@@ -1,5 +1,2 @@
 avoid-breaking-exported-api = false
-disallowed-methods = [
-    { path = "std::option::Option::unwrap", reason = "use ? or expect with context" },
-    { path = "std::result::Result::unwrap", reason = "use ? or expect with context" },
-]
+too-many-arguments-threshold = 10

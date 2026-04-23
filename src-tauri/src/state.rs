@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::device::Device;
 use crate::hierarchy::HierarchyTree;
+use crate::selector::SpatialIndex;
 
 #[derive(Default)]
 pub struct AppState {
@@ -10,4 +11,5 @@ pub struct AppState {
     pub maestro_path: RwLock<Option<String>>,
     pub connected_device: RwLock<Option<Device>>,
     pub last_hierarchy: RwLock<Option<Arc<HierarchyTree>>>,
+    pub spatial_index: RwLock<Option<Arc<SpatialIndex>>>,
 }

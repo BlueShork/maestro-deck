@@ -5,7 +5,18 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 
 export default [
-  { ignores: ["dist", "node_modules", "src-tauri/target", "src-tauri/gen"] },
+  {
+    ignores: [
+      "dist",
+      "node_modules",
+      "src-tauri/target",
+      "src-tauri/gen",
+      "tailwind.config.ts",
+      "vite.config.ts",
+      "postcss.config.js",
+      "eslint.config.js",
+    ],
+  },
   js.configs.recommended,
   {
     files: ["**/*.{ts,tsx}"],
@@ -44,6 +55,12 @@ export default [
         performance: "readonly",
         crypto: "readonly",
         fetch: "readonly",
+        KeyboardEvent: "readonly",
+        Event: "readonly",
+        CustomEvent: "readonly",
+        EventTarget: "readonly",
+        EventListener: "readonly",
+        ResizeObserver: "readonly",
       },
     },
     plugins: {

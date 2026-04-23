@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Avoid concurrent releases for the same tag
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Apple Silicon
+          - platform: macos-latest
+            label: macos-arm64
+            args: --target aarch64-apple-darwin
+            rust-target: aarch64-apple-darwin
+          # macOS Intel
+          - platform: macos-latest
+            label: macos-x64
+            args: --target x86_64-apple-darwin
+            rust-target: x86_64-apple-darwin
+          # Linux x64 (.AppImage + .deb)
+          - platform: ubuntu-22.04
+            label: linux-x64
+            args: ""
+            rust-target: ""
+          # Windows x64 (.msi)
+          - platform: windows-latest
+            label: windows-x64
+            args: ""
+            rust-target: ""
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: release-${{ matrix.label }}
+
+      - name: Install Linux system dependencies (Tauri)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: Install frontend dependencies
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Download bundled scrcpy server
+        shell: bash
+        run: bash scripts/download-scrcpy.sh
+
+      - name: Build & publish Tauri release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional Tauri updater signing keys. If not set, the build is
+          # produced unsigned (which is fine for v0.1 — the user has no certs).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Maestro Deck ${{ github.ref_name }}"
+          releaseBody: |
+            See `CHANGELOG.md` for the full list of changes in this release.
+
+            Downloads:
+            - macOS (Apple Silicon): `.dmg`
+            - macOS (Intel): `.dmg`
+            - Linux: `.AppImage`, `.deb`
+            - Windows: `.msi`
+
+            Builds are unsigned. macOS users may need to right-click → Open
+            on first launch.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

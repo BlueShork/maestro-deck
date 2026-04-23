@@ -1,0 +1,80 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much detail
+        as you can — it helps us reproduce the issue quickly.
+  - type: input
+    id: version
+    attributes:
+      label: Maestro Deck version
+      description: Run "About" inside the app, or check the title bar.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: os_version
+    attributes:
+      label: OS version
+      placeholder: macOS 14.5, Ubuntu 22.04, Windows 11 23H2
+    validations:
+      required: true
+  - type: input
+    id: adb_version
+    attributes:
+      label: adb version
+      description: "Output of `adb version` (first line)"
+      placeholder: Android Debug Bridge version 1.0.41
+  - type: input
+    id: maestro_version
+    attributes:
+      label: maestro version
+      description: "Output of `maestro --version`"
+      placeholder: 1.39.0
+  - type: input
+    id: device
+    attributes:
+      label: Android device
+      placeholder: Pixel 7, Android 14
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Maestro Deck
+        2. Connect a Pixel 7
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output from the app's console, or `RUST_LOG=debug pnpm tauri:dev`. Redact anything sensitive.
+      render: shell

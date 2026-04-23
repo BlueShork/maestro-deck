@@ -3,7 +3,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("ADB not found in PATH. Install Android platform-tools or set the ADB path in Settings.")]
+    #[error(
+        "ADB not found in PATH. Install Android platform-tools or set the ADB path in Settings."
+    )]
     AdbNotFound,
 
     #[error("No Android device connected. Plug in a device with USB debugging enabled.")]
