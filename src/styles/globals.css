@@ -58,3 +58,53 @@
       "calt" 1;
   }
 }
+
+/* CodeMirror 6 injects its structural styles at runtime via <style> tags.
+   Tailwind's preflight leaks onto CM's flex containers in release builds
+   (gutter rendered stacked above content), so we pin the layout here. */
+@layer components {
+  .cm-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    outline: none;
+  }
+  .cm-editor.cm-focused {
+    outline: none;
+  }
+  .cm-scroller {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    flex: 1 1 0;
+    overflow: auto;
+    font-family: inherit;
+    line-height: 1.5;
+  }
+  .cm-content {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 0;
+    white-space: pre;
+    tab-size: 2;
+  }
+  .cm-gutters {
+    display: flex;
+    flex-direction: row;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    user-select: none;
+  }
+  .cm-gutter {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .cm-gutterElement {
+    box-sizing: border-box;
+  }
+  .cm-line {
+    padding: 0 8px;
+  }
+}
+
