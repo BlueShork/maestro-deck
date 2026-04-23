@@ -279,10 +279,16 @@ export function DeviceView() {
       const coords = toDeviceCoords(e.clientX, e.clientY);
       if (!coords) return;
       if (!current) return;
-      // Tap the device first so the user sees their input applied immediately,
-      // then resolve the element under the cursor for the inspector panel.
+      // Coords are in stream space (what scrcpy mirrors). Pass the matching
+      // dimensions so the device-side scrcpy server scales the tap correctly,
+      // even when the device's native resolution differs (QHD+ → 1440 native
+      // vs 1080 stream).
       try {
-        await ipc.sendInput({ kind: "tap", x: coords.x, y: coords.y });
+        await ipc.sendInput(
+          { kind: "tap", x: coords.x, y: coords.y },
+          deviceWidth,
+          deviceHeight,
+        );
       } catch (err) {
         toast.error(
           "Tap failed",
@@ -303,7 +309,15 @@ export function DeviceView() {
         }
       }
     },
-    [toDeviceCoords, toHierarchyCoords, inspectEnabled, select, current],
+    [
+      toDeviceCoords,
+      toHierarchyCoords,
+      inspectEnabled,
+      select,
+      current,
+      deviceWidth,
+      deviceHeight,
+    ],
   );
 
   const onContextMenu = useCallback(

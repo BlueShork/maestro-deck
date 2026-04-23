@@ -225,13 +225,27 @@ mod tests_foreground {
 }
 
 pub fn parse_package_uid(dumpsys_package: &str) -> Option<u32> {
+    let mut app_id: Option<u32> = None;
+    let mut user_id: Option<u32> = None;
     for line in dumpsys_package.lines() {
         let t = line.trim();
-        if let Some(rest) = t.strip_prefix("userId=") {
-            return rest.split_whitespace().next()?.parse().ok();
+        if let Some(rest) = t.strip_prefix("appId=") {
+            if let Some(tok) = rest.split_whitespace().next() {
+                if let Ok(v) = tok.parse::<u32>() {
+                    app_id = Some(v);
+                }
+            }
+        } else if let Some(rest) = t.strip_prefix("userId=") {
+            if user_id.is_none() {
+                if let Some(tok) = rest.split_whitespace().next() {
+                    if let Ok(v) = tok.parse::<u32>() {
+                        user_id = Some(v);
+                    }
+                }
+            }
         }
     }
-    None
+    app_id.or(user_id)
 }
 
 #[cfg(test)]
@@ -251,6 +265,29 @@ mod tests_uid {
     #[test]
     fn none_when_missing() {
         assert!(parse_package_uid("no uid here").is_none());
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn prefers_appId_over_userId_on_modern_android() {
+        // Android 12+: userId=0 is the user profile, appId is the real app UID
+        let input = "Packages:\n  \
+                     Package [com.example.app] (abcdef):\n    \
+                     appId=10234\n    \
+                     User 0:\n      \
+                     userId=0\n      \
+                     installed=true\n";
+        assert_eq!(parse_package_uid(input), Some(10234));
+    }
+
+    #[test]
+    fn falls_back_to_userId_when_no_appId() {
+        // Older Android: only userId= is present, and it's the app UID
+        let input = "Packages:\n  \
+                     Package [com.example.app] (abcdef):\n    \
+                     userId=10234\n    \
+                     pkg=Package{...}\n";
+        assert_eq!(parse_package_uid(input), Some(10234));
     }
 }
 

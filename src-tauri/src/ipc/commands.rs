@@ -215,13 +215,21 @@ pub fn generate_command(action: MaestroAction) -> String {
 }
 
 #[tauri::command]
-pub async fn send_input(event: InputEvent, state: State<'_, AppState>) -> AppResult<()> {
-    let (w, h) = {
-        let guard = state.connected_device.read();
-        let dev = guard.as_ref().ok_or(AppError::NoDevice)?;
-        (dev.screen_width as u16, dev.screen_height as u16)
-    };
-    input::send(&event, state.inner(), w, h).await
+pub async fn send_input(
+    event: InputEvent,
+    screen_w: u16,
+    screen_h: u16,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    // The caller knows which coordinate system its (x, y) values are in
+    // (typically stream space, since coords come from the canvas) and passes
+    // the matching screen dimensions. Trusting the frontend here avoids a
+    // stream-vs-native mismatch on devices where scrcpy downscales (e.g.
+    // QHD+ Galaxy with max_size=1080).
+    if state.connected_device.read().is_none() {
+        return Err(AppError::NoDevice);
+    }
+    input::send(&event, state.inner(), screen_w, screen_h).await
 }
 
 #[tauri::command]
