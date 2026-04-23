@@ -26,6 +26,27 @@ export class IpcError extends Error {
   }
 }
 
+export interface MetricsSamplePayload {
+  package: string;
+  cpu_pct: number;
+  mem_mb: number;
+  fps: number | null;
+  jank_pct: number | null;
+  net_rx_kbps: number;
+  net_tx_kbps: number;
+  ts: number;
+}
+
+export interface TargetChangedPayload {
+  from: string | null;
+  to: string;
+}
+
+export interface MetricsStoppedPayload {
+  reason: "user" | "device_disconnected" | "error";
+  message: string | null;
+}
+
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return await tauriInvoke<T>(command, args);
@@ -54,6 +75,8 @@ export const ipc = {
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
   startStream: () => call<void>("start_stream"),
   stopStream: () => call<void>("stop_stream"),
+  startMetrics: () => call<void>("start_metrics"),
+  stopMetrics: () => call<void>("stop_metrics"),
 };
 
 export interface FrameEvent {
@@ -98,4 +121,10 @@ export const events = {
     listen<RunnerExitPayload>("runner:exit", (e) => handler(e.payload)),
   onDeviceDisconnected: (handler: () => void): Promise<UnlistenFn> =>
     listen<null>("device:disconnected", () => handler()),
+  onMetricsSample: (handler: (p: MetricsSamplePayload) => void): Promise<UnlistenFn> =>
+    listen<MetricsSamplePayload>("metrics:sample", (e) => handler(e.payload)),
+  onMetricsTargetChanged: (handler: (p: TargetChangedPayload) => void): Promise<UnlistenFn> =>
+    listen<TargetChangedPayload>("metrics:target_changed", (e) => handler(e.payload)),
+  onMetricsStopped: (handler: (p: MetricsStoppedPayload) => void): Promise<UnlistenFn> =>
+    listen<MetricsStoppedPayload>("metrics:stopped", (e) => handler(e.payload)),
 };
