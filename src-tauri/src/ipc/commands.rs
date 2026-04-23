@@ -14,6 +14,7 @@ use crate::runner;
 use crate::scrcpy;
 use crate::selector::{self, Selector, SpatialIndex};
 use crate::state::AppState;
+use crate::workspace::{self, WorkspaceNode};
 use crate::yaml::{self, MaestroAction};
 
 /// Channel depth for queued control messages. ~1s of bursty input at 60Hz.
@@ -178,6 +179,11 @@ pub async fn run_flow(file_path: String, app: AppHandle) -> AppResult<u32> {
 #[tauri::command]
 pub async fn stop_flow(pid: u32) -> AppResult<()> {
     runner::kill_runner(pid).await
+}
+
+#[tauri::command]
+pub fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
+    workspace::list_workspace(std::path::Path::new(&path))
 }
 
 impl serde::Serialize for HierarchyTree {

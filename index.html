@@ -1,17 +1,42 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Maestro Deck</title>
+    <script>
+      // Apply theme before first paint to avoid FOUC. Mirrors lib/theme.ts.
+      (function () {
+        try {
+          var raw = localStorage.getItem("maestro-deck.settings");
+          var mode = "system";
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && parsed.state && parsed.state.theme) mode = parsed.state.theme;
+          }
+          var dark =
+            mode === "dark" ||
+            (mode !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
     <style>
       html,
       body {
         margin: 0;
+        font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+      }
+      html {
+        background: hsl(40 30% 99%);
+        color: hsl(222 30% 20%);
+      }
+      html.dark {
         background: hsl(224 71% 4%);
         color: hsl(213 31% 91%);
-        font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
       }
       #splash {
         position: fixed;
@@ -23,10 +48,15 @@
         justify-content: center;
         gap: 18px;
         background:
-          radial-gradient(circle at 50% 35%, hsl(224 71% 8%) 0%, hsl(224 71% 4%) 60%),
-          hsl(224 71% 4%);
+          radial-gradient(circle at 50% 35%, hsl(40 30% 98%) 0%, hsl(40 30% 96%) 60%),
+          hsl(40 30% 99%);
         opacity: 1;
         transition: opacity 320ms ease;
+      }
+      html.dark #splash {
+        background:
+          radial-gradient(circle at 50% 35%, hsl(224 71% 8%) 0%, hsl(224 71% 4%) 60%),
+          hsl(224 71% 4%);
       }
       #splash.fade-out {
         opacity: 0;
@@ -39,10 +69,17 @@
         align-items: center;
         justify-content: center;
         border-radius: 22px;
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.02));
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 18px 50px -12px rgba(15, 23, 42, 0.18);
+        animation: pulse 1.6s ease-in-out infinite;
+        color: hsl(222 30% 20%);
+      }
+      html.dark #splash .icon-wrap {
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
         border: 1px solid rgba(255, 255, 255, 0.06);
         box-shadow: 0 18px 50px -12px rgba(0, 0, 0, 0.6);
-        animation: pulse 1.6s ease-in-out infinite;
+        color: #ffffff;
       }
       #splash svg {
         width: 56px;
@@ -52,6 +89,9 @@
         font-size: 13px;
         font-weight: 500;
         letter-spacing: 0.02em;
+        color: hsl(222 15% 45%);
+      }
+      html.dark #splash .label {
         color: hsl(215 20% 65%);
       }
       #splash .progress {
@@ -59,16 +99,22 @@
         height: 2px;
         border-radius: 999px;
         overflow: hidden;
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(15, 23, 42, 0.08);
         margin-top: 4px;
+      }
+      html.dark #splash .progress {
+        background: rgba(255, 255, 255, 0.06);
       }
       #splash .progress::after {
         content: "";
         display: block;
         height: 100%;
         width: 40%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+        background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.45), transparent);
         animation: slide 1.4s ease-in-out infinite;
+      }
+      html.dark #splash .progress::after {
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
       }
       @keyframes pulse {
         0%, 100% { transform: scale(1); opacity: 1; }
@@ -87,10 +133,10 @@
           <path
             fill-rule="evenodd"
             clip-rule="evenodd"
-            fill="#FFFFFF"
+            fill="currentColor"
             d="M256 64C150.02 64 64 150.02 64 256V768C64 873.98 150.02 960 256 960H768C873.98 960 960 873.98 960 768V256C960 150.02 873.98 64 768 64H256ZM320 256C284.654 256 256 284.654 256 320V704C256 739.346 284.654 768 320 768H704C739.346 768 768 739.346 768 704V320C768 284.654 739.346 256 704 256H320Z"
           />
-          <rect x="336" y="336" width="352" height="352" rx="24" ry="24" fill="#FFFFFF" />
+          <rect x="336" y="336" width="352" height="352" rx="24" ry="24" fill="currentColor" />
         </svg>
       </div>
       <div class="label">Maestro Deck</div>

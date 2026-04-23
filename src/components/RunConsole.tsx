@@ -30,15 +30,15 @@ export function RunConsole({
   }, [logs]);
 
   return (
-    <section className="flex h-48 shrink-0 flex-col border-t border-border bg-black/50">
+    <section className="flex h-48 shrink-0 flex-col border-t border-border bg-muted/40">
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Console
           </span>
           {running ? (
-            <span className="flex items-center gap-1 text-[10px] text-emerald-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+            <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 dark:bg-emerald-400" />
               running
             </span>
           ) : exitCode !== null ? (
@@ -46,8 +46,8 @@ export function RunConsole({
               className={cn(
                 "rounded px-1.5 py-0.5 font-mono text-[10px]",
                 exitCode === 0
-                  ? "bg-emerald-500/15 text-emerald-300"
-                  : "bg-red-500/15 text-red-300",
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                  : "bg-red-500/15 text-red-700 dark:text-red-300",
               )}
             >
               exit {exitCode}
@@ -97,7 +97,7 @@ export function RunConsole({
               key={l.id}
               className={cn(
                 "whitespace-pre-wrap",
-                l.stream === "stderr" && "text-red-300",
+                l.stream === "stderr" && "text-red-700 dark:text-red-300",
                 l.stream === "system" && "text-muted-foreground italic",
               )}
             >

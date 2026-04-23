@@ -22,6 +22,7 @@ import {
 } from "@codemirror/language";
 import { yaml } from "@codemirror/legacy-modes/mode/yaml";
 import {
+  Compartment,
   EditorState,
   StateEffect,
   StateField,
@@ -36,14 +37,18 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { FileDown, FileUp, Save } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { softProExtensions } from "@/lib/editor-theme";
+import { themeExtensions } from "@/lib/editor-theme";
+import { openFlowFile } from "@/lib/flow-io";
+import { resolveTheme } from "@/lib/theme";
 import { useFlowStore } from "@/stores/flowStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 const MAESTRO_KEYWORDS = [
   "launchApp",
@@ -103,11 +108,13 @@ export function FlowEditor() {
   const activeLine = useFlowStore((s) => s.activeLine);
   const setContent = useFlowStore((s) => s.setContent);
   const setCursor = useFlowStore((s) => s.setCursor);
-  const loaded = useFlowStore((s) => s.loaded);
   const saved = useFlowStore((s) => s.saved);
+
+  const themeMode = useSettingsStore((s) => s.theme);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const themeCompartment = useRef(new Compartment());
   const syncingFromStore = useRef(false);
 
   useEffect(() => {
@@ -138,7 +145,7 @@ export function FlowEditor() {
           indentWithTab,
         ]),
         StreamLanguage.define(yaml),
-        ...softProExtensions,
+        themeCompartment.current.of(themeExtensions(resolveTheme(themeMode))),
         activeLineField,
         EditorView.lineWrapping,
         EditorView.updateListener.of((v) => {
@@ -181,6 +188,26 @@ export function FlowEditor() {
     viewRef.current?.dispatch({ effects: setActiveLine.of(activeLine) });
   }, [activeLine]);
 
+  // Swap CodeMirror theme when settings change (also re-applies when the
+  // OS switches between light/dark under "system" mode because resolveTheme
+  // re-reads the media query).
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const apply = () =>
+      view.dispatch({
+        effects: themeCompartment.current.reconfigure(
+          themeExtensions(resolveTheme(themeMode)),
+        ),
+      });
+    apply();
+    if (themeMode !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const listener = () => apply();
+    mq.addEventListener("change", listener);
+    return () => mq.removeEventListener("change", listener);
+  }, [themeMode]);
+
   const onOpen = useCallback(async () => {
     try {
       const picked = await openDialog({
@@ -188,13 +215,12 @@ export function FlowEditor() {
         filters: [{ name: "Maestro flow", extensions: ["yaml", "yml"] }],
       });
       if (typeof picked !== "string") return;
-      const text = await readTextFile(picked);
-      loaded(text, picked);
-      toast.success("Flow loaded", picked);
+      const ok = await openFlowFile(picked);
+      if (ok) toast.success("Flow loaded", picked);
     } catch (err) {
       toast.error("Open failed", err instanceof Error ? err.message : String(err));
     }
-  }, [loaded]);
+  }, []);
 
   const onSaveAs = useCallback(async () => {
     try {
@@ -204,6 +230,7 @@ export function FlowEditor() {
       if (!picked) return;
       await writeTextFile(picked, content);
       saved(picked);
+      useWorkspaceStore.getState().setLastOpenFile(picked);
       toast.success("Saved", picked);
     } catch (err) {
       toast.error("Save failed", err instanceof Error ? err.message : String(err));
@@ -218,6 +245,7 @@ export function FlowEditor() {
     try {
       await writeTextFile(filePath, content);
       saved(filePath);
+      useWorkspaceStore.getState().setLastOpenFile(filePath);
       toast.success("Saved", filePath);
     } catch (err) {
       toast.error("Save failed", err instanceof Error ? err.message : String(err));
