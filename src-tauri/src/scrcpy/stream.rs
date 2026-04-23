@@ -37,8 +37,8 @@ const PTS_VALUE_MASK: u64 = !(PTS_FLAG_CONFIG | PTS_FLAG_KEY);
 
 const FRAME_EVENT: &str = "frame";
 
-const CONNECT_RETRIES: u32 = 10;
-const CONNECT_BACKOFF: Duration = Duration::from_millis(50);
+const CONNECT_RETRIES: u32 = 40;
+const CONNECT_BACKOFF: Duration = Duration::from_millis(75);
 
 /// Payload for the `frame` Tauri event.
 #[derive(Debug, Clone, Serialize)]
@@ -184,10 +184,40 @@ async fn read_frame_header<R: AsyncReadExt + Unpin>(r: &mut R) -> AppResult<Opti
     Ok(Some((pts, size)))
 }
 
+/// Connect to the video socket and retry the whole handshake (TCP connect +
+/// dummy byte read) as one unit. `adb forward` accepts TCP connections even
+/// before scrcpy binds the abstract socket — those premature connections get
+/// closed with EOF on the first read. We retry until we see a valid dummy.
+async fn open_video_socket(port: u16) -> AppResult<(TcpStream, String)> {
+    let addr = format!("127.0.0.1:{port}");
+    let mut last_err: Option<AppError> = None;
+    for attempt in 0..CONNECT_RETRIES {
+        match TcpStream::connect(&addr).await {
+            Ok(mut sock) => match read_device_meta(&mut sock).await {
+                Ok(name) => return Ok((sock, name)),
+                Err(e) => {
+                    debug!(attempt, error = %e, "scrcpy handshake not ready yet");
+                    last_err = Some(e);
+                }
+            },
+            Err(e) => {
+                debug!(attempt, error = %e, "scrcpy tunnel not ready yet");
+                last_err = Some(AppError::ScrcpyFailed(e.to_string()));
+            }
+        }
+        sleep(CONNECT_BACKOFF).await;
+    }
+    Err(AppError::ScrcpyFailed(format!(
+        "video socket handshake failed after {CONNECT_RETRIES} attempts: {}",
+        last_err
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "unknown error".into())
+    )))
+}
+
 /// Connect to the video socket, parse meta headers, and spawn the read loop.
 pub async fn spawn_stream(app: AppHandle, port: u16) -> AppResult<StreamHandle> {
-    let mut sock = connect_with_retry(port).await?;
-    let device_name = read_device_meta(&mut sock).await?;
+    let (mut sock, device_name) = open_video_socket(port).await?;
     info!(%device_name, "scrcpy device meta received");
     let (codec_id, width, height) = read_codec_meta(&mut sock).await?;
     if codec_id != CODEC_ID_H264 {
@@ -211,7 +241,9 @@ pub async fn spawn_stream(app: AppHandle, port: u16) -> AppResult<StreamHandle> 
     })
 }
 
-/// Connect to the control socket and spawn a writer that drains `rx`.
+/// Connect to the control socket and spawn a writer that drains `rx`. No
+/// handshake to retry here, but the TCP connect itself still races the
+/// scrcpy bind so we use the same retry loop.
 pub async fn spawn_control(port: u16, mut rx: mpsc::Receiver<Vec<u8>>) -> AppResult<()> {
     let mut sock = connect_with_retry(port).await?;
     tokio::spawn(async move {
