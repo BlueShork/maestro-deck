@@ -32,7 +32,7 @@ const GFX_INTERVAL: Duration = Duration::from_secs(5);
 const FOREGROUND_CHECK_INTERVAL: Duration = Duration::from_secs(3);
 const MAX_CONSECUTIVE_ERRORS: u32 = 3;
 
-static RUNNING: Lazy<AsyncMutex<Option<oneshot::Sender<()>>>> =
+static RUNNING: Lazy<AsyncMutex<Option<(oneshot::Sender<()>, tokio::task::JoinHandle<()>)>>> =
     Lazy::new(|| AsyncMutex::new(None));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,19 +65,21 @@ pub async fn start(app: AppHandle, serial: String) -> AppResult<()> {
         return Err(AppError::MetricsAlreadyRunning);
     }
     let (tx, rx) = oneshot::channel::<()>();
-    *guard = Some(tx);
-    drop(guard);
-
-    tokio::spawn(run_loop(app, serial, rx));
+    let join = tokio::spawn(run_loop(app, serial, rx));
+    *guard = Some((tx, join));
     info!("metrics task started");
     Ok(())
 }
 
 pub async fn stop() -> AppResult<()> {
-    let handle = RUNNING.lock().await.take();
-    if let Some(tx) = handle {
+    let slot = RUNNING.lock().await.take();
+    if let Some((tx, join)) = slot {
         let _ = tx.send(());
         info!("metrics task stop requested");
+        // Wait for the task to actually exit so a subsequent start() cannot
+        // race with a still-alive predecessor. Errors from the join are
+        // ignored: if the task panicked, we've already cleared the slot.
+        let _ = join.await;
     }
     Ok(())
 }
@@ -93,6 +95,7 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
     let mut last_gfx_poll = Instant::now() - GFX_INTERVAL;
     let mut consecutive_errors: u32 = 0;
     let mut ticker = tokio::time::interval(TICK_INTERVAL);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         tokio::select! {
@@ -171,8 +174,10 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
                     last_net_kbps = Some((s.rx_kbps, s.tx_kbps));
                 }
                 Err(e) => {
+                    // Secondary metric failure — we continue without bailing.
+                    // Only foreground and cpu/mem failures count toward the
+                    // 3-strike rule since they're prerequisites for any sample.
                     warn!(error = ?e, "net fetch failed");
-                    consecutive_errors += 1;
                 }
             }
         }
@@ -185,7 +190,6 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
                 Ok(None) => {}
                 Err(e) => {
                     warn!(error = ?e, "gfx fetch failed");
-                    consecutive_errors += 1;
                 }
             }
         }
@@ -212,8 +216,17 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
         let _ = app.emit(EVT_SAMPLE, sample);
     }
 
-    *RUNNING.lock().await = None;
     info!("metrics task exited");
+    // Self-clear the RUNNING slot when the task exits without an explicit
+    // stop() — e.g. on error bailout. We spawn this because we cannot await
+    // the mutex from inside the task's own body without risking reentrancy
+    // if stop() is concurrently holding the lock.
+    tokio::spawn(async {
+        let mut guard = RUNNING.lock().await;
+        // If stop() already took the slot (normal shutdown), nothing to do.
+        // Otherwise clear so a new start() can proceed.
+        *guard = None;
+    });
 }
 
 fn emit_stopped(app: &AppHandle, reason: &'static str, message: Option<String>) {
