@@ -6,9 +6,16 @@ import { cn } from "@/lib/utils";
 import { useToastStore, type ToastVariant } from "@/stores/toastStore";
 
 const variantStyles: Record<ToastVariant, string> = {
-  default: "border-border bg-popover text-popover-foreground",
-  success: "border-emerald-500/40 bg-emerald-500/10 text-emerald-100",
+  default: "border-border bg-popover/90 text-popover-foreground",
+  success:
+    "border-emerald-500/25 bg-background/85 text-emerald-200 before:content-[''] before:h-1.5 before:w-1.5 before:rounded-full before:bg-emerald-400 before:shrink-0 before:mt-1.5",
   error: "border-destructive/60 bg-destructive/15 text-destructive-foreground",
+};
+
+const variantSize: Record<ToastVariant, string> = {
+  default: "max-w-sm p-3 text-sm",
+  success: "max-w-xs py-1.5 px-2.5 text-xs",
+  error: "max-w-sm p-3 text-sm",
 };
 
 export function Toaster() {
@@ -18,7 +25,7 @@ export function Toaster() {
   useEffect(() => {
     if (toasts.length === 0) return;
     const timers = toasts.map((t) =>
-      setTimeout(() => dismiss(t.id), 4500),
+      setTimeout(() => dismiss(t.id), t.variant === "success" ? 1800 : 4500),
     );
     return () => {
       timers.forEach(clearTimeout);
@@ -35,26 +42,33 @@ export function Toaster() {
             if (!open) dismiss(t.id);
           }}
           className={cn(
-            "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-md border p-3 text-sm shadow-lg backdrop-blur data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:slide-in-from-right-full",
+            "pointer-events-auto flex w-full items-start gap-2 rounded-md border shadow-lg backdrop-blur data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom-2",
+            variantSize[t.variant],
             variantStyles[t.variant],
           )}
         >
           <div className="min-w-0 flex-1">
-            <ToastPrimitive.Title className="font-medium">
+            <ToastPrimitive.Title
+              className={cn(
+                t.variant === "success" ? "font-normal" : "font-medium",
+              )}
+            >
               {t.title}
             </ToastPrimitive.Title>
-            {t.description ? (
+            {t.description && t.variant !== "success" ? (
               <ToastPrimitive.Description className="mt-0.5 text-xs opacity-80">
                 {t.description}
               </ToastPrimitive.Description>
             ) : null}
           </div>
-          <ToastPrimitive.Close className="opacity-60 transition-opacity hover:opacity-100">
-            <X className="h-3.5 w-3.5" />
-          </ToastPrimitive.Close>
+          {t.variant !== "success" ? (
+            <ToastPrimitive.Close className="opacity-60 transition-opacity hover:opacity-100">
+              <X className="h-3.5 w-3.5" />
+            </ToastPrimitive.Close>
+          ) : null}
         </ToastPrimitive.Root>
       ))}
-      <ToastPrimitive.Viewport className="fixed right-4 top-4 z-[60] flex w-96 max-w-full flex-col gap-2 outline-none" />
+      <ToastPrimitive.Viewport className="fixed bottom-4 right-4 z-[60] flex max-w-full flex-col items-end gap-2 outline-none" />
     </ToastPrimitive.Provider>
   );
 }
