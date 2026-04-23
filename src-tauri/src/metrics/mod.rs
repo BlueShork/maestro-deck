@@ -18,16 +18,15 @@ use tokio::sync::{oneshot, Mutex as AsyncMutex};
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
-use crate::metrics::collector::{fetch_cpu_mem, fetch_gfx, fetch_net, GfxSample};
+use crate::metrics::collector::{fetch_cpu_mem, fetch_gfx, GfxSample};
 use crate::metrics::foreground::{resolve_target, Target};
-use crate::metrics::parsers::{NetBytes, ProcStat};
+use crate::metrics::parsers::ProcStat;
 
 const EVT_SAMPLE: &str = "metrics:sample";
 const EVT_TARGET_CHANGED: &str = "metrics:target_changed";
 const EVT_STOPPED: &str = "metrics:stopped";
 
 const TICK_INTERVAL: Duration = Duration::from_secs(1);
-const NET_INTERVAL: Duration = Duration::from_secs(2);
 const GFX_INTERVAL: Duration = Duration::from_secs(5);
 const FOREGROUND_CHECK_INTERVAL: Duration = Duration::from_secs(3);
 const MAX_CONSECUTIVE_ERRORS: u32 = 3;
@@ -88,11 +87,8 @@ pub async fn stop() -> AppResult<()> {
 async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<()>) {
     let mut target: Option<Target> = None;
     let mut prev_stat: Option<(ProcStat, Instant)> = None;
-    let mut prev_net: Option<(NetBytes, Instant)> = None;
     let mut last_gfx: Option<GfxSample> = None;
-    let mut last_net_kbps: Option<(f32, f32)> = None;
     let mut last_fg_check = Instant::now() - FOREGROUND_CHECK_INTERVAL;
-    let mut last_net_poll = Instant::now() - NET_INTERVAL;
     let mut last_gfx_poll = Instant::now() - GFX_INTERVAL;
     let mut consecutive_errors: u32 = 0;
     let mut ticker = tokio::time::interval(TICK_INTERVAL);
@@ -129,8 +125,6 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
                             },
                         );
                         prev_stat = None;
-                        prev_net = None;
-                        last_net_kbps = None;
                         last_gfx = None;
                     }
                     target = Some(new_target);
@@ -176,29 +170,11 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
         };
         prev_stat = Some((cpu_mem.stat_snapshot, Instant::now()));
 
-        // 3. Net at its own cadence.
-        if last_net_poll.elapsed() >= NET_INTERVAL {
-            last_net_poll = Instant::now();
-            if let Some(uid) = t.uid {
-                let serial_clone = serial.clone();
-                let prev = prev_net;
-                match tokio::task::spawn_blocking(move || fetch_net(&serial_clone, uid, prev))
-                    .await
-                    .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("net join failed: {e}"))))
-                {
-                    Ok(s) => {
-                        prev_net = Some((s.bytes_snapshot, Instant::now()));
-                        last_net_kbps = Some((s.rx_kbps, s.tx_kbps));
-                    }
-                    Err(e) => {
-                        // Secondary metric failure — we continue without bailing.
-                        // Only foreground and cpu/mem failures count toward the
-                        // 3-strike rule since they're prerequisites for any sample.
-                        warn!(error = ?e, "net fetch failed");
-                    }
-                }
-            }
-        }
+        // 3. Net polling is currently disabled — the dumpsys netstats fallback
+        //    doesn't produce reliable per-UID data on Samsung Android 15, and
+        //    xt_qtaguid is no longer available there. The UI hides Net ↓/↑ for
+        //    now; samples ship with 0 for both. Re-enable once we find a
+        //    working source across target Android versions.
 
         // 4. GFX at its own cadence.
         if last_gfx_poll.elapsed() >= GFX_INTERVAL {
@@ -224,16 +200,14 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
 
         consecutive_errors = 0;
 
-        let (rx_kbps, tx_kbps) = last_net_kbps.unwrap_or((0.0, 0.0));
-
         let sample = MetricsSample {
             package: t.package.clone(),
             cpu_pct: cpu_mem.cpu_pct,
             mem_mb: cpu_mem.mem_mb,
             fps: last_gfx.map(|g| g.fps),
             jank_pct: last_gfx.map(|g| g.jank_pct),
-            net_rx_kbps: rx_kbps,
-            net_tx_kbps: tx_kbps,
+            net_rx_kbps: 0.0,
+            net_tx_kbps: 0.0,
             ts: ts_ms(),
         };
         let _ = app.emit(EVT_SAMPLE, sample);
