@@ -99,6 +99,24 @@ export default function App() {
     }
   }, [setRunning, appendLog]);
 
+  const onRunAll = useCallback(async () => {
+    const folder = useWorkspaceStore.getState().folderPath;
+    if (!folder) return;
+    try {
+      // Persist any unsaved edits to the current file so they're part of the run.
+      const { content, filePath, dirty } = useFlowStore.getState();
+      if (dirty && filePath) {
+        await writeTextFile(filePath, content);
+        useFlowStore.getState().saved(filePath);
+      }
+      const pid = await ipc.runFlow(folder);
+      setRunning(pid);
+      appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
+    } catch (err) {
+      toast.error("Run all failed", err instanceof Error ? err.message : String(err));
+    }
+  }, [setRunning, appendLog]);
+
   const onStop = useCallback(async () => {
     if (runningPid === null) return;
     useRunStore.getState().requestStop();
@@ -131,6 +149,7 @@ export default function App() {
     <div className="flex h-screen flex-col bg-background text-foreground">
       <Toolbar
         onRun={() => void onRun()}
+        onRunAll={() => void onRunAll()}
         onStop={() => void onStop()}
         onOpenSettings={() => setSettingsOpen(true)}
       />
