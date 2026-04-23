@@ -32,6 +32,12 @@ pub enum AppError {
     #[error("Runner failed: {0}")]
     RunnerFailed(String),
 
+    #[error("Performance metrics collection failed: {0}")]
+    MetricsFailed(String),
+
+    #[error("Performance metrics already running")]
+    MetricsAlreadyRunning,
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
