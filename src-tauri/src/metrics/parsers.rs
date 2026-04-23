@@ -82,15 +82,14 @@ mod tests_status {
 }
 
 /// Compute CPU % between two /proc/stat samples over an elapsed wall-clock
-/// interval. `user_hz` is typically 100 on Android. `cores` is the number of
-/// online CPU cores. Result is clamped to [0, 100 * cores] and returned as a
-/// percentage of a single core (100% = one core saturated).
+/// interval. `user_hz` is typically 100 on Android. Result is clamped to a
+/// lower bound of 0 and returned as a percentage of a single core
+/// (100% = one core saturated; 200% = two cores).
 pub fn cpu_percent(
     prev: ProcStat,
     curr: ProcStat,
     elapsed_secs: f32,
     user_hz: u32,
-    _cores: u32,
 ) -> f32 {
     if elapsed_secs <= 0.0 || user_hz == 0 {
         return 0.0;
@@ -116,32 +115,32 @@ mod tests_cpu {
     #[test]
     fn full_core_usage_is_100() {
         // 1s interval, USER_HZ=100, 100 ticks consumed total → 1 full core
-        let pct = cpu_percent(s(0, 0), s(80, 20), 1.0, 100, 4);
+        let pct = cpu_percent(s(0, 0), s(80, 20), 1.0, 100);
         assert!((pct - 100.0).abs() < 0.5, "got {pct}");
     }
 
     #[test]
     fn half_core_usage_is_50() {
-        let pct = cpu_percent(s(100, 100), s(140, 110), 1.0, 100, 4);
+        let pct = cpu_percent(s(100, 100), s(140, 110), 1.0, 100);
         assert!((pct - 50.0).abs() < 0.5, "got {pct}");
     }
 
     #[test]
     fn zero_on_no_delta() {
-        let pct = cpu_percent(s(100, 50), s(100, 50), 1.0, 100, 4);
+        let pct = cpu_percent(s(100, 50), s(100, 50), 1.0, 100);
         assert_eq!(pct, 0.0);
     }
 
     #[test]
     fn zero_on_zero_elapsed() {
-        let pct = cpu_percent(s(0, 0), s(100, 100), 0.0, 100, 4);
+        let pct = cpu_percent(s(0, 0), s(100, 100), 0.0, 100);
         assert_eq!(pct, 0.0);
     }
 
     #[test]
     fn clamped_on_clock_skew() {
         // curr < prev should yield 0, not negative
-        let pct = cpu_percent(s(500, 500), s(100, 100), 1.0, 100, 4);
+        let pct = cpu_percent(s(500, 500), s(100, 100), 1.0, 100);
         assert_eq!(pct, 0.0);
     }
 }
@@ -197,6 +196,7 @@ mod tests_foreground {
         assert_eq!(parse_pidof("\n"), None);
     }
 
+    #[allow(non_snake_case)]
     #[test]
     fn foreground_pkg_from_mCurrentFocus() {
         let input = "  mCurrentFocus=Window{abc u0 com.example.app/com.example.app.MainActivity}\n\
@@ -207,6 +207,7 @@ mod tests_foreground {
         );
     }
 
+    #[allow(non_snake_case)]
     #[test]
     fn foreground_pkg_handles_mFocusedApp() {
         // Fallback key on some Android versions
@@ -237,6 +238,7 @@ pub fn parse_package_uid(dumpsys_package: &str) -> Option<u32> {
 mod tests_uid {
     use super::*;
 
+    #[allow(non_snake_case)]
     #[test]
     fn parses_userId() {
         let input = "Packages:\n  \
@@ -258,9 +260,10 @@ pub struct NetBytes {
     pub tx: u64,
 }
 
-pub fn parse_xt_qtaguid_for_uid(stats: &str, uid: u32) -> NetBytes {
+pub fn parse_xt_qtaguid_for_uid(stats: &str, uid: u32) -> Option<NetBytes> {
     let mut rx: u64 = 0;
     let mut tx: u64 = 0;
+    let mut found = false;
     for line in stats.lines() {
         let cols: Vec<&str> = line.split_whitespace().collect();
         if cols.len() < 9 {
@@ -276,12 +279,17 @@ pub fn parse_xt_qtaguid_for_uid(stats: &str, uid: u32) -> NetBytes {
         if row_uid != uid || tag != "0x0" {
             continue;
         }
+        found = true;
         let row_rx: u64 = cols[5].parse().unwrap_or(0);
         let row_tx: u64 = cols[7].parse().unwrap_or(0);
         rx = rx.saturating_add(row_rx);
         tx = tx.saturating_add(row_tx);
     }
-    NetBytes { rx, tx }
+    if found {
+        Some(NetBytes { rx, tx })
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -299,22 +307,22 @@ idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packe
 ";
         // Untagged (0x0) rows for UID 10234: rx 5000+1000, tx 2000+500
         let n = parse_xt_qtaguid_for_uid(stats, 10234);
-        assert_eq!(n.rx, 6000);
-        assert_eq!(n.tx, 2500);
+        assert_eq!(n, Some(NetBytes { rx: 6000, tx: 2500 }));
     }
 
     #[test]
-    fn zero_when_no_match() {
+    fn none_when_no_match() {
         let stats = "idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packets\n";
-        assert_eq!(parse_xt_qtaguid_for_uid(stats, 42), NetBytes { rx: 0, tx: 0 });
+        assert_eq!(parse_xt_qtaguid_for_uid(stats, 42), None);
     }
 }
 
-pub fn parse_netstats_detail_for_uid(dump: &str, uid: u32) -> NetBytes {
+pub fn parse_netstats_detail_for_uid(dump: &str, uid: u32) -> Option<NetBytes> {
     let mut rx: u64 = 0;
     let mut tx: u64 = 0;
     let uid_marker = format!("uid={uid} ");
     let mut active = false;
+    let mut found = false;
     for line in dump.lines() {
         let trimmed = line.trim_start();
         if let Some(pos) = trimmed.find("uid=") {
@@ -327,13 +335,19 @@ pub fn parse_netstats_detail_for_uid(dump: &str, uid: u32) -> NetBytes {
         }
         for tok in trimmed.split_whitespace() {
             if let Some(v) = tok.strip_prefix("rx=") {
+                found = true;
                 rx = rx.saturating_add(v.parse().unwrap_or(0));
             } else if let Some(v) = tok.strip_prefix("tx=") {
+                found = true;
                 tx = tx.saturating_add(v.parse().unwrap_or(0));
             }
         }
     }
-    NetBytes { rx, tx }
+    if found {
+        Some(NetBytes { rx, tx })
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -353,15 +367,14 @@ Active interfaces:
     rx=9999 rxPackets=99 tx=9999 txPackets=99
 ";
         let n = parse_netstats_detail_for_uid(dump, 10234);
-        assert_eq!(n.rx, 1200);
-        assert_eq!(n.tx, 600);
+        assert_eq!(n, Some(NetBytes { rx: 1200, tx: 600 }));
     }
 
     #[test]
-    fn zero_when_uid_missing() {
+    fn none_when_uid_missing() {
         assert_eq!(
             parse_netstats_detail_for_uid("nothing here", 42),
-            NetBytes { rx: 0, tx: 0 }
+            None
         );
     }
 }
