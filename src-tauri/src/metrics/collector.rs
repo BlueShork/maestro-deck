@@ -87,9 +87,25 @@ pub fn fetch_net(
             match parse_netstats_detail_for_uid(&dump, uid) {
                 Some(b) => b,
                 None => {
+                    // Extract a short diagnostic snippet around the UID so we can
+                    // see what format the device is using without asking the user.
+                    let needle = format!("{uid}");
+                    let snippet: String = dump
+                        .find(&needle)
+                        .map(|pos| {
+                            let start = pos.saturating_sub(60);
+                            let end = (pos + 200).min(dump.len());
+                            dump[start..end]
+                                .replace('\n', " | ")
+                                .chars()
+                                .take(260)
+                                .collect()
+                        })
+                        .unwrap_or_else(|| "<uid not found in dump at all>".into());
                     tracing::warn!(
                         uid,
                         dump_len = dump.len(),
+                        snippet = %snippet,
                         "dumpsys netstats detail did not contain rows for uid — net will report 0"
                     );
                     NetBytes { rx: 0, tx: 0 }
