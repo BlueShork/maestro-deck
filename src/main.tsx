@@ -3,6 +3,26 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles/globals.css";
 
+// Native context menu = "Inspect Element" entrypoint in WKWebView. Block it
+// globally; our own InspectActionMenu (DeviceView) calls preventDefault
+// upstream so it still wins on the device canvas in inspect mode.
+window.addEventListener("contextmenu", (e) => {
+  if (!e.defaultPrevented) e.preventDefault();
+});
+
+// Block the dev-tools keyboard shortcuts in production. In dev builds the
+// Tauri CLI keeps devtools available regardless of these handlers.
+window.addEventListener("keydown", (e) => {
+  const key = e.key.toLowerCase();
+  if (e.key === "F12") {
+    e.preventDefault();
+    return;
+  }
+  if ((e.metaKey || e.ctrlKey) && e.altKey && (key === "i" || key === "j")) {
+    e.preventDefault();
+  }
+});
+
 // Keep the splash visible at least this long so the pulse animation has time
 // to breathe even on fast machines where React mounts in a few ms.
 const SPLASH_MIN_MS = 450;

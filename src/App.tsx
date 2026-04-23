@@ -1,12 +1,14 @@
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { tempDir } from "@tauri-apps/api/path";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
 import { InspectorPanel } from "@/components/InspectorPanel";
-import { MetricsPanel } from "@/components/MetricsPanel";
+const MetricsPanel = lazy(() =>
+  import("@/components/MetricsPanel").then((m) => ({ default: m.MetricsPanel })),
+);
 import { RunConsole } from "@/components/RunConsole";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Toolbar } from "@/components/Toolbar";
@@ -258,7 +260,11 @@ export default function App() {
             <div className="flex min-h-0 flex-1 flex-col">
               <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
             </div>
-            {perfEnabled && panelOpen && <MetricsPanel />}
+            {perfEnabled && panelOpen && (
+              <Suspense fallback={null}>
+                <MetricsPanel />
+              </Suspense>
+            )}
           </div>
         </main>
       </div>

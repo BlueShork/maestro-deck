@@ -56,6 +56,31 @@
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
+    /* Native-app feel: block text selection / drag everywhere except the
+       elements that actually need it (editor, inputs, console). Overrides
+       below restore selection where it matters. */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-user-drag: none;
+    cursor: default;
+  }
+  input,
+  textarea,
+  [contenteditable="true"],
+  .cm-editor,
+  .cm-content,
+  .cm-line,
+  .cm-scroller,
+  .allow-select {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+  /* Run console output: users may want to copy log lines. */
+  pre,
+  code {
+    -webkit-user-select: text;
+    user-select: text;
   }
 }
 

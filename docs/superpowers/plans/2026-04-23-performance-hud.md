@@ -1036,12 +1036,18 @@ pub fn fetch_net(
     uid: u32,
     prev: Option<(NetBytes, Instant)>,
 ) -> AppResult<NetSample> {
-    // Try xt_qtaguid first; fall back on permission / missing-file errors.
-    let bytes = match adb::exec_shell(serial, "cat /proc/net/xt_qtaguid/stats") {
+    // Try xt_qtaguid first. Fall back to `dumpsys netstats detail` if the
+    // file is unreadable (Android 12+) or if it is readable but contains no
+    // rows for this UID (e.g. counters disabled).
+    let bytes_opt: Option<NetBytes> = match adb::exec_shell(serial, "cat /proc/net/xt_qtaguid/stats") {
         Ok(stats) => parse_xt_qtaguid_for_uid(&stats, uid),
-        Err(_) => {
+        Err(_) => None,
+    };
+    let bytes = match bytes_opt {
+        Some(b) => b,
+        None => {
             let dump = adb::exec_shell(serial, "dumpsys netstats detail")?;
-            parse_netstats_detail_for_uid(&dump, uid)
+            parse_netstats_detail_for_uid(&dump, uid).unwrap_or(NetBytes { rx: 0, tx: 0 })
         }
     };
 
