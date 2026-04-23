@@ -44,9 +44,5 @@
     "shortDescription": "Open-source visual IDE for Maestro mobile tests",
     "longDescription": "Maestro Deck is a fast, offline, open-source visual editor for creating Maestro mobile UI test flows. No login, no telemetry, no cloud."
   },
-  "plugins": {
-    "fs": {
-      "scope": ["$DOCUMENT/**", "$DOWNLOAD/**", "$HOME/**"]
-    }
-  }
+  "plugins": {}
 }
