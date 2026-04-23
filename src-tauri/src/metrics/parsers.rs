@@ -309,3 +309,59 @@ idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packe
         assert_eq!(parse_xt_qtaguid_for_uid(stats, 42), NetBytes { rx: 0, tx: 0 });
     }
 }
+
+pub fn parse_netstats_detail_for_uid(dump: &str, uid: u32) -> NetBytes {
+    let mut rx: u64 = 0;
+    let mut tx: u64 = 0;
+    let uid_marker = format!("uid={uid} ");
+    let mut active = false;
+    for line in dump.lines() {
+        let trimmed = line.trim_start();
+        if let Some(pos) = trimmed.find("uid=") {
+            let rest = &trimmed[pos..];
+            active = rest.starts_with(&uid_marker);
+            continue;
+        }
+        if !active {
+            continue;
+        }
+        for tok in trimmed.split_whitespace() {
+            if let Some(v) = tok.strip_prefix("rx=") {
+                rx = rx.saturating_add(v.parse().unwrap_or(0));
+            } else if let Some(v) = tok.strip_prefix("tx=") {
+                tx = tx.saturating_add(v.parse().unwrap_or(0));
+            }
+        }
+    }
+    NetBytes { rx, tx }
+}
+
+#[cfg(test)]
+mod tests_netstats {
+    use super::*;
+
+    #[test]
+    fn sums_rx_tx_for_uid() {
+        let dump = "\
+Active interfaces:
+  iface=wlan0 ...
+  uid=10234 set=DEFAULT tag=0x0 metered=NO roaming=NO defaultNetwork=NO
+    rx=1000 rxPackets=5 tx=500 txPackets=3 rxTcp=900 rxUdp=100 txTcp=500 txUdp=0
+  uid=10234 set=FOREGROUND tag=0x0 metered=NO roaming=NO defaultNetwork=NO
+    rx=200 rxPackets=1 tx=100 txPackets=1
+  uid=99999 set=DEFAULT tag=0x0 metered=NO roaming=NO defaultNetwork=NO
+    rx=9999 rxPackets=99 tx=9999 txPackets=99
+";
+        let n = parse_netstats_detail_for_uid(dump, 10234);
+        assert_eq!(n.rx, 1200);
+        assert_eq!(n.tx, 600);
+    }
+
+    #[test]
+    fn zero_when_uid_missing() {
+        assert_eq!(
+            parse_netstats_detail_for_uid("nothing here", 42),
+            NetBytes { rx: 0, tx: 0 }
+        );
+    }
+}
