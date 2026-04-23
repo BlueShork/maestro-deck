@@ -1,27 +1,26 @@
-import Editor, { loader, type OnMount } from "@monaco-editor/react";
+import {
+  autocompletion,
+  completionKeymap,
+  type CompletionContext,
+  type CompletionResult,
+} from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { StreamLanguage } from "@codemirror/language";
+import { yaml } from "@codemirror/legacy-modes/mode/yaml";
+import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
+import { oneDark } from "@codemirror/theme-one-dark";
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  highlightActiveLine,
+  keymap,
+  lineNumbers,
+} from "@codemirror/view";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { FileDown, FileUp, Save } from "lucide-react";
-import * as monaco from "monaco-editor";
-import type { editor as MonacoEditor } from "monaco-editor";
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import yamlWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import { useCallback, useEffect, useRef } from "react";
-
-// Use the bundled monaco-editor package instead of the default CDN loader.
-// Release builds run inside a Tauri webview with a strict CSP that blocks
-// cross-origin script loads — without this line the editor just shows
-// "Loading…" forever.
-loader.config({ monaco });
-
-// Monaco needs a worker factory at runtime. Vite's `?worker` import bundles
-// each worker as a separate chunk and returns a Worker constructor.
-self.MonacoEnvironment = {
-  getWorker(_workerId, label) {
-    if (label === "yaml" || label === "json") return new yamlWorker();
-    return new editorWorker();
-  },
-};
 
 import { Button } from "@/components/ui/Button";
 import { useFlowStore } from "@/stores/flowStore";
@@ -46,6 +45,49 @@ const MAESTRO_KEYWORDS = [
   "takeScreenshot",
 ];
 
+function maestroCompletions(ctx: CompletionContext): CompletionResult | null {
+  const word = ctx.matchBefore(/\w*/);
+  if (!word || (word.from === word.to && !ctx.explicit)) return null;
+  return {
+    from: word.from,
+    options: MAESTRO_KEYWORDS.map((label) => ({ label, type: "keyword" })),
+  };
+}
+
+// Active line highlighting for run-in-progress: the backend emits the line
+// number currently executing and we paint it with a subtle background.
+const setActiveLine = StateEffect.define<number | null>();
+
+const activeLineField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setActiveLine)) {
+        if (e.value === null || e.value < 1) return Decoration.none;
+        const line = tr.state.doc.line(Math.min(e.value, tr.state.doc.lines));
+        return Decoration.set([
+          Decoration.line({ class: "cm-active-run-line" }).range(line.from),
+        ]);
+      }
+    }
+    return deco.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+const editorTheme = EditorView.theme({
+  "&": {
+    height: "100%",
+    fontSize: "12px",
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",
+  },
+  ".cm-scroller": { overflow: "auto" },
+  ".cm-active-run-line": {
+    backgroundColor: "hsl(var(--primary) / 0.15)",
+    borderLeft: "2px solid hsl(var(--primary))",
+  },
+});
+
 export function FlowEditor() {
   const content = useFlowStore((s) => s.content);
   const filePath = useFlowStore((s) => s.filePath);
@@ -56,67 +98,68 @@ export function FlowEditor() {
   const loaded = useFlowStore((s) => s.loaded);
   const saved = useFlowStore((s) => s.saved);
 
-  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
-  const decorationsRef = useRef<string[]>([]);
-
-  const handleMount: OnMount = useCallback(
-    (editor, monaco) => {
-      editorRef.current = editor;
-      // Force a layout pass on the next frame: Monaco otherwise caches stale
-      // width measurements from before the flex container settled, producing
-      // overlapping glyphs in release builds.
-      requestAnimationFrame(() => editor.layout());
-      monaco.languages.registerCompletionItemProvider("yaml", {
-        provideCompletionItems: (model, position) => {
-          const word = model.getWordUntilPosition(position);
-          const range = {
-            startLineNumber: position.lineNumber,
-            endLineNumber: position.lineNumber,
-            startColumn: word.startColumn,
-            endColumn: word.endColumn,
-          };
-          return {
-            suggestions: MAESTRO_KEYWORDS.map((kw) => ({
-              label: kw,
-              kind: monaco.languages.CompletionItemKind.Keyword,
-              insertText: kw,
-              range,
-            })),
-          };
-        },
-      });
-      editor.onDidChangeCursorPosition((e) => {
-        setCursor(e.position.lineNumber, e.position.column);
-      });
-    },
-    [setCursor],
-  );
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const syncingFromStore = useRef(false);
+  const readonlyCompartment = useRef(new Compartment()).current;
 
   useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    if (activeLine === null) {
-      decorationsRef.current = editor.deltaDecorations(
-        decorationsRef.current,
-        [],
-      );
-      return;
-    }
-    decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
-      {
-        range: {
-          startLineNumber: activeLine,
-          endLineNumber: activeLine,
-          startColumn: 1,
-          endColumn: 1,
-        },
-        options: {
-          isWholeLine: true,
-          className: "bg-primary/10",
-          glyphMarginClassName: "border-l-2 border-primary",
-        },
-      },
-    ]);
+    if (!hostRef.current) return;
+    const state = EditorState.create({
+      doc: content,
+      extensions: [
+        lineNumbers(),
+        history(),
+        highlightActiveLine(),
+        autocompletion({ override: [maestroCompletions] }),
+        keymap.of([
+          ...defaultKeymap,
+          ...historyKeymap,
+          ...completionKeymap,
+          indentWithTab,
+        ]),
+        StreamLanguage.define(yaml),
+        oneDark,
+        editorTheme,
+        activeLineField,
+        readonlyCompartment.of(EditorState.readOnly.of(false)),
+        EditorView.updateListener.of((v) => {
+          if (v.docChanged && !syncingFromStore.current) {
+            setContent(v.state.doc.toString());
+          }
+          if (v.selectionSet) {
+            const head = v.state.selection.main.head;
+            const line = v.state.doc.lineAt(head);
+            setCursor(line.number, head - line.from + 1);
+          }
+        }),
+      ],
+    });
+    const view = new EditorView({ state, parent: hostRef.current });
+    viewRef.current = view;
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+    };
+    // Only mount once; content sync handled in the next effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pull content from the store when it diverges (file open, external edits).
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const current = view.state.doc.toString();
+    if (current === content) return;
+    syncingFromStore.current = true;
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: content },
+    });
+    syncingFromStore.current = false;
+  }, [content]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setActiveLine.of(activeLine) });
   }, [activeLine]);
 
   const onOpen = useCallback(async () => {
@@ -170,8 +213,7 @@ export function FlowEditor() {
       else if (ce.detail === "open") void onOpen();
     };
     window.addEventListener("flow:command", handler as EventListener);
-    return () =>
-      window.removeEventListener("flow:command", handler as EventListener);
+    return () => window.removeEventListener("flow:command", handler as EventListener);
   }, [onSave, onSaveAs, onOpen]);
 
   return (
@@ -181,9 +223,7 @@ export function FlowEditor() {
           <span className="truncate text-xs font-medium">
             {filePath ? filePath.split(/[\\/]/).pop() : "Untitled.yaml"}
           </span>
-          {dirty ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-          ) : null}
+          {dirty ? <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> : null}
         </div>
         <div className="flex items-center gap-1">
           <Button size="xs" variant="ghost" onClick={() => void onOpen()}>
@@ -200,27 +240,7 @@ export function FlowEditor() {
           </Button>
         </div>
       </div>
-      <div className="min-h-0 flex-1">
-        <Editor
-          height="100%"
-          language="yaml"
-          theme="vs-dark"
-          value={content}
-          onChange={(v) => setContent(v ?? "")}
-          onMount={handleMount}
-          options={{
-            automaticLayout: true,
-            minimap: { enabled: false },
-            fontSize: 12,
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",
-            scrollBeyondLastLine: false,
-            renderLineHighlight: "line",
-            tabSize: 2,
-            wordWrap: "on",
-            glyphMargin: true,
-          }}
-        />
-      </div>
+      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden" />
     </div>
   );
 }
