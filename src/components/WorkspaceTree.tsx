@@ -1,8 +1,10 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { exists } from "@tauri-apps/plugin-fs";
 import {
   ChevronRight,
   FileCode2,
   FilePlus,
+  FileText,
   FolderClosed,
   FolderOpen,
   FolderPlus,
@@ -27,10 +29,12 @@ export function WorkspaceTree() {
   const tree = useWorkspaceStore((s) => s.tree);
   const loading = useWorkspaceStore((s) => s.loading);
   const error = useWorkspaceStore((s) => s.error);
+  const hasConfig = useWorkspaceStore((s) => s.hasConfig);
   const setFolder = useWorkspaceStore((s) => s.setFolder);
   const setTree = useWorkspaceStore((s) => s.setTree);
   const setLoading = useWorkspaceStore((s) => s.setLoading);
   const setError = useWorkspaceStore((s) => s.setError);
+  const setHasConfig = useWorkspaceStore((s) => s.setHasConfig);
 
   // Transient: which directory currently shows the inline "new file" input.
   const [pendingNewDir, setPendingNewDir] = useState<string | null>(null);
@@ -42,15 +46,25 @@ export function WorkspaceTree() {
       try {
         const t = await ipc.listWorkspace(path);
         setTree(t);
+        const sep = path.includes("\\") && !path.includes("/") ? "\\" : "/";
+        const configPath = path.endsWith(sep)
+          ? `${path}config.yaml`
+          : `${path}${sep}config.yaml`;
+        try {
+          setHasConfig(await exists(configPath));
+        } catch {
+          setHasConfig(false);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
         setTree(null);
+        setHasConfig(false);
       } finally {
         setLoading(false);
       }
     },
-    [setLoading, setError, setTree],
+    [setLoading, setError, setTree, setHasConfig],
   );
 
   useEffect(() => {
@@ -146,10 +160,19 @@ export function WorkspaceTree() {
       ) : tree && tree.kind === "dir" ? (
         <>
           <div
-            className="truncate border-b border-border px-3 py-1 font-mono text-[10px] text-muted-foreground"
+            className="flex items-center justify-between gap-2 border-b border-border px-3 py-1 font-mono text-[10px] text-muted-foreground"
             title={folderPath}
           >
-            {tree.name || folderPath}
+            <span className="truncate">{tree.name || folderPath}</span>
+            {hasConfig ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-sans text-[9px] font-medium uppercase tracking-wide text-primary"
+                title="config.yaml found — Maestro will follow its flows order"
+              >
+                <FileText className="h-2.5 w-2.5" />
+                config
+              </span>
+            ) : null}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
             {pendingNewDir === folderPath ? (

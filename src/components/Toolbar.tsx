@@ -1,4 +1,4 @@
-import { MousePointer2, Play, Settings, Square } from "lucide-react";
+import { ListChecks, MousePointer2, Play, Settings, Square } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Separator } from "@/components/ui/Separator";
@@ -13,19 +13,22 @@ import { useInspectorStore } from "@/stores/inspectorStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 interface ToolbarProps {
   onRun: () => void;
+  onRunAll: () => void;
   onStop: () => void;
   onOpenSettings: () => void;
 }
 
-export function Toolbar({ onRun, onStop, onOpenSettings }: ToolbarProps) {
+export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProps) {
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const running = useRunStore((s) => s.running);
   const fps = useStreamStore((s) => s.fps);
   const showFps = useSettingsStore((s) => s.showFps);
+  const folderPath = useWorkspaceStore((s) => s.folderPath);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -81,20 +84,41 @@ export function Toolbar({ onRun, onStop, onOpenSettings }: ToolbarProps) {
               <TooltipContent>Stop flow</TooltipContent>
             </Tooltip>
           ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={onRun}
-                  className={cn("gap-1.5")}
-                >
-                  <Play className="h-3.5 w-3.5" fill="currentColor" />
-                  Run
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Run flow (Cmd/Ctrl+R)</TooltipContent>
-            </Tooltip>
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={onRun}
+                    className={cn("gap-1.5")}
+                  >
+                    <Play className="h-3.5 w-3.5" fill="currentColor" />
+                    Run
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Run flow (Cmd/Ctrl+R)</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onRunAll}
+                    disabled={!folderPath}
+                    className="gap-1.5"
+                  >
+                    <ListChecks className="h-3.5 w-3.5" />
+                    Run all
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {folderPath
+                    ? "Run every flow in the workspace"
+                    : "Open a folder to enable"}
+                </TooltipContent>
+              </Tooltip>
+            </>
           )}
 
           <Tooltip>
