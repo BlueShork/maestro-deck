@@ -1,9 +1,27 @@
-import Editor, { type OnMount } from "@monaco-editor/react";
+import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { FileDown, FileUp, Save } from "lucide-react";
+import * as monaco from "monaco-editor";
 import type { editor as MonacoEditor } from "monaco-editor";
+import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import yamlWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import { useCallback, useEffect, useRef } from "react";
+
+// Use the bundled monaco-editor package instead of the default CDN loader.
+// Release builds run inside a Tauri webview with a strict CSP that blocks
+// cross-origin script loads — without this line the editor just shows
+// "Loading…" forever.
+loader.config({ monaco });
+
+// Monaco needs a worker factory at runtime. Vite's `?worker` import bundles
+// each worker as a separate chunk and returns a Worker constructor.
+self.MonacoEnvironment = {
+  getWorker(_workerId, label) {
+    if (label === "yaml" || label === "json") return new yamlWorker();
+    return new editorWorker();
+  },
+};
 
 import { Button } from "@/components/ui/Button";
 import { useFlowStore } from "@/stores/flowStore";

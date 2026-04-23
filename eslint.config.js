@@ -54,6 +54,8 @@ export default [
         cancelAnimationFrame: "readonly",
         performance: "readonly",
         crypto: "readonly",
+        self: "readonly",
+        Worker: "readonly",
         fetch: "readonly",
         KeyboardEvent: "readonly",
         Event: "readonly",
