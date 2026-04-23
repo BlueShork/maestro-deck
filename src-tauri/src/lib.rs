@@ -1,6 +1,7 @@
 //! Maestro Deck — open-source visual IDE for Maestro mobile tests.
 
 pub mod device;
+mod env_shim;
 pub mod error;
 pub mod hierarchy;
 pub mod input;
@@ -23,6 +24,11 @@ pub fn run() {
     fmt().with_env_filter(filter).with_target(false).init();
 
     tracing::info!("Maestro Deck v{} starting", env!("CARGO_PKG_VERSION"));
+
+    // GUI-launched .app bundles on macOS get a minimal PATH that doesn't
+    // include adb / maestro / java. Inherit the user's shell env before we
+    // expose any subprocess command.
+    env_shim::enrich_from_login_shell();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
