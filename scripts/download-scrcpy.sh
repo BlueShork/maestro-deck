@@ -3,15 +3,16 @@
 # screen mirroring. Idempotent: if the destination file already exists with
 # the expected SHA-256, the script is a no-op.
 #
-# Pinned to scrcpy v2.7 — bumping this version requires regenerating the
-# expected SHA-256 below. See docs/PLAN.md §7 (Risk 2).
+# Pinned to scrcpy v3.3.1 — required for Android 15 / Samsung One UI 7.
+# Bumping this version requires regenerating the expected SHA-256 below.
+# See docs/PLAN.md §7 (Risk 2).
 
 set -eu
 
-SCRCPY_VERSION="2.7"
+SCRCPY_VERSION="3.3.1"
 SCRCPY_FILENAME="scrcpy-server-v${SCRCPY_VERSION}"
 SCRCPY_URL="https://github.com/Genymobile/scrcpy/releases/download/v${SCRCPY_VERSION}/${SCRCPY_FILENAME}"
-EXPECTED_SHA256="a23c5659f36c260f105c022d27bcb3eafffa26070e7baa9eda66d01377a1adba"
+EXPECTED_SHA256="a0f70b20aa4998fbf658c94118cd6c8dab6abbb0647a3bdab344d70bc1ebcbb8"
 
 # Resolve repo root from the script location so the script can be invoked
 # from anywhere (CI, dev shell, IDE task).

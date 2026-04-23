@@ -16,10 +16,11 @@ use crate::error::{AppError, AppResult};
 
 pub mod stream;
 
-pub const SCRCPY_VERSION: &str = "2.7";
+pub const SCRCPY_VERSION: &str = "3.3.1";
 pub const DEFAULT_PORT: u16 = 27183;
 pub const DEVICE_JAR_PATH: &str = "/data/local/tmp/scrcpy-server.jar";
 pub const SOCKET_NAME: &str = "scrcpy";
+pub const JAR_FILENAME: &str = "scrcpy-server-v3.3.1.jar";
 
 /// Generate a fresh 8-hex-char SCID for a new session.
 pub fn random_scid() -> String {
@@ -40,6 +41,10 @@ pub struct ServerOptions {
     pub tunnel_forward: bool,
     pub audio: bool,
     pub control: bool,
+    /// scrcpy default is `true` which deletes the bundled jar from
+    /// `/data/local/tmp/` on exit — and the next session would get
+    /// `ClassNotFoundException`. We keep the jar around.
+    pub cleanup: bool,
 }
 
 impl Default for ServerOptions {
@@ -51,6 +56,7 @@ impl Default for ServerOptions {
             tunnel_forward: true,
             audio: false,
             control: true,
+            cleanup: false,
         }
     }
 }
@@ -70,15 +76,15 @@ pub fn build_server_argv(opts: &ServerOptions, scid: &str) -> Vec<String> {
         format!("tunnel_forward={}", opts.tunnel_forward),
         format!("audio={}", opts.audio),
         format!("control={}", opts.control),
+        format!("cleanup={}", opts.cleanup),
     ]
 }
 
 pub fn local_jar_path() -> AppResult<PathBuf> {
     let candidates = [
-        PathBuf::from("resources/scrcpy-server-v2.7.jar"),
-        PathBuf::from("resources/scrcpy/scrcpy-server.jar"),
-        PathBuf::from("src-tauri/resources/scrcpy-server-v2.7.jar"),
-        PathBuf::from("../Resources/resources/scrcpy-server-v2.7.jar"),
+        PathBuf::from(format!("resources/{JAR_FILENAME}")),
+        PathBuf::from(format!("src-tauri/resources/{JAR_FILENAME}")),
+        PathBuf::from(format!("../Resources/resources/{JAR_FILENAME}")),
     ];
     for p in &candidates {
         if p.exists() {
@@ -116,12 +122,13 @@ pub fn pkill_scrcpy(serial: &str) {
 
 /// Spawn scrcpy-server as a detached child of `adb shell`. Does NOT wait for
 /// the server to exit — the caller stores the [`Child`] so it can be killed
-/// on disconnect.
+/// on disconnect. Stderr/stdout are drained into our tracing log so server
+/// crashes show up in the app logs.
 pub fn spawn_server(serial: &str, scid: &str) -> AppResult<Child> {
     let opts = ServerOptions::default();
     let cmd = build_server_argv(&opts, scid).join(" ");
     info!(serial, scid, "spawning scrcpy server");
-    let child = Command::new("adb")
+    let mut child = Command::new("adb")
         .args(["-s", serial, "shell", &cmd])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -134,6 +141,25 @@ pub fn spawn_server(serial: &str, scid: &str) -> AppResult<Child> {
                 AppError::Io(e)
             }
         })?;
+
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    if let Some(stdout) = child.stdout.take() {
+        let mut lines = BufReader::new(stdout).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = lines.next_line().await {
+                info!(target: "scrcpy::stdout", "{line}");
+            }
+        });
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let mut lines = BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = lines.next_line().await {
+                tracing::warn!(target: "scrcpy::stderr", "{line}");
+            }
+        });
+    }
+
     Ok(child)
 }
 
@@ -160,6 +186,7 @@ mod tests {
                 tunnel_forward: true,
                 audio: false,
                 control: false,
+                cleanup: false,
             },
             "deadbeef",
         );
