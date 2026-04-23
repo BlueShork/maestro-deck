@@ -80,3 +80,68 @@ mod tests_status {
         assert!(parse_vm_rss_mb("Name: x\nState: S\n").is_none());
     }
 }
+
+/// Compute CPU % between two /proc/stat samples over an elapsed wall-clock
+/// interval. `user_hz` is typically 100 on Android. `cores` is the number of
+/// online CPU cores. Result is clamped to [0, 100 * cores] and returned as a
+/// percentage of a single core (100% = one core saturated).
+pub fn cpu_percent(
+    prev: ProcStat,
+    curr: ProcStat,
+    elapsed_secs: f32,
+    user_hz: u32,
+    _cores: u32,
+) -> f32 {
+    if elapsed_secs <= 0.0 || user_hz == 0 {
+        return 0.0;
+    }
+    let d_user = curr.utime_ticks.saturating_sub(prev.utime_ticks);
+    let d_sys = curr.stime_ticks.saturating_sub(prev.stime_ticks);
+    let delta_ticks = (d_user + d_sys) as f32;
+    let wall_ticks = elapsed_secs * user_hz as f32;
+    if wall_ticks <= 0.0 {
+        return 0.0;
+    }
+    (delta_ticks / wall_ticks * 100.0).max(0.0)
+}
+
+#[cfg(test)]
+mod tests_cpu {
+    use super::*;
+
+    fn s(u: u64, st: u64) -> ProcStat {
+        ProcStat { utime_ticks: u, stime_ticks: st, starttime_ticks: 0 }
+    }
+
+    #[test]
+    fn full_core_usage_is_100() {
+        // 1s interval, USER_HZ=100, 100 ticks consumed total → 1 full core
+        let pct = cpu_percent(s(0, 0), s(80, 20), 1.0, 100, 4);
+        assert!((pct - 100.0).abs() < 0.5, "got {pct}");
+    }
+
+    #[test]
+    fn half_core_usage_is_50() {
+        let pct = cpu_percent(s(100, 100), s(140, 110), 1.0, 100, 4);
+        assert!((pct - 50.0).abs() < 0.5, "got {pct}");
+    }
+
+    #[test]
+    fn zero_on_no_delta() {
+        let pct = cpu_percent(s(100, 50), s(100, 50), 1.0, 100, 4);
+        assert_eq!(pct, 0.0);
+    }
+
+    #[test]
+    fn zero_on_zero_elapsed() {
+        let pct = cpu_percent(s(0, 0), s(100, 100), 0.0, 100, 4);
+        assert_eq!(pct, 0.0);
+    }
+
+    #[test]
+    fn clamped_on_clock_skew() {
+        // curr < prev should yield 0, not negative
+        let pct = cpu_percent(s(500, 500), s(100, 100), 1.0, 100, 4);
+        assert_eq!(pct, 0.0);
+    }
+}
