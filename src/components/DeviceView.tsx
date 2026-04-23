@@ -257,7 +257,7 @@ export function DeviceView() {
 
 function EmptyState({ connected }: { connected: boolean }) {
   return (
-    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-black/40 p-6 text-center">
+    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
       <Smartphone className="h-10 w-10 text-muted-foreground/60" />
       <div className="text-sm font-medium">
         {connected ? "Waiting for frames…" : "No device connected"}

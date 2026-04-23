@@ -67,3 +67,7 @@ export type MaestroAction =
 export interface RunnerExitPayload {
   code: number;
 }
+
+export type WorkspaceNode =
+  | { kind: "dir"; name: string; path: string; children: WorkspaceNode[] }
+  | { kind: "file"; name: string; path: string };

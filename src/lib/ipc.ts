@@ -9,6 +9,7 @@ import type {
   RunnerExitPayload,
   Selector,
   UINode,
+  WorkspaceNode,
 } from "@/types";
 
 export class IpcError extends Error {
@@ -49,6 +50,7 @@ export const ipc = {
   sendInput: (event: InputEvent) => call<void>("send_input", { event }),
   runFlow: (filePath: string) => call<number>("run_flow", { filePath }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
+  listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
 };
 
 export interface FrameEvent {

@@ -1,5 +1,6 @@
 //! Maestro runner subprocess orchestration.
 
+use std::collections::HashMap;
 use std::process::Stdio;
 
 use once_cell::sync::Lazy;
@@ -7,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{oneshot, Mutex as AsyncMutex};
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
@@ -29,11 +30,12 @@ pub struct RunnerExit {
     pub code: Option<i32>,
 }
 
-/// Track spawned children by PID so `stop_flow` can target the right process.
-/// Uses tokio::sync::Mutex so we can `await` on `start_kill` if needed and
-/// avoid blocking the async runtime.
-static CHILDREN: Lazy<AsyncMutex<Vec<(u32, tokio::process::Child)>>> =
-    Lazy::new(|| AsyncMutex::new(Vec::new()));
+/// Map of active runner PIDs to their kill-signal sender. The kill signal is
+/// consumed by the wait task which owns the `Child` and calls `kill().await`
+/// from a `tokio::select!` arm. Entries are removed once the wait task
+/// completes (whether the runner exited on its own or was killed).
+static RUNNERS: Lazy<AsyncMutex<HashMap<u32, oneshot::Sender<()>>>> =
+    Lazy::new(|| AsyncMutex::new(HashMap::new()));
 
 fn maestro_bin() -> String {
     std::env::var("MAESTRO_BIN").unwrap_or_else(|_| DEFAULT_BIN.to_string())
@@ -85,49 +87,42 @@ pub async fn spawn_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
         });
     }
 
-    // Wait for exit in a separate task so spawn_runner returns immediately.
+    // Register the kill channel BEFORE spawning the wait task so a quick
+    // `stop_flow` after `run_flow` returns can always find the PID.
+    let (kill_tx, kill_rx) = oneshot::channel::<()>();
+    RUNNERS.lock().await.insert(pid, kill_tx);
+
     let app_exit = app.clone();
     tokio::spawn(async move {
-        let code = match wait_and_remove(pid).await {
-            Ok(c) => c,
-            Err(e) => {
-                warn!(error = %e, "runner wait failed");
-                None
+        let code = tokio::select! {
+            status = child.wait() => status.ok().and_then(|s| s.code()),
+            _ = kill_rx => {
+                if let Err(e) = child.kill().await {
+                    warn!(pid, error = %e, "child kill failed");
+                }
+                child.wait().await.ok().and_then(|s| s.code())
             }
         };
+        RUNNERS.lock().await.remove(&pid);
         let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
     });
 
-    CHILDREN.lock().await.push((pid, child));
     Ok(pid)
 }
 
-async fn wait_and_remove(pid: u32) -> AppResult<Option<i32>> {
-    let mut child = {
-        let mut guard = CHILDREN.lock().await;
-        let idx = guard
-            .iter()
-            .position(|(p, _)| *p == pid)
-            .ok_or_else(|| AppError::RunnerFailed(format!("pid {pid} not registered")))?;
-        guard.swap_remove(idx).1
-    };
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| AppError::RunnerFailed(format!("wait failed: {e}")))?;
-    Ok(status.code())
-}
-
 pub async fn kill_runner(pid: u32) -> AppResult<()> {
-    let mut guard = CHILDREN.lock().await;
-    if let Some(idx) = guard.iter().position(|(p, _)| *p == pid) {
-        let (_, child) = guard.get_mut(idx).expect("just located");
-        child
-            .start_kill()
-            .map_err(|e| AppError::RunnerFailed(format!("kill failed: {e}")))?;
-        Ok(())
-    } else {
-        Err(AppError::RunnerFailed(format!("no runner with PID {pid}")))
+    let tx = RUNNERS.lock().await.remove(&pid);
+    match tx {
+        Some(tx) => {
+            // The receiver may already be dropped if the runner exited in the
+            // tiny window between us locking and the wait task finishing —
+            // that's fine, send returns Err which we ignore.
+            let _ = tx.send(());
+            Ok(())
+        }
+        None => Err(AppError::RunnerFailed(format!(
+            "no runner with PID {pid}"
+        ))),
     }
 }
 

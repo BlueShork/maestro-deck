@@ -9,26 +9,46 @@ import { InspectorPanel } from "@/components/InspectorPanel";
 import { RunConsole } from "@/components/RunConsole";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Toolbar } from "@/components/Toolbar";
+import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { Toaster } from "@/components/ui/Toast";
+import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
+import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const inspectKey = useSettingsStore((s) => s.inspectKey);
+  const theme = useSettingsStore((s) => s.theme);
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
   const setRunning = useRunStore((s) => s.setRunning);
   const setStopped = useRunStore((s) => s.setStopped);
   const runningPid = useRunStore((s) => s.pid);
+
+  // Restore the last opened file from the previous session. The workspace
+  // store hydrates synchronously from localStorage, so the path is available
+  // on first effect tick.
+  useEffect(() => {
+    const last = useWorkspaceStore.getState().lastOpenFile;
+    if (last) void openFlowFile(last, { silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== "system") return;
+    return watchSystemTheme(() => applyTheme("system"));
+  }, [theme]);
 
   useEffect(() => {
     let cleanups: Array<() => void> = [];
@@ -37,9 +57,16 @@ export default function App() {
       events.onRunnerStdout((line) => appendLog("stdout", line)),
       events.onRunnerStderr((line) => appendLog("stderr", line)),
       events.onRunnerExit(({ code }) => {
-        appendLog("system", `[runner exited with code ${code}]`);
+        const wasStopped = useRunStore.getState().stopRequested;
+        appendLog(
+          "system",
+          wasStopped
+            ? "[runner stopped by user]"
+            : `[runner exited with code ${code}]`,
+        );
         setStopped(code);
-        if (code === 0) toast.success("Flow completed");
+        if (wasStopped) toast.success("Flow stopped");
+        else if (code === 0) toast.success("Flow completed");
         else toast.error("Flow failed", `exit code ${code}`);
       }),
       events.onDeviceDisconnected(() => markDisconnected()),
@@ -74,6 +101,7 @@ export default function App() {
 
   const onStop = useCallback(async () => {
     if (runningPid === null) return;
+    useRunStore.getState().requestStop();
     try {
       await ipc.stopFlow(runningPid);
     } catch (err) {
@@ -107,6 +135,9 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <div className="flex min-h-0 flex-1">
+        <aside className="flex w-60 shrink-0 flex-col border-r border-border">
+          <WorkspaceTree />
+        </aside>
         <aside className="flex w-72 shrink-0 flex-col border-r border-border">
           <DeviceSelector />
           <div className="min-h-0 flex-1 overflow-hidden">
@@ -115,7 +146,7 @@ export default function App() {
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1">
-            <section className="flex min-w-0 flex-1 items-center justify-center bg-black/40 p-4">
+            <section className="flex min-w-0 flex-1 items-center justify-center bg-muted/40 p-4">
               <DeviceView />
             </section>
             <section className="flex w-[45%] min-w-0 flex-col border-l border-border">

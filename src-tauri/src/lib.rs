@@ -11,6 +11,7 @@ pub mod scrcpy;
 pub mod selector;
 pub mod state;
 pub mod video;
+pub mod workspace;
 pub mod yaml;
 
 use tracing_subscriber::{fmt, EnvFilter};
@@ -47,6 +48,7 @@ pub fn run() {
             send_input,
             run_flow,
             stop_flow,
+            list_workspace,
         ])
         .setup(|app| {
             ipc::register_events(app)?;
