@@ -23,6 +23,8 @@ printf '__JAVA_START__%s__JAVA_END__' "${JAVA_HOME:-}"
     let child = Command::new(&shell)
         .args(["-ilc", script])
         .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .spawn();
 
     let mut child = match child {
