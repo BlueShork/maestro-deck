@@ -21,10 +21,12 @@ const variantSize: Record<ToastVariant, string> = {
 export function Toaster() {
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
+  const setClosed = useToastStore((s) => s.setClosed);
 
   useEffect(() => {
-    if (toasts.length === 0) return;
-    const timers = toasts.map((t) =>
+    const open = toasts.filter((t) => t.open);
+    if (open.length === 0) return;
+    const timers = open.map((t) =>
       setTimeout(() => dismiss(t.id), t.variant === "success" ? 1800 : 4500),
     );
     return () => {
@@ -37,9 +39,14 @@ export function Toaster() {
       {toasts.map((t) => (
         <ToastPrimitive.Root
           key={t.id}
-          open
+          open={t.open}
           onOpenChange={(open) => {
-            if (!open) dismiss(t.id);
+            if (!open) {
+              dismiss(t.id);
+              // Radix completes its close animation before unmounting; remove
+              // from the store after the swap delay.
+              setTimeout(() => setClosed(t.id), 200);
+            }
           }}
           className={cn(
             "pointer-events-auto flex w-full items-start gap-2 rounded-md border shadow-lg backdrop-blur data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom-2",
