@@ -62,6 +62,10 @@ export function FlowEditor() {
   const handleMount: OnMount = useCallback(
     (editor, monaco) => {
       editorRef.current = editor;
+      // Force a layout pass on the next frame: Monaco otherwise caches stale
+      // width measurements from before the flex container settled, producing
+      // overlapping glyphs in release builds.
+      requestAnimationFrame(() => editor.layout());
       monaco.languages.registerCompletionItemProvider("yaml", {
         provideCompletionItems: (model, position) => {
           const word = model.getWordUntilPosition(position);
@@ -205,6 +209,7 @@ export function FlowEditor() {
           onChange={(v) => setContent(v ?? "")}
           onMount={handleMount}
           options={{
+            automaticLayout: true,
             minimap: { enabled: false },
             fontSize: 12,
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",
