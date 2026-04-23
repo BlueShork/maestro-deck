@@ -145,3 +145,80 @@ mod tests_cpu {
         assert_eq!(pct, 0.0);
     }
 }
+
+pub fn parse_pidof(s: &str) -> Option<u32> {
+    s.split_whitespace().next()?.parse().ok()
+}
+
+pub fn parse_foreground_package(dumpsys_window: &str) -> Option<String> {
+    for line in dumpsys_window.lines() {
+        let key = if let Some(idx) = line.find("mCurrentFocus=") {
+            &line[idx..]
+        } else if let Some(idx) = line.find("mFocusedApp=") {
+            &line[idx..]
+        } else {
+            continue;
+        };
+        // Look for "<pkg>/<activity>" pattern inside the line
+        for tok in key.split_whitespace() {
+            if let Some(slash) = tok.find('/') {
+                let candidate = &tok[..slash];
+                // Filter out brace-prefixed junk like "Window{xxx"
+                if candidate.contains('.')
+                    && !candidate.contains('{')
+                    && !candidate.contains('=')
+                {
+                    return Some(candidate.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests_foreground {
+    use super::*;
+
+    #[test]
+    fn pidof_single_pid() {
+        assert_eq!(parse_pidof("1234\n"), Some(1234));
+    }
+
+    #[test]
+    fn pidof_first_of_multiple() {
+        // Multiple processes: take the first
+        assert_eq!(parse_pidof("1234 5678\n"), Some(1234));
+    }
+
+    #[test]
+    fn pidof_empty_is_none() {
+        assert_eq!(parse_pidof(""), None);
+        assert_eq!(parse_pidof("\n"), None);
+    }
+
+    #[test]
+    fn foreground_pkg_from_mCurrentFocus() {
+        let input = "  mCurrentFocus=Window{abc u0 com.example.app/com.example.app.MainActivity}\n\
+                     Some other line\n";
+        assert_eq!(
+            parse_foreground_package(input).as_deref(),
+            Some("com.example.app")
+        );
+    }
+
+    #[test]
+    fn foreground_pkg_handles_mFocusedApp() {
+        // Fallback key on some Android versions
+        let input = "  mFocusedApp=ActivityRecord{deadbeef u0 com.example.app/.Main t5}\n";
+        assert_eq!(
+            parse_foreground_package(input).as_deref(),
+            Some("com.example.app")
+        );
+    }
+
+    #[test]
+    fn foreground_pkg_none_when_absent() {
+        assert!(parse_foreground_package("nothing relevant here").is_none());
+    }
+}
