@@ -46,3 +46,37 @@ mod tests_stat {
         assert!(parse_proc_stat("1 (x) S 2 3").is_none());
     }
 }
+
+/// Returns VmRSS in megabytes, rounded to 1 decimal (via f32). Android /proc reports kB.
+pub fn parse_vm_rss_mb(s: &str) -> Option<f32> {
+    for line in s.lines() {
+        if let Some(rest) = line.strip_prefix("VmRSS:") {
+            let kb: u64 = rest.trim().split_whitespace().next()?.parse().ok()?;
+            return Some(kb as f32 / 1024.0);
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests_status {
+    use super::*;
+
+    #[test]
+    fn parses_vm_rss_in_kb() {
+        let input = "Name:\tcom.example.app\n\
+                     State:\tS (sleeping)\n\
+                     Tgid:\t1234\n\
+                     VmPeak:\t  5120000 kB\n\
+                     VmSize:\t  4096000 kB\n\
+                     VmRSS:\t   204800 kB\n\
+                     Threads:\t32\n";
+        let mb = parse_vm_rss_mb(input).expect("should parse");
+        assert!((mb - 200.0).abs() < 0.01, "got {mb}");
+    }
+
+    #[test]
+    fn returns_none_when_missing() {
+        assert!(parse_vm_rss_mb("Name: x\nState: S\n").is_none());
+    }
+}
