@@ -49,6 +49,8 @@ pub fn run() {
             run_flow,
             stop_flow,
             list_workspace,
+            start_stream,
+            stop_stream,
         ])
         .setup(|app| {
             ipc::register_events(app)?;

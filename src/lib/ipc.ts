@@ -38,7 +38,8 @@ export const ipc = {
   ping: () => call<string>("ping"),
   appVersion: () => call<string>("app_version"),
   listDevices: () => call<Device[]>("list_devices"),
-  connectDevice: (serial: string) => call<void>("connect_device", { serial }),
+  connectDevice: (serial: string, streamEnabled: boolean) =>
+    call<void>("connect_device", { serial, streamEnabled }),
   disconnectDevice: () => call<void>("disconnect_device"),
   enterInspectMode: () => call<HierarchyTree>("enter_inspect_mode"),
   queryElement: (x: number, y: number) =>
@@ -51,6 +52,8 @@ export const ipc = {
   runFlow: (filePath: string) => call<number>("run_flow", { filePath }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
+  startStream: () => call<void>("start_stream"),
+  stopStream: () => call<void>("stop_stream"),
 };
 
 export interface FrameEvent {

@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/Dialog";
+import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils";
 import { useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
 
@@ -29,6 +30,8 @@ export function SettingsDialog({
   const setInspectKey = useSettingsStore((s) => s.setInspectKey);
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const streamEnabled = useSettingsStore((s) => s.streamEnabled);
+  const setStreamEnabled = useSettingsStore((s) => s.setStreamEnabled);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -66,14 +69,28 @@ export function SettingsDialog({
             </div>
           </div>
 
-          <label className="flex items-center justify-between">
-            <span>Show FPS counter</span>
-            <input
-              type="checkbox"
-              checked={showFps}
-              onChange={(e) => setShowFps(e.currentTarget.checked)}
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col">
+              <span>Live device stream</span>
+              <span className="text-[11px] text-muted-foreground">
+                Off = run flows on a connected device without scrcpy mirroring.
+                Saves ~250 MB RAM and ~10% CPU.
+              </span>
+            </div>
+            <Switch
+              checked={streamEnabled}
+              onCheckedChange={setStreamEnabled}
+              aria-label="Live device stream"
             />
-          </label>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Show FPS counter</span>
+            <Switch
+              checked={showFps}
+              onCheckedChange={setShowFps}
+              aria-label="Show FPS counter"
+            />
+          </div>
           <label className="flex items-center justify-between gap-3">
             <span>Inspect shortcut key</span>
             <input

@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import type { Device } from "@/types";
 
@@ -35,11 +37,17 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   },
   connect: async (serial) => {
     const device = get().devices.find((d) => d.serial === serial);
+    const streamEnabled = useSettingsStore.getState().streamEnabled;
     set({ connecting: true, error: null });
     try {
-      await ipc.connectDevice(serial);
+      await ipc.connectDevice(serial, streamEnabled);
       set({ current: device ?? null, connecting: false });
-      toast.success("Device connected", device?.model ?? serial);
+      toast.success(
+        "Device connected",
+        streamEnabled
+          ? (device?.model ?? serial)
+          : `${device?.model ?? serial} · stream off`,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       set({ connecting: false, error: message });
@@ -54,10 +62,12 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       toast.error("Disconnect failed", message);
     } finally {
       set({ current: null });
+      useStreamStore.getState().reset();
     }
   },
   markDisconnected: () => {
     set({ current: null });
+    useStreamStore.getState().reset();
     toast.info("Device disconnected");
   },
 }));
