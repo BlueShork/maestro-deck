@@ -365,3 +365,60 @@ Active interfaces:
         );
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GfxStats {
+    pub total_frames: u32,
+    pub janky_frames: u32,
+}
+
+pub fn parse_gfxinfo(s: &str) -> Option<GfxStats> {
+    let mut total: Option<u32> = None;
+    let mut janky: Option<u32> = None;
+    for line in s.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("Total frames rendered:") {
+            total = rest.trim().split_whitespace().next()?.parse().ok();
+        } else if let Some(rest) = t.strip_prefix("Janky frames:") {
+            janky = rest.trim().split_whitespace().next()?.parse().ok();
+        }
+    }
+    Some(GfxStats {
+        total_frames: total?,
+        janky_frames: janky?,
+    })
+}
+
+#[cfg(test)]
+mod tests_gfx {
+    use super::*;
+
+    #[test]
+    fn parses_basic_gfxinfo() {
+        let input = "\
+Graphics info for pid 1234 [com.example.app]
+
+  Stats since: 123456ms
+  Total frames rendered: 420
+  Janky frames: 38 (9.05%)
+  50th percentile: 8ms
+  90th percentile: 14ms
+  95th percentile: 17ms
+  99th percentile: 23ms
+";
+        let s = parse_gfxinfo(input).expect("should parse");
+        assert_eq!(s.total_frames, 420);
+        assert_eq!(s.janky_frames, 38);
+    }
+
+    #[test]
+    fn returns_none_when_missing() {
+        assert!(parse_gfxinfo("unrelated output").is_none());
+    }
+
+    #[test]
+    fn returns_none_when_only_partial() {
+        // Total present but janky missing — treat as None to avoid lying to UI
+        assert!(parse_gfxinfo("Total frames rendered: 100\n").is_none());
+    }
+}
