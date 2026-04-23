@@ -15,6 +15,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, Mutex as AsyncMutex};
+use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
@@ -32,8 +33,9 @@ const GFX_INTERVAL: Duration = Duration::from_secs(5);
 const FOREGROUND_CHECK_INTERVAL: Duration = Duration::from_secs(3);
 const MAX_CONSECUTIVE_ERRORS: u32 = 3;
 
-static RUNNING: Lazy<AsyncMutex<Option<(oneshot::Sender<()>, tokio::task::JoinHandle<()>)>>> =
-    Lazy::new(|| AsyncMutex::new(None));
+type MetricsSlot = Option<(oneshot::Sender<()>, JoinHandle<()>)>;
+
+static RUNNING: Lazy<AsyncMutex<MetricsSlot>> = Lazy::new(|| AsyncMutex::new(None));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsSample {
@@ -109,7 +111,11 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
         // 1. Refresh foreground every 3s (and on first tick).
         if last_fg_check.elapsed() >= FOREGROUND_CHECK_INTERVAL {
             last_fg_check = Instant::now();
-            match resolve_target(&serial) {
+            let serial_clone = serial.clone();
+            let target_result = tokio::task::spawn_blocking(move || resolve_target(&serial_clone))
+                .await
+                .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("resolve_target join failed: {e}"))));
+            match target_result {
                 Ok(Some(new_target)) => {
                     let changed = target
                         .as_ref()
@@ -151,7 +157,13 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
         };
 
         // 2. CPU + RAM every tick.
-        let cpu_mem = match fetch_cpu_mem(&serial, t.pid, prev_stat) {
+        let serial_clone = serial.clone();
+        let pid = t.pid;
+        let prev = prev_stat;
+        let cpu_mem = match tokio::task::spawn_blocking(move || fetch_cpu_mem(&serial_clone, pid, prev))
+            .await
+            .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("cpu_mem join failed: {e}"))))
+        {
             Ok(s) => s,
             Err(e) => {
                 warn!(error = ?e, "cpu_mem fetch failed");
@@ -168,7 +180,13 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
         // 3. Net at its own cadence.
         if last_net_poll.elapsed() >= NET_INTERVAL {
             last_net_poll = Instant::now();
-            match fetch_net(&serial, t.uid, prev_net) {
+            let serial_clone = serial.clone();
+            let uid = t.uid;
+            let prev = prev_net;
+            match tokio::task::spawn_blocking(move || fetch_net(&serial_clone, uid, prev))
+                .await
+                .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("net join failed: {e}"))))
+            {
                 Ok(s) => {
                     prev_net = Some((s.bytes_snapshot, Instant::now()));
                     last_net_kbps = Some((s.rx_kbps, s.tx_kbps));
@@ -185,7 +203,12 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
         // 4. GFX at its own cadence.
         if last_gfx_poll.elapsed() >= GFX_INTERVAL {
             last_gfx_poll = Instant::now();
-            match fetch_gfx(&serial, &t.package) {
+            let serial_clone = serial.clone();
+            let package = t.package.clone();
+            match tokio::task::spawn_blocking(move || fetch_gfx(&serial_clone, &package))
+                .await
+                .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("gfx join failed: {e}"))))
+            {
                 Ok(Some(s)) => last_gfx = Some(s),
                 Ok(None) => {}
                 Err(e) => {

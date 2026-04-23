@@ -51,7 +51,7 @@ mod tests_stat {
 pub fn parse_vm_rss_mb(s: &str) -> Option<f32> {
     for line in s.lines() {
         if let Some(rest) = line.strip_prefix("VmRSS:") {
-            let kb: u64 = rest.trim().split_whitespace().next()?.parse().ok()?;
+            let kb: u64 = rest.split_whitespace().next()?.parse().ok()?;
             return Some(kb as f32 / 1024.0);
         }
     }
@@ -391,9 +391,9 @@ pub fn parse_gfxinfo(s: &str) -> Option<GfxStats> {
     for line in s.lines() {
         let t = line.trim();
         if let Some(rest) = t.strip_prefix("Total frames rendered:") {
-            total = rest.trim().split_whitespace().next()?.parse().ok();
+            total = rest.split_whitespace().next()?.parse().ok();
         } else if let Some(rest) = t.strip_prefix("Janky frames:") {
-            janky = rest.trim().split_whitespace().next()?.parse().ok();
+            janky = rest.split_whitespace().next()?.parse().ok();
         }
     }
     Some(GfxStats {

@@ -1,5 +1,6 @@
 import { ListChecks, MousePointer2, Play, Settings, Square } from "lucide-react";
 
+import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
 import { Separator } from "@/components/ui/Separator";
 import {
@@ -34,12 +35,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
     <TooltipProvider delayDuration={200}>
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/15 text-xs font-bold text-primary">
-            M
-          </div>
-          <div className="text-sm font-semibold tracking-tight">
-            Maestro Deck
-          </div>
+          <Logo className="h-7 w-auto text-foreground" />
           <Separator orientation="vertical" className="mx-1 h-5" />
           <span className="text-xs text-muted-foreground">v0.1.0</span>
         </div>
