@@ -171,13 +171,13 @@ pub async fn send_input(event: InputEvent, state: State<'_, AppState>) -> AppRes
 }
 
 #[tauri::command]
-pub fn run_flow(file_path: String) -> AppResult<u32> {
-    runner::spawn_runner(&file_path)
+pub async fn run_flow(file_path: String, app: AppHandle) -> AppResult<u32> {
+    runner::spawn_runner(app, &file_path).await
 }
 
 #[tauri::command]
-pub fn stop_flow(pid: u32) -> AppResult<()> {
-    runner::kill_runner(pid)
+pub async fn stop_flow(pid: u32) -> AppResult<()> {
+    runner::kill_runner(pid).await
 }
 
 impl serde::Serialize for HierarchyTree {
