@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, State};
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 use crate::device::{adb, Device};
@@ -14,6 +15,9 @@ use crate::scrcpy;
 use crate::selector::{self, Selector, SpatialIndex};
 use crate::state::AppState;
 use crate::yaml::{self, MaestroAction};
+
+/// Channel depth for queued control messages. ~1s of bursty input at 60Hz.
+const CONTROL_CHANNEL_DEPTH: usize = 64;
 
 #[tauri::command]
 pub fn ping() -> &'static str {
@@ -31,7 +35,11 @@ pub fn list_devices() -> AppResult<Vec<Device>> {
 }
 
 #[tauri::command]
-pub fn connect_device(serial: String, state: State<'_, AppState>) -> AppResult<()> {
+pub async fn connect_device(
+    serial: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
     let device = adb::get_device_info(&serial)?;
     info!(serial = %serial, model = %device.model, "device connected");
     *state.connected_device.write() = Some(device);
@@ -41,19 +49,52 @@ pub fn connect_device(serial: String, state: State<'_, AppState>) -> AppResult<(
     // without streaming.
     if let Err(e) = scrcpy::push_server(&serial) {
         warn!(error = ?e, "scrcpy push_server failed");
+        return Ok(());
     }
     if let Err(e) = scrcpy::create_tunnel(&serial, scrcpy::DEFAULT_PORT) {
         warn!(error = ?e, "scrcpy create_tunnel failed");
+        return Ok(());
+    }
+    if let Err(e) = scrcpy::start_server(&serial) {
+        warn!(error = ?e, "scrcpy start_server failed");
+        return Ok(());
+    }
+
+    // Spawn video stream first (it gets the device meta header), then control.
+    match scrcpy::stream::spawn_stream(app, scrcpy::DEFAULT_PORT).await {
+        Ok(handle) => {
+            *state.stream_abort.lock().await = Some(handle.abort);
+        }
+        Err(e) => {
+            warn!(error = ?e, "scrcpy stream connection failed");
+            return Ok(());
+        }
+    }
+
+    let (tx, rx) = mpsc::channel::<Vec<u8>>(CONTROL_CHANNEL_DEPTH);
+    match scrcpy::stream::spawn_control(scrcpy::DEFAULT_PORT, rx).await {
+        Ok(()) => {
+            *state.control_tx.lock().await = Some(tx);
+        }
+        Err(e) => {
+            warn!(error = ?e, "scrcpy control connection failed");
+        }
     }
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
+pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
     *state.connected_device.write() = None;
     *state.last_hierarchy.write() = None;
     *state.spatial_index.write() = None;
+    // Drop the control channel sender — the writer task exits when rx returns None.
+    *state.control_tx.lock().await = None;
+    // Send the abort signal to the video read loop.
+    if let Some(abort) = state.stream_abort.lock().await.take() {
+        let _ = abort.send(());
+    }
     Ok(())
 }
 
@@ -97,8 +138,13 @@ pub fn generate_command(action: MaestroAction) -> String {
 }
 
 #[tauri::command]
-pub fn send_input(event: InputEvent) -> AppResult<()> {
-    input::send(&event)
+pub async fn send_input(event: InputEvent, state: State<'_, AppState>) -> AppResult<()> {
+    let (w, h) = {
+        let guard = state.connected_device.read();
+        let dev = guard.as_ref().ok_or(AppError::NoDevice)?;
+        (dev.screen_width as u16, dev.screen_height as u16)
+    };
+    input::send(&event, state.inner(), w, h).await
 }
 
 #[tauri::command]

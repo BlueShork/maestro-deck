@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from "react";
 
+import { H264Decoder } from "@/lib/decoder";
 import { events, ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
@@ -15,26 +16,6 @@ import { useInspectorStore } from "@/stores/inspectorStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import type { Bounds, UINode } from "@/types";
-
-function framePayloadToImageData(payload: unknown): ImageData | null {
-  if (!payload || typeof payload !== "object") return null;
-  const p = payload as { width?: unknown; height?: unknown; bytes?: unknown };
-  if (typeof p.width !== "number" || typeof p.height !== "number") return null;
-  const expected = p.width * p.height * 4;
-  let buffer: ArrayBuffer | null = null;
-  if (p.bytes instanceof ArrayBuffer) {
-    buffer = p.bytes;
-  } else if (Array.isArray(p.bytes)) {
-    buffer = new Uint8Array(p.bytes).buffer;
-  } else if (p.bytes instanceof Uint8Array) {
-    const copy = new Uint8Array(p.bytes.byteLength);
-    copy.set(p.bytes);
-    buffer = copy.buffer;
-  }
-  if (!buffer || buffer.byteLength !== expected) return null;
-  const bytes = new Uint8ClampedArray(buffer);
-  return new ImageData(bytes, p.width, p.height);
-}
 
 function findLeafAt(node: UINode, x: number, y: number): UINode | null {
   const { bounds } = node;
@@ -55,41 +36,72 @@ function findLeafAt(node: UINode, x: number, y: number): UINode | null {
 
 function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
-  const pendingRef = useRef<ImageData | null>(null);
+  const pendingRef = useRef<VideoFrame | null>(null);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
+
+    const drawNext = () => {
+      rafRef.current = null;
+      const canvas = canvasRef.current;
+      const frame = pendingRef.current;
+      pendingRef.current = null;
+      if (!frame) return;
+      if (!canvas) {
+        frame.close();
+        return;
+      }
+      const w = frame.displayWidth || frame.codedWidth;
+      const h = frame.displayHeight || frame.codedHeight;
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        frame.close();
+        return;
+      }
+      ctx.drawImage(frame, 0, 0);
+      pushFrame({ width: w, height: h });
+      frame.close();
+    };
+
+    const decoder = new H264Decoder({
+      onFrame: (frame) => {
+        // Coalesce: if a frame is already queued for the next paint, drop it
+        // in favor of the newest one to keep latency low.
+        if (pendingRef.current) {
+          pendingRef.current.close();
+        }
+        pendingRef.current = frame;
+        if (rafRef.current === null) {
+          rafRef.current = requestAnimationFrame(drawNext);
+        }
+      },
+      onError: (err) => {
+        toast.error("Decoder error", err.message);
+      },
+    });
+
     void events
       .onFrame((payload) => {
-        const img = framePayloadToImageData(payload);
-        if (!img) return;
-        pendingRef.current = img;
-        if (rafRef.current === null) {
-          rafRef.current = requestAnimationFrame(() => {
-            rafRef.current = null;
-            const canvas = canvasRef.current;
-            const frame = pendingRef.current;
-            pendingRef.current = null;
-            if (!canvas || !frame) return;
-            if (canvas.width !== frame.width) canvas.width = frame.width;
-            if (canvas.height !== frame.height) canvas.height = frame.height;
-            const ctx = canvas.getContext("2d");
-            if (!ctx) return;
-            ctx.putImageData(frame, 0, 0);
-            pushFrame(frame);
-          });
-        }
+        decoder.feed(payload);
       })
       .then((fn) => {
         if (cancelled) fn();
         else unlisten = fn;
       });
+
     return () => {
       cancelled = true;
       if (unlisten) unlisten();
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (pendingRef.current) {
+        pendingRef.current.close();
+        pendingRef.current = null;
+      }
+      decoder.close();
     };
   }, [canvasRef, pushFrame]);
 }

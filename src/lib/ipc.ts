@@ -52,14 +52,37 @@ export const ipc = {
 };
 
 export interface FrameEvent {
-  width: number;
-  height: number;
-  bytes: number[] | Uint8Array | ArrayBuffer;
+  ptsUs: number;
+  isConfig: boolean;
+  isKey: boolean;
+  data: Uint8Array;
+}
+
+interface RawFrameEvent {
+  ptsUs: number;
+  isConfig: boolean;
+  isKey: boolean;
+  // Tauri serializes Vec<u8> as a JSON array of numbers; convert at the boundary.
+  data: number[] | Uint8Array | ArrayBuffer;
+}
+
+function toUint8Array(d: number[] | Uint8Array | ArrayBuffer): Uint8Array {
+  if (d instanceof Uint8Array) return d;
+  if (d instanceof ArrayBuffer) return new Uint8Array(d);
+  return Uint8Array.from(d);
 }
 
 export const events = {
   onFrame: (handler: (payload: FrameEvent) => void): Promise<UnlistenFn> =>
-    listen<FrameEvent>("frame", (e) => handler(e.payload)),
+    listen<RawFrameEvent>("frame", (e) => {
+      const p = e.payload;
+      handler({
+        ptsUs: p.ptsUs,
+        isConfig: p.isConfig,
+        isKey: p.isKey,
+        data: toUint8Array(p.data),
+      });
+    }),
   onRunnerStdout: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stdout", (e) => handler(e.payload)),
   onRunnerStderr: (handler: (line: string) => void): Promise<UnlistenFn> =>

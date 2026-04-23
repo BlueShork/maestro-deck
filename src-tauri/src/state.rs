@@ -1,5 +1,6 @@
 use parking_lot::RwLock;
 use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 
 use crate::device::Device;
 use crate::hierarchy::HierarchyTree;
@@ -12,4 +13,8 @@ pub struct AppState {
     pub connected_device: RwLock<Option<Device>>,
     pub last_hierarchy: RwLock<Option<Arc<HierarchyTree>>>,
     pub spatial_index: RwLock<Option<Arc<SpatialIndex>>>,
+
+    // Streaming state (async-locked because we acquire from tokio tasks).
+    pub control_tx: AsyncMutex<Option<mpsc::Sender<Vec<u8>>>>,
+    pub stream_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
 }

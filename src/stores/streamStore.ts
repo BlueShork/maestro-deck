@@ -6,8 +6,7 @@ interface StreamState {
   frameCount: number;
   fps: number;
   hasFrame: boolean;
-  lastFrame: ImageData | null;
-  pushFrame: (frame: ImageData) => void;
+  pushFrame: (dims: { width: number; height: number }) => void;
   reset: () => void;
 }
 
@@ -19,18 +18,16 @@ export const useStreamStore = create<StreamState>((set) => ({
   frameCount: 0,
   fps: 0,
   hasFrame: false,
-  lastFrame: null,
-  pushFrame: (frame) => {
+  pushFrame: ({ width, height }) => {
     const now = performance.now();
     frameTimes.push(now);
     while (frameTimes.length > 0 && now - frameTimes[0] > 1000) {
       frameTimes.shift();
     }
     set((s) => ({
-      width: frame.width,
-      height: frame.height,
+      width,
+      height,
       hasFrame: true,
-      lastFrame: frame,
       frameCount: s.frameCount + 1,
       fps: frameTimes.length,
     }));
@@ -43,7 +40,6 @@ export const useStreamStore = create<StreamState>((set) => ({
       frameCount: 0,
       fps: 0,
       hasFrame: false,
-      lastFrame: null,
     });
   },
 }));

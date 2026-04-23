@@ -16,6 +16,8 @@ use tracing::info;
 use crate::device::adb;
 use crate::error::AppResult;
 
+pub mod stream;
+
 pub const SCRCPY_VERSION: &str = "2.7";
 pub const DEFAULT_PORT: u16 = 27183;
 pub const DEVICE_JAR_PATH: &str = "/data/local/tmp/scrcpy-server.jar";

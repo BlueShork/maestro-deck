@@ -64,12 +64,6 @@ export type MaestroAction =
   | { kind: "pressKey"; key: string }
   | { kind: "waitForAnimationToEnd" };
 
-export interface FramePayload {
-  width: number;
-  height: number;
-  bytes: ArrayBuffer;
-}
-
 export interface RunnerExitPayload {
   code: number;
 }

@@ -61,6 +61,9 @@ export default [
         EventTarget: "readonly",
         EventListener: "readonly",
         ResizeObserver: "readonly",
+        VideoDecoder: "readonly",
+        VideoFrame: "readonly",
+        EncodedVideoChunk: "readonly",
       },
     },
     plugins: {

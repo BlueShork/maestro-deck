@@ -5,7 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
+use crate::state::AppState;
 
 // Control message type codes (subset).
 pub const TYPE_INJECT_KEYCODE: u8 = 0;
@@ -175,14 +176,55 @@ pub fn encode_swipe(
     out
 }
 
-/// High-level entry used by the IPC handler. No device connection is available
-/// yet, so we only validate the event and log; once scrcpy control is wired up
-/// this will write the encoded bytes to the control socket.
-pub fn send(event: &InputEvent) -> AppResult<()> {
-    match event {
-        InputEvent::Tap { .. } | InputEvent::Swipe { .. } => tracing::debug!(?event, "touch event"),
-        InputEvent::Text { .. } => tracing::debug!("text event"),
-        InputEvent::Key { .. } => tracing::debug!(?event, "key event"),
+/// High-level entry used by the IPC handler. Encodes the event with the
+/// helpers above and pushes each control message to the scrcpy control socket
+/// via the channel held in [`AppState`].
+pub async fn send(
+    event: &InputEvent,
+    state: &AppState,
+    screen_w: u16,
+    screen_h: u16,
+) -> AppResult<()> {
+    let tx = {
+        let guard = state.control_tx.lock().await;
+        guard.clone().ok_or(AppError::NoDevice)?
+    };
+
+    let messages: Vec<Vec<u8>> = match event {
+        InputEvent::Tap { x, y } => {
+            encode_tap(x.round() as i32, y.round() as i32, screen_w, screen_h)
+        }
+        InputEvent::Swipe {
+            x1,
+            y1,
+            x2,
+            y2,
+            duration_ms,
+        } => {
+            // Use ~16ms per step (≈60Hz) and clamp so very short swipes still
+            // emit at least one MOVE event.
+            let steps = (duration_ms / 16).max(1);
+            encode_swipe(
+                x1.round() as i32,
+                y1.round() as i32,
+                x2.round() as i32,
+                y2.round() as i32,
+                steps,
+                screen_w,
+                screen_h,
+            )
+        }
+        InputEvent::Text { text } => vec![encode_text(text)],
+        InputEvent::Key { keycode } => vec![
+            encode_keycode(KEY_ACTION_DOWN, *keycode, 0, 0),
+            encode_keycode(KEY_ACTION_UP, *keycode, 0, 0),
+        ],
+    };
+
+    for msg in messages {
+        tx.send(msg)
+            .await
+            .map_err(|e| AppError::ScrcpyFailed(format!("control channel closed: {e}")))?;
     }
     Ok(())
 }
