@@ -8,10 +8,12 @@ interface SettingsState {
   showFps: boolean;
   theme: ThemeMode;
   streamEnabled: boolean;
+  perfMonitoringEnabled: boolean;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
   setStreamEnabled: (v: boolean) => void;
+  setPerfMonitoringEnabled: (v: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -21,10 +23,12 @@ export const useSettingsStore = create<SettingsState>()(
       showFps: import.meta.env.DEV,
       theme: "system",
       streamEnabled: true,
+      perfMonitoringEnabled: false,
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
+      setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
     }),
     {
       name: "maestro-deck.settings",
@@ -33,6 +37,7 @@ export const useSettingsStore = create<SettingsState>()(
         inspectKey: s.inspectKey,
         theme: s.theme,
         streamEnabled: s.streamEnabled,
+        perfMonitoringEnabled: s.perfMonitoringEnabled,
       }),
     },
   ),
