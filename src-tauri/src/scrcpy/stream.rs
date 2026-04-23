@@ -78,8 +78,11 @@ async fn connect_with_retry(port: u16) -> AppResult<TcpStream> {
     )))
 }
 
-/// Read the device meta header sent only on the very first socket.
-async fn read_device_meta<R: AsyncReadExt + Unpin>(r: &mut R) -> AppResult<String> {
+/// Read the 1-byte dummy status prefix. scrcpy 3.x sends this as soon as the
+/// first socket is accepted — before the server blocks on any other expected
+/// socket (audio/control). This lets the client distinguish "server ready"
+/// from "adb forward accepted a premature connection".
+async fn read_dummy<R: AsyncReadExt + Unpin>(r: &mut R) -> AppResult<()> {
     let dummy = r
         .read_u8()
         .await
@@ -89,6 +92,12 @@ async fn read_device_meta<R: AsyncReadExt + Unpin>(r: &mut R) -> AppResult<Strin
             "device meta status byte = {dummy} (expected 0)"
         )));
     }
+    Ok(())
+}
+
+/// Read the 64-byte NUL-padded device name — sent AFTER all other expected
+/// sockets (audio, control) have connected.
+async fn read_device_name<R: AsyncReadExt + Unpin>(r: &mut R) -> AppResult<String> {
     let mut name_buf = [0u8; 64];
     r.read_exact(&mut name_buf)
         .await
@@ -184,19 +193,19 @@ async fn read_frame_header<R: AsyncReadExt + Unpin>(r: &mut R) -> AppResult<Opti
     Ok(Some((pts, size)))
 }
 
-/// Connect to the video socket and retry the whole handshake (TCP connect +
-/// dummy byte read) as one unit. `adb forward` accepts TCP connections even
-/// before scrcpy binds the abstract socket — those premature connections get
-/// closed with EOF on the first read. We retry until we see a valid dummy.
-async fn open_video_socket(port: u16) -> AppResult<(TcpStream, String)> {
+/// Connect to the video socket and retry until we see a clean dummy byte.
+/// `adb forward` accepts TCP connections even before scrcpy binds the
+/// abstract socket — those premature connections close with EOF on the first
+/// read. We retry the whole connect+dummy sequence until success.
+async fn open_video_with_dummy(port: u16) -> AppResult<TcpStream> {
     let addr = format!("127.0.0.1:{port}");
     let mut last_err: Option<AppError> = None;
     for attempt in 0..CONNECT_RETRIES {
         match TcpStream::connect(&addr).await {
-            Ok(mut sock) => match read_device_meta(&mut sock).await {
-                Ok(name) => return Ok((sock, name)),
+            Ok(mut sock) => match read_dummy(&mut sock).await {
+                Ok(()) => return Ok(sock),
                 Err(e) => {
-                    debug!(attempt, error = %e, "scrcpy handshake not ready yet");
+                    debug!(attempt, error = %e, "scrcpy dummy not ready yet");
                     last_err = Some(e);
                 }
             },
@@ -215,11 +224,22 @@ async fn open_video_socket(port: u16) -> AppResult<(TcpStream, String)> {
     )))
 }
 
-/// Connect to the video socket, parse meta headers, and spawn the read loop.
-pub async fn spawn_stream(app: AppHandle, port: u16) -> AppResult<StreamHandle> {
-    let (mut sock, device_name) = open_video_socket(port).await?;
+/// Connect both sockets in scrcpy's expected order (video first, then
+/// control), perform the device-meta handshake, and spawn the read/write
+/// tasks. scrcpy blocks on the device-name + codec-meta send until ALL
+/// declared sockets are connected, so we MUST open control before reading
+/// meta from video.
+pub async fn spawn_session(
+    app: AppHandle,
+    port: u16,
+    mut control_rx: mpsc::Receiver<Vec<u8>>,
+) -> AppResult<StreamHandle> {
+    let mut video = open_video_with_dummy(port).await?;
+    let mut control = connect_with_retry(port).await?;
+
+    let device_name = read_device_name(&mut video).await?;
     info!(%device_name, "scrcpy device meta received");
-    let (codec_id, width, height) = read_codec_meta(&mut sock).await?;
+    let (codec_id, width, height) = read_codec_meta(&mut video).await?;
     if codec_id != CODEC_ID_H264 {
         warn!(
             codec_id = format!("0x{codec_id:08X}"),
@@ -230,32 +250,25 @@ pub async fn spawn_stream(app: AppHandle, port: u16) -> AppResult<StreamHandle> 
 
     let (abort_tx, abort_rx) = oneshot::channel();
     tokio::spawn(async move {
-        if let Err(e) = read_frame_loop(sock, app, abort_rx).await {
+        if let Err(e) = read_frame_loop(video, app, abort_rx).await {
             warn!(error = %e, "video stream loop ended with error");
         }
     });
-    Ok(StreamHandle {
-        width,
-        height,
-        abort: abort_tx,
-    })
-}
-
-/// Connect to the control socket and spawn a writer that drains `rx`. No
-/// handshake to retry here, but the TCP connect itself still races the
-/// scrcpy bind so we use the same retry loop.
-pub async fn spawn_control(port: u16, mut rx: mpsc::Receiver<Vec<u8>>) -> AppResult<()> {
-    let mut sock = connect_with_retry(port).await?;
     tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            if let Err(e) = sock.write_all(&msg).await {
+        while let Some(msg) = control_rx.recv().await {
+            if let Err(e) = control.write_all(&msg).await {
                 warn!(error = %e, "control write failed; closing");
                 break;
             }
         }
         debug!("control writer exiting");
     });
-    Ok(())
+
+    Ok(StreamHandle {
+        width,
+        height,
+        abort: abort_tx,
+    })
 }
 
 #[cfg(test)]
@@ -317,7 +330,8 @@ mod tests {
             drop(server);
         });
 
-        let device = read_device_meta(&mut client).await.expect("device meta");
+        read_dummy(&mut client).await.expect("dummy");
+        let device = read_device_name(&mut client).await.expect("device name");
         assert_eq!(device, "Pixel");
         let (codec, w, h) = read_codec_meta(&mut client).await.expect("codec meta");
         assert_eq!(codec, CODEC_ID_H264);
@@ -351,7 +365,7 @@ mod tests {
             let zeros = [0u8; 64];
             server.write_all(&zeros).await.unwrap();
         });
-        let res = read_device_meta(&mut client).await;
+        let res = read_dummy(&mut client).await;
         assert!(res.is_err());
     }
 

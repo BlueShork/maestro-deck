@@ -70,27 +70,18 @@ pub async fn connect_device(
     };
     *state.scrcpy_child.lock().await = Some(child);
 
-    // The server takes ~100-300ms to bind the abstract socket. spawn_stream
+    // The server takes ~100-300ms to bind the abstract socket. spawn_session
     // also retries internally, so a short delay here just trims dead time.
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
-    match scrcpy::stream::spawn_stream(app, scrcpy::DEFAULT_PORT).await {
+    let (tx, rx) = mpsc::channel::<Vec<u8>>(CONTROL_CHANNEL_DEPTH);
+    match scrcpy::stream::spawn_session(app, scrcpy::DEFAULT_PORT, rx).await {
         Ok(handle) => {
             *state.stream_abort.lock().await = Some(handle.abort);
-        }
-        Err(e) => {
-            warn!(error = ?e, "scrcpy stream connection failed");
-            return Ok(());
-        }
-    }
-
-    let (tx, rx) = mpsc::channel::<Vec<u8>>(CONTROL_CHANNEL_DEPTH);
-    match scrcpy::stream::spawn_control(scrcpy::DEFAULT_PORT, rx).await {
-        Ok(()) => {
             *state.control_tx.lock().await = Some(tx);
         }
         Err(e) => {
-            warn!(error = ?e, "scrcpy control connection failed");
+            warn!(error = ?e, "scrcpy session connection failed");
         }
     }
 
