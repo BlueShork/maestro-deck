@@ -1,10 +1,12 @@
-import { Eraser, Play, Square } from "lucide-react";
+import { Activity, Eraser, Play, Square } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { renderAnsi } from "@/lib/ansi";
 import { cn } from "@/lib/utils";
 import { useRunStore } from "@/stores/runStore";
+import { useMetricsStore } from "@/stores/metricsStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 export function RunConsole({
   onRun,
@@ -17,6 +19,10 @@ export function RunConsole({
   const exitCode = useRunStore((s) => s.exitCode);
   const logs = useRunStore((s) => s.logs);
   const clearLogs = useRunStore((s) => s.clearLogs);
+
+  const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
+  const panelOpen = useMetricsStore((s) => s.panelOpen);
+  const togglePanel = useMetricsStore((s) => s.togglePanel);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -55,6 +61,17 @@ export function RunConsole({
           ) : null}
         </div>
         <div className="flex items-center gap-1">
+          {perfEnabled && (
+            <Button
+              size="xs"
+              variant={panelOpen ? "default" : "ghost"}
+              onClick={togglePanel}
+              title="Toggle performance HUD"
+            >
+              <Activity className="h-3 w-3" />
+              Perf
+            </Button>
+          )}
           <Button
             size="xs"
             variant="ghost"
@@ -85,7 +102,7 @@ export function RunConsole({
           stickRef.current =
             el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         }}
-        className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
+        className="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
       >
         {logs.length === 0 ? (
           <div className="text-muted-foreground">
