@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronRight, Plus } from "lucide-react";
-import { useCallback, useState } from "react";
+import { AlertTriangle, ChevronDown, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ScrollArea } from "@/components/ui/ScrollArea";
@@ -194,6 +194,26 @@ function SelectorCandidates({
   );
 }
 
+function countNodes(n: UINode): { total: number; targetable: number } {
+  const stack: UINode[] = [n];
+  let total = 0;
+  let targetable = 0;
+  while (stack.length) {
+    const node = stack.pop()!;
+    total += 1;
+    if (
+      node.text?.trim() ||
+      node.resource_id?.trim() ||
+      node.content_desc?.trim() ||
+      node.clickable
+    ) {
+      targetable += 1;
+    }
+    for (const c of node.children) stack.push(c);
+  }
+  return { total, targetable };
+}
+
 export function InspectorPanel() {
   const enabled = useInspectorStore((s) => s.enabled);
   const loading = useInspectorStore((s) => s.loading);
@@ -201,6 +221,13 @@ export function InspectorPanel() {
   const selected = useInspectorStore((s) => s.selected);
   const selectors = useInspectorStore((s) => s.selectors);
   const toggle = useInspectorStore((s) => s.toggle);
+  const refresh = useInspectorStore((s) => s.refresh);
+
+  const stats = useMemo(
+    () => (tree?.root ? countNodes(tree.root) : null),
+    [tree],
+  );
+  const sparse = stats !== null && stats.targetable < 3;
 
   if (!enabled) {
     return (
@@ -224,13 +251,49 @@ export function InspectorPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Hierarchy
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Hierarchy
+          </div>
+          {stats ? (
+            <span
+              className="shrink-0 font-mono text-[10px] text-muted-foreground"
+              title={`${stats.total} total nodes, ${stats.targetable} with a selector (text / id / desc / clickable)`}
+            >
+              {stats.targetable}/{stats.total}
+            </span>
+          ) : null}
         </div>
-        <Button size="xs" variant="ghost" onClick={() => void toggle()}>
-          Exit
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => void refresh()}
+            disabled={loading}
+            aria-label="Refresh hierarchy"
+            className="h-6 w-6"
+            title="Re-dump UI hierarchy"
+          >
+            <RefreshCw
+              className={cn("h-3 w-3", loading && "animate-spin")}
+            />
+          </Button>
+          <Button size="xs" variant="ghost" onClick={() => void toggle()}>
+            Exit
+          </Button>
+        </div>
       </div>
+      {sparse ? (
+        <div className="flex items-start gap-2 border-b border-border bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div>
+            Sparse hierarchy — this app likely uses Compose / React Native
+            without exposed testTags. Only {stats!.targetable} node(s) are
+            targetable. Try the 🔄 button after the screen has settled, or
+            fall back to point-based selectors.
+          </div>
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1 border-b border-border">
         <ScrollArea className="h-full">
           <div className="p-1.5">
@@ -251,8 +314,14 @@ export function InspectorPanel() {
             <SelectorCandidates node={selected} selectors={selectors} />
           </>
         ) : (
-          <div className="text-[11px] text-muted-foreground">
-            Click a node in the hierarchy or on the device to see properties.
+          <div className="space-y-1 text-[11px] text-muted-foreground">
+            <div>
+              Click a node here or on the device to see its properties.
+            </div>
+            <div>
+              <kbd className="rounded border border-border px-1">Right-click</kbd> on
+              the device to insert a Maestro action.
+            </div>
           </div>
         )}
       </div>

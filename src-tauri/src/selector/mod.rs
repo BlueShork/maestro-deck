@@ -53,23 +53,42 @@ impl SpatialIndex {
         self
     }
 
-    /// Returns the most specific (smallest area) node whose bounds contain (x, y).
-    /// Ties broken by deepest in tree (already implied by smallest area in normal hierarchies).
+    /// Returns the most relevant node whose bounds contain (x, y). Prefer
+    /// nodes with a usable selector (text / resource-id / content-desc /
+    /// clickable) picking the smallest among those; otherwise fall back to
+    /// the raw smallest-area containing node.
     pub fn find_at(&self, x: i32, y: i32) -> Option<UINode> {
         let pt = AABB::from_point([x, y]);
-        let mut best: Option<&IndexedNode> = None;
+        let mut best_targetable: Option<&IndexedNode> = None;
+        let mut best_any: Option<&IndexedNode> = None;
         for candidate in self.tree.locate_in_envelope_intersecting(&pt) {
             if !candidate.bounds.contains(x, y) {
                 continue;
             }
-            best = Some(match best {
+            best_any = Some(match best_any {
                 None => candidate,
                 Some(prev) if candidate.bounds.area() < prev.bounds.area() => candidate,
                 Some(prev) => prev,
             });
+            if is_targetable(&candidate.node) {
+                best_targetable = Some(match best_targetable {
+                    None => candidate,
+                    Some(prev) if candidate.bounds.area() < prev.bounds.area() => candidate,
+                    Some(prev) => prev,
+                });
+            }
         }
-        best.map(|c| c.node.clone())
+        best_targetable
+            .or(best_any)
+            .map(|c| c.node.clone())
     }
+}
+
+fn is_targetable(n: &UINode) -> bool {
+    n.text.as_deref().is_some_and(|t| !t.is_empty())
+        || n.resource_id.as_deref().is_some_and(|r| !r.is_empty())
+        || n.content_desc.as_deref().is_some_and(|d| !d.is_empty())
+        || n.clickable
 }
 
 fn collect(node: &UINode, out: &mut Vec<IndexedNode>) {

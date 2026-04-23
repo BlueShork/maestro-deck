@@ -2,12 +2,15 @@ import { Smartphone } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
 
+import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { H264Decoder } from "@/lib/decoder";
 import { events, ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
@@ -15,23 +18,62 @@ import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
-import type { Bounds, UINode } from "@/types";
+import type { Bounds, Selector, UINode } from "@/types";
 
-function findLeafAt(node: UINode, x: number, y: number): UINode | null {
-  const { bounds } = node;
-  if (
-    x < bounds.left ||
-    x > bounds.right ||
-    y < bounds.top ||
-    y > bounds.bottom
-  ) {
-    return null;
+function nodeArea(n: UINode): number {
+  const w = n.bounds.right - n.bounds.left;
+  const h = n.bounds.bottom - n.bounds.top;
+  return Math.max(0, w) * Math.max(0, h);
+}
+
+function contains(n: UINode, x: number, y: number): boolean {
+  const { bounds } = n;
+  return (
+    x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom
+  );
+}
+
+function isTargetable(n: UINode): boolean {
+  return (
+    !!n.text?.trim() ||
+    !!n.resource_id?.trim() ||
+    !!n.content_desc?.trim() ||
+    n.clickable
+  );
+}
+
+/**
+ * Walk the full tree and return the best node containing (x, y). "Best" = the
+ * smallest-area node, but with a preference for nodes that have a usable
+ * selector (text / resource-id / content-desc / clickable). Falls back to the
+ * smallest raw match if no targetable candidate exists.
+ *
+ * We walk unconditionally instead of pruning on "does parent contain point"
+ * because Maestro 2.0 returns the root with empty attributes → bounds parse
+ * to [0,0][0,0], which would cut the descent and return null.
+ */
+function findSmallestAt(root: UINode, x: number, y: number): UINode | null {
+  let bestTargetable: UINode | null = null;
+  let bestTargetableArea = Infinity;
+  let bestAny: UINode | null = null;
+  let bestAnyArea = Infinity;
+  const stack: UINode[] = [root];
+  while (stack.length) {
+    const n = stack.pop()!;
+    if (contains(n, x, y)) {
+      const area = nodeArea(n);
+      if (area > 0 && area < bestAnyArea) {
+        bestAny = n;
+        bestAnyArea = area;
+      }
+      if (area > 0 && area < bestTargetableArea && isTargetable(n)) {
+        bestTargetable = n;
+        bestTargetableArea = area;
+      }
+    }
+    for (const c of n.children) stack.push(c);
   }
-  for (const child of node.children) {
-    const hit = findLeafAt(child, x, y);
-    if (hit) return hit;
-  }
-  return node;
+  return bestTargetable ?? bestAny;
 }
 
 function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
@@ -121,6 +163,13 @@ export function DeviceView() {
   const setHovered = useInspectorStore((s) => s.setHovered);
   const select = useInspectorStore((s) => s.select);
 
+  const [actionMenu, setActionMenu] = useState<{
+    x: number;
+    y: number;
+    node: UINode;
+    selector: Selector | null;
+  } | null>(null);
+
   useFrameStream(canvasRef);
 
   const deviceWidth = streamW || current?.screen_width || 1080;
@@ -144,6 +193,32 @@ export function DeviceView() {
   const displayW = deviceWidth * scale;
   const displayH = deviceHeight * scale;
 
+  // Maestro hierarchy returns bounds in the device's *native* resolution,
+  // which can differ from scrcpy's downscaled stream (scrcpy is capped to
+  // max_size=1080, while a Galaxy S24 Ultra is natively 1440×3120). Detect
+  // the hierarchy coordinate space from the tree itself so overlays line up
+  // and hit-tests resolve to the right element.
+  const hierarchyDims = useMemo(() => {
+    if (!tree?.root) return null;
+    let w = 0;
+    let h = 0;
+    const stack: UINode[] = [tree.root];
+    while (stack.length) {
+      const n = stack.pop()!;
+      if (n.bounds.right > w) w = n.bounds.right;
+      if (n.bounds.bottom > h) h = n.bounds.bottom;
+      for (const c of n.children) stack.push(c);
+    }
+    return w > 0 && h > 0 ? { w, h } : null;
+  }, [tree]);
+
+  const overlayScaleX = hierarchyDims ? displayW / hierarchyDims.w : scale;
+  const overlayScaleY = hierarchyDims ? displayH / hierarchyDims.h : scale;
+  // Stream → hierarchy ratio; used to convert local pointer coords (stream
+  // space) into the coords expected by `findSmallestAt` and `query_element`.
+  const hierToStreamX = hierarchyDims ? hierarchyDims.w / deviceWidth : 1;
+  const hierToStreamY = hierarchyDims ? hierarchyDims.h / deviceHeight : 1;
+
   const toDeviceCoords = useCallback(
     (clientX: number, clientY: number) => {
       const el = containerRef.current;
@@ -163,11 +238,20 @@ export function DeviceView() {
         return null;
       }
       return {
+        // Stream-space pixels — what scrcpy expects for input events.
         x: Math.round(localX / scale),
         y: Math.round(localY / scale),
       };
     },
     [displayW, displayH, scale],
+  );
+
+  const toHierarchyCoords = useCallback(
+    (streamX: number, streamY: number) => ({
+      x: Math.round(streamX * hierToStreamX),
+      y: Math.round(streamY * hierToStreamY),
+    }),
+    [hierToStreamX, hierToStreamY],
   );
 
   const onPointerMove = useCallback(
@@ -178,29 +262,23 @@ export function DeviceView() {
         setHovered(null);
         return;
       }
-      const hit = findLeafAt(tree.root, coords.x, coords.y);
+      const h = toHierarchyCoords(coords.x, coords.y);
+      const hit = findSmallestAt(tree.root, h.x, h.y);
       setHovered(hit);
     },
-    [inspectEnabled, tree, toDeviceCoords, setHovered],
+    [inspectEnabled, tree, toDeviceCoords, toHierarchyCoords, setHovered],
   );
 
   const onClick = useCallback(
     async (e: ReactPointerEvent) => {
+      // Only react to primary (left) button. Right-click is handled by
+      // onContextMenu so we don't accidentally tap on a right-click.
+      if (e.button !== 0) return;
       const coords = toDeviceCoords(e.clientX, e.clientY);
       if (!coords) return;
-      if (inspectEnabled) {
-        try {
-          const node = await ipc.queryElement(coords.x, coords.y);
-          await select(node);
-        } catch (err) {
-          toast.error(
-            "Query failed",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
-        return;
-      }
       if (!current) return;
+      // Tap the device first so the user sees their input applied immediately,
+      // then resolve the element under the cursor for the inspector panel.
       try {
         await ipc.sendInput({ kind: "tap", x: coords.x, y: coords.y });
       } catch (err) {
@@ -208,10 +286,59 @@ export function DeviceView() {
           "Tap failed",
           err instanceof Error ? err.message : String(err),
         );
+        return;
+      }
+      if (inspectEnabled) {
+        try {
+          const h = toHierarchyCoords(coords.x, coords.y);
+          const node = await ipc.queryElement(h.x, h.y);
+          await select(node);
+        } catch (err) {
+          toast.error(
+            "Query failed",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       }
     },
-    [toDeviceCoords, inspectEnabled, select, current],
+    [toDeviceCoords, toHierarchyCoords, inspectEnabled, select, current],
   );
+
+  const onContextMenu = useCallback(
+    async (e: ReactMouseEvent) => {
+      if (!inspectEnabled) return;
+      const coords = toDeviceCoords(e.clientX, e.clientY);
+      if (!coords) return;
+      e.preventDefault();
+      try {
+        const h = toHierarchyCoords(coords.x, coords.y);
+        const node = await ipc.queryElement(h.x, h.y);
+        if (!node) {
+          toast.error("No element here", "Try near a UI block.");
+          return;
+        }
+        await select(node);
+        const selectors = await ipc.suggestSelectors(node);
+        setActionMenu({
+          x: e.clientX,
+          y: e.clientY,
+          node,
+          selector: selectors[0] ?? null,
+        });
+      } catch (err) {
+        toast.error(
+          "Inspect failed",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    },
+    [inspectEnabled, toDeviceCoords, toHierarchyCoords, select],
+  );
+
+  // Close the menu when the user leaves inspect mode.
+  useEffect(() => {
+    if (!inspectEnabled) setActionMenu(null);
+  }, [inspectEnabled]);
 
   const overlayBounds: Bounds | null = hovered?.bounds ?? null;
 
@@ -222,6 +349,7 @@ export function DeviceView() {
       onPointerMove={onPointerMove}
       onPointerLeave={() => setHovered(null)}
       onPointerDown={(e) => void onClick(e)}
+      onContextMenu={(e) => void onContextMenu(e)}
     >
       {hasFrame ? null : <EmptyState connected={!!current} />}
 
@@ -240,15 +368,29 @@ export function DeviceView() {
 
       {inspectEnabled && overlayBounds && scale > 0 ? (
         <div
-          className="pointer-events-none absolute border-2 border-primary/80 bg-primary/15"
+          className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
           style={{
             left:
-              (canvasRect.width - displayW) / 2 + overlayBounds.left * scale,
+              (canvasRect.width - displayW) / 2 +
+              overlayBounds.left * overlayScaleX,
             top:
-              (canvasRect.height - displayH) / 2 + overlayBounds.top * scale,
-            width: (overlayBounds.right - overlayBounds.left) * scale,
-            height: (overlayBounds.bottom - overlayBounds.top) * scale,
+              (canvasRect.height - displayH) / 2 +
+              overlayBounds.top * overlayScaleY,
+            width:
+              (overlayBounds.right - overlayBounds.left) * overlayScaleX,
+            height:
+              (overlayBounds.bottom - overlayBounds.top) * overlayScaleY,
           }}
+        />
+      ) : null}
+
+      {actionMenu ? (
+        <InspectActionMenu
+          x={actionMenu.x}
+          y={actionMenu.y}
+          node={actionMenu.node}
+          selector={actionMenu.selector}
+          onClose={() => setActionMenu(null)}
         />
       ) : null}
     </div>
