@@ -50,6 +50,8 @@ pub fn run() {
             run_flow,
             stop_flow,
             list_workspace,
+            start_metrics,
+            stop_metrics,
             start_stream,
             stop_stream,
         ])

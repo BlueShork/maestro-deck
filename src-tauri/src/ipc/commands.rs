@@ -10,6 +10,7 @@ use crate::device::{adb, Device};
 use crate::error::{AppError, AppResult};
 use crate::hierarchy::{self, HierarchyTree, UINode};
 use crate::input::{self, InputEvent};
+use crate::metrics;
 use crate::runner;
 use crate::scrcpy;
 use crate::selector::{self, Selector, SpatialIndex};
@@ -236,6 +237,22 @@ pub async fn stop_flow(pid: u32) -> AppResult<()> {
 #[tauri::command]
 pub fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
     workspace::list_workspace(std::path::Path::new(&path))
+}
+
+#[tauri::command]
+pub async fn start_metrics(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let serial = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.serial.clone())
+        .ok_or(AppError::NoDevice)?;
+    metrics::start(app, serial).await
+}
+
+#[tauri::command]
+pub async fn stop_metrics() -> AppResult<()> {
+    metrics::stop().await
 }
 
 impl serde::Serialize for HierarchyTree {
