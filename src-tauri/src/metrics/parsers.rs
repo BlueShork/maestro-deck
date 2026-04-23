@@ -251,3 +251,61 @@ mod tests_uid {
         assert!(parse_package_uid("no uid here").is_none());
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NetBytes {
+    pub rx: u64,
+    pub tx: u64,
+}
+
+pub fn parse_xt_qtaguid_for_uid(stats: &str, uid: u32) -> NetBytes {
+    let mut rx: u64 = 0;
+    let mut tx: u64 = 0;
+    for line in stats.lines() {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 9 {
+            continue;
+        }
+        // Column layout: 0 idx, 1 iface, 2 acct_tag_hex, 3 uid_tag_int,
+        //                4 cnt_set, 5 rx_bytes, ..., 7 tx_bytes
+        let tag = cols[2];
+        let row_uid: u32 = match cols[3].parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if row_uid != uid || tag != "0x0" {
+            continue;
+        }
+        let row_rx: u64 = cols[5].parse().unwrap_or(0);
+        let row_tx: u64 = cols[7].parse().unwrap_or(0);
+        rx = rx.saturating_add(row_rx);
+        tx = tx.saturating_add(row_tx);
+    }
+    NetBytes { rx, tx }
+}
+
+#[cfg(test)]
+mod tests_net {
+    use super::*;
+
+    #[test]
+    fn sums_untagged_rows_for_uid() {
+        let stats = "\
+idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packets rx_tcp_bytes rx_tcp_packets rx_udp_bytes rx_udp_packets rx_other_bytes rx_other_packets tx_tcp_bytes tx_tcp_packets tx_udp_bytes tx_udp_packets tx_other_bytes tx_other_packets
+2 wlan0 0x0 10234 0 5000 10 2000 8 5000 10 0 0 0 0 2000 8 0 0 0 0
+3 wlan0 0x0 10234 1 1000 4 500 3 1000 4 0 0 0 0 500 3 0 0 0 0
+4 wlan0 0xFFFFFF0000000000 10234 0 9999 1 9999 1 0 0 0 0 0 0 0 0 0 0 0 0
+5 wlan0 0x0 99999 0 1234 1 5678 1 0 0 0 0 0 0 0 0 0 0 0 0
+";
+        // Untagged (0x0) rows for UID 10234: rx 5000+1000, tx 2000+500
+        let n = parse_xt_qtaguid_for_uid(stats, 10234);
+        assert_eq!(n.rx, 6000);
+        assert_eq!(n.tx, 2500);
+    }
+
+    #[test]
+    fn zero_when_no_match() {
+        let stats = "idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packets\n";
+        assert_eq!(parse_xt_qtaguid_for_uid(stats, 42), NetBytes { rx: 0, tx: 0 });
+    }
+}
