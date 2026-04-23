@@ -6,6 +6,7 @@ pub mod error;
 pub mod hierarchy;
 pub mod input;
 pub mod ipc;
+pub mod metrics;
 pub mod runner;
 pub mod scrcpy;
 pub mod selector;
