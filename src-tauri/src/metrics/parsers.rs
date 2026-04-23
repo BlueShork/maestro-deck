@@ -222,3 +222,32 @@ mod tests_foreground {
         assert!(parse_foreground_package("nothing relevant here").is_none());
     }
 }
+
+pub fn parse_package_uid(dumpsys_package: &str) -> Option<u32> {
+    for line in dumpsys_package.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("userId=") {
+            return rest.split_whitespace().next()?.parse().ok();
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests_uid {
+    use super::*;
+
+    #[test]
+    fn parses_userId() {
+        let input = "Packages:\n  \
+                     Package [com.example.app] (abcdef):\n    \
+                     userId=10234\n    \
+                     pkg=Package{...}\n";
+        assert_eq!(parse_package_uid(input), Some(10234));
+    }
+
+    #[test]
+    fn none_when_missing() {
+        assert!(parse_package_uid("no uid here").is_none());
+    }
+}
