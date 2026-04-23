@@ -83,20 +83,6 @@ export function MetricsPanel() {
                 series={samples.map((s) => s.jankPct)}
                 tooltip="Percentage of frames that missed the 16.67 ms deadline (60 FPS target). Under 5% feels smooth; over 10% is visible lag. This is the best indicator of perceived smoothness."
               />
-              <Card
-                label="Net ↓"
-                value={last?.netRxKbps.toFixed(1) ?? "—"}
-                unit="KB/s"
-                series={samples.map((s) => s.netRxKbps)}
-                tooltip="Kilobytes per second received by the app across all network interfaces (Wi-Fi + cellular). Measured per app UID. Shows 0 if the UID could not be resolved on this device."
-              />
-              <Card
-                label="Net ↑"
-                value={last?.netTxKbps.toFixed(1) ?? "—"}
-                unit="KB/s"
-                series={samples.map((s) => s.netTxKbps)}
-                tooltip="Kilobytes per second sent by the app across all network interfaces (Wi-Fi + cellular). Measured per app UID. Shows 0 if the UID could not be resolved on this device."
-              />
             </div>
           </TooltipProvider>
         )}
