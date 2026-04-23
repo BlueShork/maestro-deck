@@ -32,6 +32,10 @@ export function SettingsDialog({
   const setTheme = useSettingsStore((s) => s.setTheme);
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const setStreamEnabled = useSettingsStore((s) => s.setStreamEnabled);
+  const perfMonitoringEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
+  const setPerfMonitoringEnabled = useSettingsStore(
+    (s) => s.setPerfMonitoringEnabled,
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -81,6 +85,19 @@ export function SettingsDialog({
               checked={streamEnabled}
               onCheckedChange={setStreamEnabled}
               aria-label="Live device stream"
+            />
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col">
+              <span>Enable performance monitoring</span>
+              <span className="text-[11px] text-muted-foreground">
+                Adds a performance HUD next to the console.
+              </span>
+            </div>
+            <Switch
+              checked={perfMonitoringEnabled}
+              onCheckedChange={setPerfMonitoringEnabled}
+              aria-label="Enable performance monitoring"
             />
           </div>
           <div className="flex items-center justify-between">
