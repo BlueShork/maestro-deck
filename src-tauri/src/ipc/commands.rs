@@ -44,23 +44,36 @@ pub async fn connect_device(
     info!(serial = %serial, model = %device.model, "device connected");
     *state.connected_device.write() = Some(device);
 
-    // Best-effort: push the scrcpy server and open the tunnel. Failures are
-    // logged but don't fail the connect call — the inspector still works
-    // without streaming.
+    // Defensive cleanup: any leftover scrcpy server from a previous run holds
+    // the abstract socket name and would block start_server with EADDRINUSE.
+    teardown_scrcpy(&serial, state.inner()).await;
+
     if let Err(e) = scrcpy::push_server(&serial) {
         warn!(error = ?e, "scrcpy push_server failed");
         return Ok(());
     }
-    if let Err(e) = scrcpy::create_tunnel(&serial, scrcpy::DEFAULT_PORT) {
+
+    let scid = scrcpy::random_scid();
+    *state.scid.write() = Some(scid.clone());
+
+    if let Err(e) = scrcpy::create_tunnel(&serial, scrcpy::DEFAULT_PORT, &scid) {
         warn!(error = ?e, "scrcpy create_tunnel failed");
         return Ok(());
     }
-    if let Err(e) = scrcpy::start_server(&serial) {
-        warn!(error = ?e, "scrcpy start_server failed");
-        return Ok(());
-    }
 
-    // Spawn video stream first (it gets the device meta header), then control.
+    let child = match scrcpy::spawn_server(&serial, &scid) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(error = ?e, "scrcpy spawn_server failed");
+            return Ok(());
+        }
+    };
+    *state.scrcpy_child.lock().await = Some(child);
+
+    // The server takes ~100-300ms to bind the abstract socket. spawn_stream
+    // also retries internally, so a short delay here just trims dead time.
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
     match scrcpy::stream::spawn_stream(app, scrcpy::DEFAULT_PORT).await {
         Ok(handle) => {
             *state.stream_abort.lock().await = Some(handle.abort);
@@ -86,16 +99,35 @@ pub async fn connect_device(
 
 #[tauri::command]
 pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
+    let serial = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.serial.clone());
     *state.connected_device.write() = None;
     *state.last_hierarchy.write() = None;
     *state.spatial_index.write() = None;
-    // Drop the control channel sender — the writer task exits when rx returns None.
+
+    if let Some(serial) = serial {
+        teardown_scrcpy(&serial, state.inner()).await;
+    }
+    Ok(())
+}
+
+/// Tear down the scrcpy session: drop the control channel, abort the read
+/// loop, kill the spawned `adb shell` child, kill any leftover server on the
+/// device, and remove the adb forward.
+async fn teardown_scrcpy(serial: &str, state: &AppState) {
     *state.control_tx.lock().await = None;
-    // Send the abort signal to the video read loop.
     if let Some(abort) = state.stream_abort.lock().await.take() {
         let _ = abort.send(());
     }
-    Ok(())
+    if let Some(mut child) = state.scrcpy_child.lock().await.take() {
+        let _ = child.kill().await;
+    }
+    scrcpy::pkill_scrcpy(serial);
+    let _ = scrcpy::remove_tunnel(serial, scrcpy::DEFAULT_PORT);
+    *state.scid.write() = None;
 }
 
 #[tauri::command]

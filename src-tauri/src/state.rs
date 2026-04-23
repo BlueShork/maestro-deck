@@ -14,7 +14,9 @@ pub struct AppState {
     pub last_hierarchy: RwLock<Option<Arc<HierarchyTree>>>,
     pub spatial_index: RwLock<Option<Arc<SpatialIndex>>>,
 
-    // Streaming state (async-locked because we acquire from tokio tasks).
+    // Per-session scrcpy state.
+    pub scid: RwLock<Option<String>>,
     pub control_tx: AsyncMutex<Option<mpsc::Sender<Vec<u8>>>>,
     pub stream_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+    pub scrcpy_child: AsyncMutex<Option<tokio::process::Child>>,
 }

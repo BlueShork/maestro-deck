@@ -89,6 +89,11 @@ pub fn forward(serial: &str, local: &str, remote: &str) -> AppResult<()> {
     Ok(())
 }
 
+pub fn forward_remove(serial: &str, local: &str) -> AppResult<()> {
+    run_adb(&["-s", serial, "forward", "--remove", local])?;
+    Ok(())
+}
+
 pub fn pull(serial: &str, src: &str, dst: &str) -> AppResult<()> {
     run_adb(&["-s", serial, "pull", src, dst])?;
     Ok(())
