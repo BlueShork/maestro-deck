@@ -69,7 +69,8 @@ export const ipc = {
     call<Selector[]>("suggest_selectors", { node }),
   generateCommand: (action: MaestroAction) =>
     call<string>("generate_command", { action }),
-  sendInput: (event: InputEvent) => call<void>("send_input", { event }),
+  sendInput: (event: InputEvent, screenW: number, screenH: number) =>
+    call<void>("send_input", { event, screenW, screenH }),
   runFlow: (filePath: string) => call<number>("run_flow", { filePath }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),

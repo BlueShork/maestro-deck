@@ -1,14 +1,14 @@
 //! Foreground app detection + PID/UID resolution via ADB.
 
 use crate::device::adb;
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 use crate::metrics::parsers;
 
 #[derive(Debug, Clone)]
 pub struct Target {
     pub package: String,
     pub pid: u32,
-    pub uid: u32,
+    pub uid: Option<u32>,
 }
 
 pub fn current_foreground(serial: &str) -> AppResult<Option<String>> {
@@ -39,9 +39,16 @@ pub fn resolve_target(serial: &str) -> AppResult<Option<Target>> {
         Some(p) => p,
         None => return Ok(None),
     };
-    let uid = match resolve_uid(serial, &pkg)? {
-        Some(u) => u,
-        None => return Err(AppError::MetricsFailed(format!("could not resolve UID for {pkg}"))),
+    let uid = match resolve_uid(serial, &pkg) {
+        Ok(Some(u)) => Some(u),
+        Ok(None) => {
+            tracing::warn!(package = %pkg, "could not resolve UID — net metrics will be disabled for this target");
+            None
+        }
+        Err(e) => {
+            tracing::warn!(package = %pkg, error = ?e, "UID resolution errored — net metrics will be disabled for this target");
+            None
+        }
     };
     Ok(Some(Target { package: pkg, pid, uid }))
 }

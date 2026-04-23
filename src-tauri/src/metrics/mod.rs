@@ -15,7 +15,6 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, Mutex as AsyncMutex};
-use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
@@ -33,7 +32,7 @@ const GFX_INTERVAL: Duration = Duration::from_secs(5);
 const FOREGROUND_CHECK_INTERVAL: Duration = Duration::from_secs(3);
 const MAX_CONSECUTIVE_ERRORS: u32 = 3;
 
-type MetricsSlot = Option<(oneshot::Sender<()>, JoinHandle<()>)>;
+type MetricsSlot = Option<(oneshot::Sender<()>, tokio::task::JoinHandle<()>)>;
 
 static RUNNING: Lazy<AsyncMutex<MetricsSlot>> = Lazy::new(|| AsyncMutex::new(None));
 
@@ -180,22 +179,23 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
         // 3. Net at its own cadence.
         if last_net_poll.elapsed() >= NET_INTERVAL {
             last_net_poll = Instant::now();
-            let serial_clone = serial.clone();
-            let uid = t.uid;
-            let prev = prev_net;
-            match tokio::task::spawn_blocking(move || fetch_net(&serial_clone, uid, prev))
-                .await
-                .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("net join failed: {e}"))))
-            {
-                Ok(s) => {
-                    prev_net = Some((s.bytes_snapshot, Instant::now()));
-                    last_net_kbps = Some((s.rx_kbps, s.tx_kbps));
-                }
-                Err(e) => {
-                    // Secondary metric failure — we continue without bailing.
-                    // Only foreground and cpu/mem failures count toward the
-                    // 3-strike rule since they're prerequisites for any sample.
-                    warn!(error = ?e, "net fetch failed");
+            if let Some(uid) = t.uid {
+                let serial_clone = serial.clone();
+                let prev = prev_net;
+                match tokio::task::spawn_blocking(move || fetch_net(&serial_clone, uid, prev))
+                    .await
+                    .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("net join failed: {e}"))))
+                {
+                    Ok(s) => {
+                        prev_net = Some((s.bytes_snapshot, Instant::now()));
+                        last_net_kbps = Some((s.rx_kbps, s.tx_kbps));
+                    }
+                    Err(e) => {
+                        // Secondary metric failure — we continue without bailing.
+                        // Only foreground and cpu/mem failures count toward the
+                        // 3-strike rule since they're prerequisites for any sample.
+                        warn!(error = ?e, "net fetch failed");
+                    }
                 }
             }
         }
