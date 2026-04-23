@@ -1,13 +1,19 @@
-//! UIAutomator hierarchy dump + parse.
+//! UI hierarchy dump + parse.
+//!
+//! Primary path: shell out to `maestro --device <serial> hierarchy` which uses
+//! Maestro's on-device driver. This driver exposes Compose semantics nodes,
+//! React Native widgets, and accessibility metadata that raw `uiautomator dump`
+//! does not surface, and stays in sync with whatever Maestro CLI is installed.
+//! `parse_xml` is kept for the unit-test fixture (UIAutomator XML format).
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::process::Command;
 
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::device::adb;
 use crate::error::{AppError, AppResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,22 +57,136 @@ pub struct HierarchyTree {
     pub xml_raw: String,
 }
 
-const REMOTE_DUMP_PATH: &str = "/sdcard/window_dump.xml";
+const DEFAULT_BIN: &str = "maestro";
+/// Number of attempts when the on-device driver isn't ready yet (e.g. after a
+/// `maestro test` was killed and the driver process is restarting).
+const HIERARCHY_RETRIES: usize = 3;
+const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(800);
+
+fn maestro_bin() -> String {
+    std::env::var("MAESTRO_BIN").unwrap_or_else(|_| DEFAULT_BIN.to_string())
+}
+
+/// True for errors that indicate the on-device gRPC driver isn't yet up. These
+/// typically resolve in a few hundred ms, so we just wait and retry.
+fn is_driver_warmup_error(stderr: &str) -> bool {
+    stderr.contains("UNAVAILABLE")
+        || stderr.contains("Connection refused")
+        || stderr.contains("io exception")
+}
 
 pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
-    adb::exec_shell(serial, &format!("uiautomator dump {}", REMOTE_DUMP_PATH))?;
+    let bin = maestro_bin();
+    let mut last_err: Option<String> = None;
+    for attempt in 0..HIERARCHY_RETRIES {
+        let output = Command::new(&bin)
+            .args(["--device", serial, "hierarchy"])
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    AppError::RunnerNotFound
+                } else {
+                    AppError::Io(e)
+                }
+            })?;
 
-    let tmp = std::env::temp_dir().join(format!("maestro-deck-dump-{}.xml", serial));
-    let tmp_str = tmp
-        .to_str()
-        .ok_or_else(|| AppError::Other("temp path is not utf-8".into()))?;
-    adb::pull(serial, REMOTE_DUMP_PATH, tmp_str)?;
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+            debug!(bytes = stdout.len(), attempt, "maestro hierarchy returned");
+            return parse_maestro_json(&stdout);
+        }
 
-    let xml = std::fs::read_to_string(&tmp).map_err(AppError::Io)?;
-    // Best-effort cleanup; ignore failure.
-    let _ = std::fs::remove_file(&tmp);
-    debug!(bytes = xml.len(), "hierarchy XML pulled");
-    parse_xml(&xml)
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        last_err = Some(stderr.clone());
+        if attempt + 1 < HIERARCHY_RETRIES && is_driver_warmup_error(&stderr) {
+            debug!(
+                attempt,
+                "driver not ready, retrying in {:?}", RETRY_DELAY
+            );
+            std::thread::sleep(RETRY_DELAY);
+            continue;
+        }
+        break;
+    }
+
+    let raw = last_err.unwrap_or_default();
+    // Surface a short, actionable message; the full stack trace lives in the
+    // logs for debugging.
+    let summary = raw
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("unknown error")
+        .trim()
+        .to_string();
+    debug!(stderr = %raw, "maestro hierarchy failed");
+    Err(AppError::HierarchyParse(format!(
+        "maestro hierarchy failed: {summary}. The on-device driver may not be up — try again in a moment, or run `maestro test` once to (re)install the driver."
+    )))
+}
+
+/// Parse the JSON output of `maestro hierarchy`. The CLI may print log lines
+/// before the JSON payload, so we locate the first `{` and parse from there.
+pub fn parse_maestro_json(raw: &str) -> AppResult<HierarchyTree> {
+    let start = raw.find('{').ok_or_else(|| {
+        AppError::HierarchyParse("no JSON object found in maestro hierarchy output".into())
+    })?;
+    let json = &raw[start..];
+    let root: MaestroNode = serde_json::from_str(json)
+        .map_err(|e| AppError::HierarchyParse(format!("JSON parse error: {e}")))?;
+    let mut next_index = 0usize;
+    let ui_root = convert_maestro_node(root, &mut next_index);
+    Ok(HierarchyTree {
+        root: Some(ui_root),
+        xml_raw: raw.to_string(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct MaestroNode {
+    #[serde(default)]
+    attributes: HashMap<String, String>,
+    #[serde(default)]
+    children: Vec<MaestroNode>,
+}
+
+fn convert_maestro_node(node: MaestroNode, next_index: &mut usize) -> UINode {
+    let attrs = &node.attributes;
+    let bounds = attrs
+        .get("bounds")
+        .and_then(|s| parse_bounds(s))
+        .unwrap_or(Bounds {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        });
+    let id = next_index.to_string();
+    *next_index += 1;
+    let children = node
+        .children
+        .into_iter()
+        .map(|c| convert_maestro_node(c, next_index))
+        .collect();
+
+    UINode {
+        id,
+        resource_id: attrs.get("resource-id").cloned().filter(|s| !s.is_empty()),
+        text: attrs.get("text").cloned().filter(|s| !s.is_empty()),
+        // Maestro/Compose may surface accessibility under `accessibilityText`
+        // (Compose's contentDescription) or the legacy `content-desc`.
+        content_desc: attrs
+            .get("content-desc")
+            .or_else(|| attrs.get("accessibilityText"))
+            .cloned()
+            .filter(|s| !s.is_empty()),
+        class_name: attrs.get("class").cloned().unwrap_or_default(),
+        package: attrs.get("package").cloned().unwrap_or_default(),
+        bounds,
+        clickable: attrs.get("clickable").map(|s| s == "true").unwrap_or(false),
+        enabled: attrs.get("enabled").map(|s| s == "true").unwrap_or(true),
+        focused: attrs.get("focused").map(|s| s == "true").unwrap_or(false),
+        children,
+    }
 }
 
 /// Parse a UIAutomator XML dump into a tree.
@@ -240,12 +360,6 @@ pub fn count(tree: &HierarchyTree) -> usize {
     tree.root.as_ref().map(rec).unwrap_or(0)
 }
 
-/// Used by tests / debugging to look at where the dump landed before parsing.
-#[allow(dead_code)]
-pub(crate) fn remote_dump_path() -> PathBuf {
-    PathBuf::from(REMOTE_DUMP_PATH)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,5 +453,53 @@ mod tests {
         // Unclosed tag — quick-xml flags this on read.
         let res = parse_xml("<hierarchy><node bounds=\"[0,0][1,1]\" class=\"X\" package=\"p\"");
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn parses_maestro_json_output() {
+        let json = r#"{
+            "attributes": {
+                "bounds": "[0,0][1080,2400]",
+                "class": "android.widget.FrameLayout",
+                "package": "com.x",
+                "resource-id": "",
+                "text": "",
+                "clickable": "false",
+                "enabled": "true"
+            },
+            "children": [
+                {
+                    "attributes": {
+                        "bounds": "[100,200][500,300]",
+                        "class": "androidx.compose.ui.platform.ComposeView",
+                        "package": "com.x",
+                        "resource-id": "com.x:id/btn",
+                        "text": "Sign in",
+                        "clickable": "true",
+                        "enabled": "true"
+                    },
+                    "children": []
+                }
+            ]
+        }"#;
+        let tree = parse_maestro_json(json).expect("parse");
+        let root = tree.root.as_ref().expect("root");
+        assert_eq!(root.class_name, "android.widget.FrameLayout");
+        assert_eq!(root.bounds.right, 1080);
+        assert_eq!(root.children.len(), 1);
+        let btn = &root.children[0];
+        assert_eq!(btn.text.as_deref(), Some("Sign in"));
+        assert_eq!(btn.resource_id.as_deref(), Some("com.x:id/btn"));
+        assert!(btn.clickable);
+    }
+
+    #[test]
+    fn parses_maestro_json_with_log_prefix() {
+        // Maestro CLI sometimes prints status lines before the JSON payload.
+        let raw = "Setting up Maestro on device...\nDone\n{\
+            \"attributes\":{\"bounds\":\"[0,0][10,10]\",\"class\":\"View\",\"package\":\"p\"},\
+            \"children\":[]}";
+        let tree = parse_maestro_json(raw).expect("parse");
+        assert!(tree.root.is_some());
     }
 }

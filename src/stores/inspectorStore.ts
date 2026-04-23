@@ -14,6 +14,7 @@ interface InspectorState {
   toggle: () => Promise<void>;
   enable: () => Promise<void>;
   disable: () => void;
+  refresh: () => Promise<void>;
   setHovered: (node: UINode | null) => void;
   select: (node: UINode | null) => Promise<void>;
 }
@@ -51,6 +52,18 @@ export const useInspectorStore = create<InspectorState>((set, get) => ({
       selected: null,
       selectors: [],
     });
+  },
+  refresh: async () => {
+    if (!get().enabled) return;
+    set({ loading: true });
+    try {
+      const tree = await ipc.enterInspectMode();
+      set({ tree, loading: false, hovered: null, selected: null, selectors: [] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ loading: false });
+      toast.error("Refresh failed", message);
+    }
   },
   setHovered: (node) => set({ hovered: node }),
   select: async (node) => {
