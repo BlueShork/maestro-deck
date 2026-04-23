@@ -96,7 +96,9 @@ pub fn fetch_gfx(serial: &str, package: &str) -> AppResult<Option<GfxSample>> {
     let cmd = format!("dumpsys gfxinfo {package} framestats");
     let out = adb::exec_shell(serial, &cmd)?;
     // Reset counters so the next 5s window is independent.
-    let _ = adb::exec_shell(serial, &format!("dumpsys gfxinfo {package} reset"));
+    if let Err(e) = adb::exec_shell(serial, &format!("dumpsys gfxinfo {package} reset")) {
+        tracing::warn!(error = ?e, "gfxinfo reset failed; fps will inflate over time");
+    }
 
     let Some(stats) = parse_gfxinfo(&out) else {
         return Ok(None);
