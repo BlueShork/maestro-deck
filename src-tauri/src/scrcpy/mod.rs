@@ -80,20 +80,41 @@ pub fn build_server_argv(opts: &ServerOptions, scid: &str) -> Vec<String> {
     ]
 }
 
+/// Locate the bundled scrcpy-server jar. Resolves relative to the binary's
+/// location (via `current_exe`) so the lookup works no matter the cwd —
+/// macOS launches .app bundles with cwd=/, which would break any cwd-relative
+/// path. Falls back to cwd-relative candidates for `cargo run` workflows.
 pub fn local_jar_path() -> AppResult<PathBuf> {
-    let candidates = [
+    let mut tried: Vec<PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            // .app bundle: .../Contents/MacOS/<binary> → .../Contents/Resources/resources/jar
+            let bundle = dir.join(format!("../Resources/resources/{JAR_FILENAME}"));
+            tried.push(bundle.clone());
+            if bundle.exists() {
+                return Ok(bundle);
+            }
+            // cargo target/{debug,release}/<binary> → ../../src-tauri/resources/jar
+            let target = dir.join(format!("../../src-tauri/resources/{JAR_FILENAME}"));
+            tried.push(target.clone());
+            if target.exists() {
+                return Ok(target);
+            }
+        }
+    }
+    // cwd-relative fallbacks for `cargo run` from various working dirs.
+    let cwd_candidates = [
         PathBuf::from(format!("resources/{JAR_FILENAME}")),
         PathBuf::from(format!("src-tauri/resources/{JAR_FILENAME}")),
-        PathBuf::from(format!("../Resources/resources/{JAR_FILENAME}")),
     ];
-    for p in &candidates {
+    for p in &cwd_candidates {
+        tried.push(p.clone());
         if p.exists() {
             return Ok(p.clone());
         }
     }
     Err(AppError::ScrcpyFailed(format!(
-        "scrcpy-server jar not found. Tried: {:?}",
-        candidates
+        "scrcpy-server jar not found. Tried: {tried:?}"
     )))
 }
 

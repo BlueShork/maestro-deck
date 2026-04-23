@@ -146,6 +146,7 @@ where
     R: AsyncReadExt + Unpin,
     S: FrameSink,
 {
+    let mut frame_count: u64 = 0;
     loop {
         let header = tokio::select! {
             biased;
@@ -167,6 +168,11 @@ where
 
         let is_config = (pts_raw & PTS_FLAG_CONFIG) != 0;
         let is_key = (pts_raw & PTS_FLAG_KEY) != 0;
+
+        frame_count += 1;
+        if frame_count <= 3 || frame_count % 60 == 0 {
+            info!(n = frame_count, size, is_config, is_key, "frame emitted");
+        }
         let pts_us = pts_raw & PTS_VALUE_MASK;
         sink.emit(FramePayload {
             pts_us,
