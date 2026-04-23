@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Maestro Deck",
+  "version": "0.1.0",
+  "identifier": "dev.blueshork.maestrodeck",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Maestro Deck",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png"
+    ],
+    "resources": ["resources/*"],
+    "category": "DeveloperTool",
+    "shortDescription": "Open-source visual IDE for Maestro mobile tests",
+    "longDescription": "Maestro Deck is a fast, offline, open-source visual editor for creating Maestro mobile UI test flows. No login, no telemetry, no cloud."
+  },
+  "plugins": {
+    "fs": {
+      "scope": ["$DOCUMENT/**", "$DOWNLOAD/**", "$HOME/**"]
+    }
+  }
+}
