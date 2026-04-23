@@ -38,35 +38,89 @@ pub fn list_devices() -> AppResult<Vec<Device>> {
 #[tauri::command]
 pub async fn connect_device(
     serial: String,
+    stream_enabled: bool,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<()> {
     let device = adb::get_device_info(&serial)?;
-    info!(serial = %serial, model = %device.model, "device connected");
+    info!(
+        serial = %serial,
+        model = %device.model,
+        stream = stream_enabled,
+        "device connected",
+    );
     *state.connected_device.write() = Some(device);
 
     // Defensive cleanup: any leftover scrcpy server from a previous run holds
     // the abstract socket name and would block start_server with EADDRINUSE.
     teardown_scrcpy(&serial, state.inner()).await;
 
-    if let Err(e) = scrcpy::push_server(&serial) {
-        warn!(error = ?e, "scrcpy push_server failed");
+    if !stream_enabled {
+        // Lightweight mode — no scrcpy. Inputs (taps/swipes) won't work since
+        // they go through the scrcpy control channel, but inspect (Maestro
+        // hierarchy) and run (maestro test) operate independently of the
+        // stream.
         return Ok(());
+    }
+
+    setup_scrcpy(&serial, app, state.inner()).await;
+    Ok(())
+}
+
+/// Bring up scrcpy for the currently connected device. Used by the settings
+/// toggle to enable mirroring without forcing a full reconnect.
+#[tauri::command]
+pub async fn start_stream(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<()> {
+    let serial = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.serial.clone())
+        .ok_or(AppError::NoDevice)?;
+    // Tear any previous session down before starting a fresh one — same
+    // EADDRINUSE / dangling-process protection as connect_device.
+    teardown_scrcpy(&serial, state.inner()).await;
+    setup_scrcpy(&serial, app, state.inner()).await;
+    Ok(())
+}
+
+/// Tear down scrcpy without disconnecting the device. Run / inspect keep
+/// working since they don't depend on the stream.
+#[tauri::command]
+pub async fn stop_stream(state: State<'_, AppState>) -> AppResult<()> {
+    let serial = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.serial.clone());
+    if let Some(serial) = serial {
+        teardown_scrcpy(&serial, state.inner()).await;
+    }
+    Ok(())
+}
+
+async fn setup_scrcpy(serial: &str, app: AppHandle, state: &AppState) {
+    if let Err(e) = scrcpy::push_server(serial) {
+        warn!(error = ?e, "scrcpy push_server failed");
+        return;
     }
 
     let scid = scrcpy::random_scid();
     *state.scid.write() = Some(scid.clone());
 
-    if let Err(e) = scrcpy::create_tunnel(&serial, scrcpy::DEFAULT_PORT, &scid) {
+    if let Err(e) = scrcpy::create_tunnel(serial, scrcpy::DEFAULT_PORT, &scid) {
         warn!(error = ?e, "scrcpy create_tunnel failed");
-        return Ok(());
+        return;
     }
 
-    let child = match scrcpy::spawn_server(&serial, &scid) {
+    let child = match scrcpy::spawn_server(serial, &scid) {
         Ok(c) => c,
         Err(e) => {
             warn!(error = ?e, "scrcpy spawn_server failed");
-            return Ok(());
+            return;
         }
     };
     *state.scrcpy_child.lock().await = Some(child);
@@ -85,8 +139,6 @@ pub async fn connect_device(
             warn!(error = ?e, "scrcpy session connection failed");
         }
     }
-
-    Ok(())
 }
 
 #[tauri::command]

@@ -127,6 +127,12 @@ export function buildAvcc(configAnnexB: Uint8Array): AvccBuild {
   return { description: buf, codec };
 }
 
+// Cap on the decoder's internal queue. When the consumer (canvas paint) can't
+// keep up, delta frames pile up in WebKit's internal buffer and balloon
+// memory — drop deltas above this threshold but always accept key frames so
+// we don't desync.
+const MAX_DECODE_QUEUE = 4;
+
 export class H264Decoder {
   private decoder: VideoDecoder;
   private configured = false;
@@ -160,6 +166,11 @@ export class H264Decoder {
       }
       if (!this.configured) {
         // Drop pictures that arrive before the first config packet.
+        return;
+      }
+      // Backpressure: drop delta frames when the decode queue is too deep.
+      // Always let keyframes through to keep the stream resyncable.
+      if (!payload.isKey && this.decoder.decodeQueueSize >= MAX_DECODE_QUEUE) {
         return;
       }
       const avcc = annexBToAvcc(payload.data);

@@ -16,6 +16,7 @@ import { events, ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import type { Bounds, Selector, UINode } from "@/types";
@@ -157,6 +158,7 @@ export function DeviceView() {
   const hasFrame = useStreamStore((s) => s.hasFrame);
   const streamW = useStreamStore((s) => s.width);
   const streamH = useStreamStore((s) => s.height);
+  const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const tree = useInspectorStore((s) => s.tree);
   const hovered = useInspectorStore((s) => s.hovered);
@@ -351,7 +353,9 @@ export function DeviceView() {
       onPointerDown={(e) => void onClick(e)}
       onContextMenu={(e) => void onContextMenu(e)}
     >
-      {hasFrame ? null : <EmptyState connected={!!current} />}
+      {hasFrame ? null : (
+        <EmptyState connected={!!current} streamEnabled={streamEnabled} />
+      )}
 
       <canvas
         ref={canvasRef}
@@ -397,17 +401,30 @@ export function DeviceView() {
   );
 }
 
-function EmptyState({ connected }: { connected: boolean }) {
+function EmptyState({
+  connected,
+  streamEnabled,
+}: {
+  connected: boolean;
+  streamEnabled: boolean;
+}) {
+  const lightweight = connected && !streamEnabled;
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
       <Smartphone className="h-10 w-10 text-muted-foreground/60" />
       <div className="text-sm font-medium">
-        {connected ? "Waiting for frames…" : "No device connected"}
+        {lightweight
+          ? "Lightweight mode"
+          : connected
+            ? "Waiting for frames…"
+            : "No device connected"}
       </div>
       <div className="max-w-[16rem] text-xs text-muted-foreground">
-        {connected
-          ? "The stream will appear here once scrcpy pushes the first frame."
-          : "Plug in an Android device with USB debugging enabled, then pick it in the sidebar."}
+        {lightweight
+          ? "Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle in Settings to re-enable mirroring."
+          : connected
+            ? "The stream will appear here once scrcpy pushes the first frame."
+            : "Plug in an Android device with USB debugging enabled, then pick it in the sidebar."}
       </div>
     </div>
   );

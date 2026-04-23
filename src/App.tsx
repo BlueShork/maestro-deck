@@ -1,6 +1,6 @@
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { tempDir } from "@tauri-apps/api/path";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
@@ -15,11 +15,13 @@ import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
@@ -49,6 +51,36 @@ export default function App() {
     if (theme !== "system") return;
     return watchSystemTheme(() => applyTheme("system"));
   }, [theme]);
+
+  // React to streamEnabled toggles while a device is connected: spin up or
+  // tear down scrcpy live without forcing the user to disconnect/reconnect.
+  // Skip the initial render — connect_device already passed the right flag.
+  const streamEnabled = useSettingsStore((s) => s.streamEnabled);
+  const prevStreamEnabledRef = useRef(streamEnabled);
+  useEffect(() => {
+    if (prevStreamEnabledRef.current === streamEnabled) return;
+    prevStreamEnabledRef.current = streamEnabled;
+    const current = useDeviceStore.getState().current;
+    if (!current) return;
+    if (streamEnabled) {
+      ipc
+        .startStream()
+        .then(() => toast.success("Stream on"))
+        .catch((err) =>
+          toast.error("Start stream failed", err instanceof Error ? err.message : String(err)),
+        );
+    } else {
+      ipc
+        .stopStream()
+        .then(() => {
+          useStreamStore.getState().reset();
+          toast.success("Stream off");
+        })
+        .catch((err) =>
+          toast.error("Stop stream failed", err instanceof Error ? err.message : String(err)),
+        );
+    }
+  }, [streamEnabled]);
 
   useEffect(() => {
     let cleanups: Array<() => void> = [];
@@ -165,10 +197,19 @@ export default function App() {
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1">
-            <section className="flex min-w-0 flex-1 items-center justify-center bg-muted/40 p-4">
-              <DeviceView />
-            </section>
-            <section className="flex w-[45%] min-w-0 flex-col border-l border-border">
+            {streamEnabled ? (
+              <section className="flex min-w-0 flex-1 items-center justify-center bg-muted/40 p-4">
+                <DeviceView />
+              </section>
+            ) : null}
+            <section
+              className={cn(
+                "flex min-w-0 flex-col",
+                streamEnabled
+                  ? "w-[45%] border-l border-border"
+                  : "flex-1",
+              )}
+            >
               <FlowEditor />
             </section>
           </div>
