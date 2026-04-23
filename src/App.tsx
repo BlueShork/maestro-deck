@@ -6,6 +6,7 @@ import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
 import { InspectorPanel } from "@/components/InspectorPanel";
+import { MetricsPanel } from "@/components/MetricsPanel";
 import { RunConsole } from "@/components/RunConsole";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Toolbar } from "@/components/Toolbar";
@@ -18,6 +19,7 @@ import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
+import { useMetricsStore } from "@/stores/metricsStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -82,6 +84,10 @@ export default function App() {
     }
   }, [streamEnabled]);
 
+  const appendSample = useMetricsStore((s) => s.appendSample);
+  const onTargetChanged = useMetricsStore((s) => s.onTargetChanged);
+  const setStoppedReason = useMetricsStore((s) => s.setStoppedReason);
+
   useEffect(() => {
     let cleanups: Array<() => void> = [];
     let cancelled = false;
@@ -102,6 +108,21 @@ export default function App() {
         else toast.error("Flow failed", `exit code ${code}`);
       }),
       events.onDeviceDisconnected(() => markDisconnected()),
+      events.onMetricsSample((p) =>
+        appendSample({
+          ts: p.ts,
+          cpuPct: p.cpu_pct,
+          memMb: p.mem_mb,
+          fps: p.fps,
+          jankPct: p.jank_pct,
+          netRxKbps: p.net_rx_kbps,
+          netTxKbps: p.net_tx_kbps,
+        }),
+      ),
+      events.onMetricsTargetChanged((p) => onTargetChanged(p.to)),
+      events.onMetricsStopped((p) =>
+        setStoppedReason(p.reason === "user" ? null : p.reason),
+      ),
     ]).then((fns) => {
       if (cancelled) fns.forEach((fn) => fn());
       else cleanups = fns;
@@ -110,7 +131,27 @@ export default function App() {
       cancelled = true;
       cleanups.forEach((fn) => fn());
     };
-  }, [appendLog, setStopped, markDisconnected]);
+  }, [appendLog, setStopped, markDisconnected, appendSample, onTargetChanged, setStoppedReason]);
+
+  const panelOpen = useMetricsStore((s) => s.panelOpen);
+  const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
+  const deviceConnected = useDeviceStore((s) => Boolean(s.current));
+
+  useEffect(() => {
+    if (!perfEnabled || !panelOpen || !deviceConnected) {
+      void ipc.stopMetrics().catch(() => {});
+      return;
+    }
+    void ipc.startMetrics().catch((err) => {
+      toast.error(
+        "Performance monitoring failed to start",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+    return () => {
+      void ipc.stopMetrics().catch(() => {});
+    };
+  }, [perfEnabled, panelOpen, deviceConnected]);
 
   const onRun = useCallback(async () => {
     const { content, filePath } = useFlowStore.getState();
@@ -213,7 +254,12 @@ export default function App() {
               <FlowEditor />
             </section>
           </div>
-          <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
+          <div className="flex min-h-0">
+            <div className="flex min-h-0 flex-1 flex-col">
+              <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
+            </div>
+            {perfEnabled && panelOpen && <MetricsPanel />}
+          </div>
         </main>
       </div>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
