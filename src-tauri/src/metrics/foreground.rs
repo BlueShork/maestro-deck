@@ -28,6 +28,14 @@ pub fn resolve_uid(serial: &str, package: &str) -> AppResult<Option<u32>> {
     Ok(parsers::parse_package_uid(&out))
 }
 
+/// Kernel-level fallback: ask the kernel what UID owns /proc/<pid>. Bulletproof
+/// across Android versions since it doesn't depend on dumpsys output format.
+pub fn resolve_uid_from_proc(serial: &str, pid: u32) -> AppResult<Option<u32>> {
+    let cmd = format!("stat -c %u /proc/{pid}");
+    let out = adb::exec_shell(serial, &cmd)?;
+    Ok(out.trim().split_whitespace().next().and_then(|s| s.parse().ok()))
+}
+
 /// Detect foreground, then resolve its PID + UID. Returns `None` if no
 /// foreground app could be identified or if the target already died.
 pub fn resolve_target(serial: &str) -> AppResult<Option<Target>> {
@@ -40,15 +48,20 @@ pub fn resolve_target(serial: &str) -> AppResult<Option<Target>> {
         None => return Ok(None),
     };
     let uid = match resolve_uid(serial, &pkg) {
-        Ok(Some(u)) => Some(u),
-        Ok(None) => {
-            tracing::warn!(package = %pkg, "could not resolve UID — net metrics will be disabled for this target");
-            None
+        Ok(Some(u)) => {
+            tracing::info!(package = %pkg, uid = u, "UID resolved via dumpsys package");
+            Some(u)
         }
-        Err(e) => {
-            tracing::warn!(package = %pkg, error = ?e, "UID resolution errored — net metrics will be disabled for this target");
-            None
-        }
+        _ => match resolve_uid_from_proc(serial, pid) {
+            Ok(Some(u)) => {
+                tracing::info!(package = %pkg, pid, uid = u, "UID resolved via /proc stat fallback");
+                Some(u)
+            }
+            _ => {
+                tracing::warn!(package = %pkg, pid, "could not resolve UID via any method — net metrics disabled for this target");
+                None
+            }
+        },
     };
     Ok(Some(Target { package: pkg, pid, uid }))
 }

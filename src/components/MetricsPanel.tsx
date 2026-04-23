@@ -2,6 +2,12 @@ import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { MetricsSparkline } from "@/components/MetricsSparkline";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 
@@ -47,44 +53,52 @@ export function MetricsPanel() {
         ) : samples.length === 0 ? (
           <div className="text-muted-foreground">Waiting for samples…</div>
         ) : (
-          <div className="space-y-3">
-            <Card
-              label="CPU"
-              value={last?.cpuPct.toFixed(1) ?? "—"}
-              unit="%"
-              series={samples.map((s) => s.cpuPct)}
-            />
-            <Card
-              label="RAM"
-              value={last?.memMb.toFixed(0) ?? "—"}
-              unit="MB"
-              series={samples.map((s) => s.memMb)}
-            />
-            <Card
-              label="FPS"
-              value={last?.fps != null ? last.fps.toFixed(0) : "—"}
-              unit=""
-              series={samples.map((s) => s.fps)}
-            />
-            <Card
-              label="Jank"
-              value={last?.jankPct != null ? last.jankPct.toFixed(1) : "—"}
-              unit="%"
-              series={samples.map((s) => s.jankPct)}
-            />
-            <Card
-              label="Net ↓"
-              value={last?.netRxKbps.toFixed(1) ?? "—"}
-              unit="KB/s"
-              series={samples.map((s) => s.netRxKbps)}
-            />
-            <Card
-              label="Net ↑"
-              value={last?.netTxKbps.toFixed(1) ?? "—"}
-              unit="KB/s"
-              series={samples.map((s) => s.netTxKbps)}
-            />
-          </div>
+          <TooltipProvider delayDuration={300}>
+            <div className="space-y-3">
+              <Card
+                label="CPU"
+                value={last?.cpuPct.toFixed(1) ?? "—"}
+                unit="%"
+                series={samples.map((s) => s.cpuPct)}
+                tooltip="CPU time consumed by the app process. 100% means one core is fully saturated; values above 100% mean multiple cores are in use. Read from /proc/<pid>/stat on the device."
+              />
+              <Card
+                label="RAM"
+                value={last?.memMb.toFixed(0) ?? "—"}
+                unit="MB"
+                series={samples.map((s) => s.memMb)}
+                tooltip="Resident memory (VmRSS) used by the app process on the device. Includes shared system libraries, so it slightly overstates the app's exclusive memory usage."
+              />
+              <Card
+                label="FPS"
+                value={last?.fps != null ? last.fps.toFixed(0) : "—"}
+                unit=""
+                series={samples.map((s) => s.fps)}
+                tooltip="Frames per second rendered by the app's UI, averaged over the last 5 seconds. An idle app stays near 0 (nothing to redraw). Read from `dumpsys gfxinfo`."
+              />
+              <Card
+                label="Jank"
+                value={last?.jankPct != null ? last.jankPct.toFixed(1) : "—"}
+                unit="%"
+                series={samples.map((s) => s.jankPct)}
+                tooltip="Percentage of frames that missed the 16.67 ms deadline (60 FPS target). Under 5% feels smooth; over 10% is visible lag. This is the best indicator of perceived smoothness."
+              />
+              <Card
+                label="Net ↓"
+                value={last?.netRxKbps.toFixed(1) ?? "—"}
+                unit="KB/s"
+                series={samples.map((s) => s.netRxKbps)}
+                tooltip="Kilobytes per second received by the app across all network interfaces (Wi-Fi + cellular). Measured per app UID. Shows 0 if the UID could not be resolved on this device."
+              />
+              <Card
+                label="Net ↑"
+                value={last?.netTxKbps.toFixed(1) ?? "—"}
+                unit="KB/s"
+                series={samples.map((s) => s.netTxKbps)}
+                tooltip="Kilobytes per second sent by the app across all network interfaces (Wi-Fi + cellular). Measured per app UID. Shows 0 if the UID could not be resolved on this device."
+              />
+            </div>
+          </TooltipProvider>
         )}
       </div>
     </section>
@@ -96,23 +110,33 @@ function Card({
   value,
   unit,
   series,
+  tooltip,
 }: {
   label: string;
   value: string;
   unit: string;
   series: (number | null)[];
+  tooltip: string;
 }) {
   return (
-    <div>
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-          {label}
-        </span>
-        <span className="font-mono tabular-nums">
-          {value} <span className="text-[10px] text-muted-foreground">{unit}</span>
-        </span>
-      </div>
-      <MetricsSparkline values={series} className="text-foreground/60" />
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="cursor-help">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {label}
+            </span>
+            <span className="font-mono tabular-nums">
+              {value}{" "}
+              <span className="text-[10px] text-muted-foreground">{unit}</span>
+            </span>
+          </div>
+          <MetricsSparkline values={series} className="text-foreground/60" />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-[260px] text-[11px] leading-snug">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
   );
 }
