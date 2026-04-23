@@ -354,30 +354,64 @@ idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packe
     }
 }
 
+/// Extract the first UID value from markers on a line: `uid=N`, `UID N`, `UID N:`.
+/// Returns None if no recognizable UID marker is present.
+fn first_uid_in_line(line: &str) -> Option<u32> {
+    for marker in ["uid=", "UID "] {
+        if let Some(idx) = line.find(marker) {
+            let rest = &line[idx + marker.len()..];
+            let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if !digits.is_empty() {
+                if let Ok(n) = digits.parse::<u32>() {
+                    return Some(n);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn parse_netstats_detail_for_uid(dump: &str, uid: u32) -> Option<NetBytes> {
     let mut rx: u64 = 0;
     let mut tx: u64 = 0;
-    let uid_marker = format!("uid={uid} ");
-    let mut active = false;
     let mut found = false;
+    let mut active = false;
     for line in dump.lines() {
-        let trimmed = line.trim_start();
-        if let Some(pos) = trimmed.find("uid=") {
-            let rest = &trimmed[pos..];
-            active = rest.starts_with(&uid_marker);
-            continue;
+        // Any UID marker on the line switches active state. If no marker,
+        // preserve the previous state so multi-line blocks (header + indented
+        // rx/tx lines) are handled.
+        if let Some(line_uid) = first_uid_in_line(line) {
+            active = line_uid == uid;
         }
         if !active {
             continue;
         }
-        for tok in trimmed.split_whitespace() {
-            if let Some(v) = tok.strip_prefix("rx=") {
-                found = true;
-                rx = rx.saturating_add(v.parse().unwrap_or(0));
+        // Scan the line for rx*/tx* byte tokens in any of the format
+        // variants we've seen across Android versions.
+        for tok in line.split(|c: char| c.is_whitespace() || c == ',' || c == ';') {
+            let (is_rx, raw_val) = if let Some(v) = tok.strip_prefix("rxBytes=") {
+                (true, v)
+            } else if let Some(v) = tok.strip_prefix("rx=") {
+                (true, v)
+            } else if let Some(v) = tok.strip_prefix("txBytes=") {
+                (false, v)
             } else if let Some(v) = tok.strip_prefix("tx=") {
-                found = true;
-                tx = tx.saturating_add(v.parse().unwrap_or(0));
+                (false, v)
+            } else {
+                continue;
+            };
+            // Take leading digits only — tolerant of trailing units/punct.
+            let digits: String = raw_val.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if digits.is_empty() {
+                continue;
             }
+            let n: u64 = digits.parse().unwrap_or(0);
+            if is_rx {
+                rx = rx.saturating_add(n);
+            } else {
+                tx = tx.saturating_add(n);
+            }
+            found = true;
         }
     }
     if found {
@@ -413,6 +447,36 @@ Active interfaces:
             parse_netstats_detail_for_uid("nothing here", 42),
             None
         );
+    }
+
+    #[test]
+    fn handles_same_line_rx_tx_with_rxBytes_format() {
+        // Android 14/15 format: single-line entry with rxBytes/txBytes
+        let dump = "\
+Active interfaces:
+  iface=wlan0 ...
+Active UID stats:
+  iface=wlan0 uid=10563 set=DEFAULT tag=0x0 metered=NO rxBytes=1234 rxPackets=5 txBytes=5678 txPackets=3
+  iface=wlan0 uid=10563 set=FOREGROUND tag=0x0 metered=NO rxBytes=200 rxPackets=1 txBytes=100 txPackets=1
+  iface=wlan0 uid=99999 set=DEFAULT tag=0x0 metered=NO rxBytes=9999 rxPackets=9 txBytes=9999 txPackets=9
+";
+        let n = parse_netstats_detail_for_uid(dump, 10563);
+        assert_eq!(n, Some(NetBytes { rx: 1434, tx: 5778 }));
+    }
+
+    #[test]
+    fn handles_uid_header_block_format() {
+        // Hypothetical newer format: "UID N:" header, indented byte lines
+        let dump = "\
+Active UID stats:
+  UID 10563:
+    rxBytes=500 txBytes=200
+    rxBytes=100 txBytes=50
+  UID 99999:
+    rxBytes=9999 txBytes=9999
+";
+        let n = parse_netstats_detail_for_uid(dump, 10563);
+        assert_eq!(n, Some(NetBytes { rx: 600, tx: 250 }));
     }
 }
 
