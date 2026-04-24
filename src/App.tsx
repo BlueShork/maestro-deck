@@ -9,6 +9,7 @@ import { InspectorPanel } from "@/components/InspectorPanel";
 const MetricsPanel = lazy(() =>
   import("@/components/MetricsPanel").then((m) => ({ default: m.MetricsPanel })),
 );
+import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Toolbar } from "@/components/Toolbar";
@@ -18,16 +19,17 @@ import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
-import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
+import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -137,6 +139,23 @@ export default function App() {
 
   const panelOpen = useMetricsStore((s) => s.panelOpen);
   const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
+  const panels = usePanelsStore((s) => s.visible);
+
+  // `defaultSize` values within a PanelGroup must sum to 100 — react-
+  // resizable-panels warns and normalizes otherwise. Since any panel
+  // can be hidden, we compute the fill-sizes dynamically per siblings
+  // count so the totals always balance regardless of visibility.
+  const WORKSPACE_SIZE = 15;
+  const INSPECTOR_SIZE = 18;
+  const mainSize =
+    100 -
+    (panels.workspace ? WORKSPACE_SIZE : 0) -
+    (panels.inspector ? INSPECTOR_SIZE : 0);
+
+  const bottomVisible =
+    panels.console || (perfEnabled && panelOpen && panels.metrics);
+  const mainTopSize = bottomVisible ? 65 : 100;
+  const mainBottomSize = 100 - mainTopSize;
   const deviceConnected = useDeviceStore((s) => Boolean(s.current));
 
   useEffect(() => {
@@ -228,48 +247,178 @@ export default function App() {
         onStop={() => void onStop()}
         onOpenSettings={() => setSettingsOpen(true)}
       />
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-60 shrink-0 flex-col border-r border-border">
-          <WorkspaceTree />
-        </aside>
-        <aside className="flex w-72 shrink-0 flex-col border-r border-border">
-          <DeviceSelector />
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <InspectorPanel />
-          </div>
-        </aside>
-        <main className="flex min-w-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1">
-            {streamEnabled ? (
-              <section className="flex min-w-0 flex-1 items-center justify-center bg-muted/40 p-4">
-                <DeviceView />
-              </section>
-            ) : null}
-            <section
-              className={cn(
-                "flex min-w-0 flex-col",
-                streamEnabled
-                  ? "w-[45%] border-l border-border"
-                  : "flex-1",
-              )}
+      <div className="min-h-0 flex-1">
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="maestro-deck.layout.outer"
+        >
+          {panels.workspace ? (
+            <>
+              <Panel
+                id="workspace"
+                order={1}
+                defaultSize={WORKSPACE_SIZE}
+                minSize={8}
+                className="border-r border-border"
+              >
+                <PanelShell id="workspace">
+                  <WorkspaceTree />
+                </PanelShell>
+              </Panel>
+              <PanelResizeHandle className={RESIZE_HANDLE_H} />
+            </>
+          ) : null}
+
+          {panels.inspector ? (
+            <>
+              <Panel
+                id="inspector"
+                order={2}
+                defaultSize={INSPECTOR_SIZE}
+                minSize={10}
+                className="border-r border-border"
+              >
+                <PanelShell id="inspector">
+                  <DeviceSelector />
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <InspectorPanel />
+                  </div>
+                </PanelShell>
+              </Panel>
+              <PanelResizeHandle className={RESIZE_HANDLE_H} />
+            </>
+          ) : null}
+
+          <Panel id="main" order={3} defaultSize={mainSize} minSize={30}>
+            <PanelGroup
+              direction="vertical"
+              autoSaveId="maestro-deck.layout.main"
             >
-              <FlowEditor />
-            </section>
-          </div>
-          <div className="flex min-h-0">
-            <div className="flex min-h-0 flex-1 flex-col">
-              <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
-            </div>
-            {perfEnabled && panelOpen && (
-              <Suspense fallback={null}>
-                <MetricsPanel />
-              </Suspense>
-            )}
-          </div>
-        </main>
+              <Panel
+                id="main-top"
+                order={1}
+                defaultSize={mainTopSize}
+                minSize={20}
+              >
+                <PanelGroup
+                  direction="horizontal"
+                  autoSaveId="maestro-deck.layout.top"
+                >
+                  {streamEnabled && panels.device ? (
+                    <>
+                      <Panel
+                        id="device"
+                        order={1}
+                        // Panels in the same group must have defaultSize
+                        // values that sum to 100, otherwise the library
+                        // warns and normalizes. Collapse to 100 when the
+                        // sibling is hidden so we don't rely on
+                        // normalization + avoid the console warning.
+                        defaultSize={panels.editor ? 55 : 100}
+                        minSize={20}
+                      >
+                        <PanelShell
+                          id="device"
+                          className="items-center justify-center bg-muted/40 p-4"
+                        >
+                          <DeviceView />
+                        </PanelShell>
+                      </Panel>
+                      {panels.editor ? (
+                        <PanelResizeHandle className={RESIZE_HANDLE_H} />
+                      ) : null}
+                    </>
+                  ) : null}
+
+                  {panels.editor ? (
+                    <Panel
+                      id="editor"
+                      order={2}
+                      defaultSize={streamEnabled && panels.device ? 45 : 100}
+                      minSize={20}
+                      className={
+                        streamEnabled && panels.device
+                          ? "border-l border-border"
+                          : undefined
+                      }
+                    >
+                      <PanelShell id="editor">
+                        <FlowEditor />
+                      </PanelShell>
+                    </Panel>
+                  ) : null}
+                </PanelGroup>
+              </Panel>
+
+              {panels.console || (perfEnabled && panelOpen && panels.metrics) ? (
+                <>
+                  <PanelResizeHandle className={RESIZE_HANDLE_V} />
+                  <Panel
+                    id="main-bottom"
+                    order={2}
+                    defaultSize={mainBottomSize}
+                    minSize={10}
+                  >
+                    <PanelGroup
+                      direction="horizontal"
+                      autoSaveId="maestro-deck.layout.bottom"
+                    >
+                      {panels.console ? (
+                        <Panel
+                          id="console"
+                          order={1}
+                          defaultSize={
+                            perfEnabled && panelOpen && panels.metrics
+                              ? 70
+                              : 100
+                          }
+                          minSize={20}
+                        >
+                          <PanelShell id="console">
+                            <RunConsole
+                              onRun={() => void onRun()}
+                              onStop={() => void onStop()}
+                            />
+                          </PanelShell>
+                        </Panel>
+                      ) : null}
+
+                      {perfEnabled && panelOpen && panels.metrics ? (
+                        <>
+                          {panels.console ? (
+                            <PanelResizeHandle className={RESIZE_HANDLE_H} />
+                          ) : null}
+                          <Panel
+                            id="metrics"
+                            order={2}
+                            defaultSize={panels.console ? 30 : 100}
+                            minSize={15}
+                          >
+                            <PanelShell id="metrics">
+                              <Suspense fallback={null}>
+                                <MetricsPanel />
+                              </Suspense>
+                            </PanelShell>
+                          </Panel>
+                        </>
+                      ) : null}
+                    </PanelGroup>
+                  </Panel>
+                </>
+              ) : null}
+            </PanelGroup>
+          </Panel>
+        </PanelGroup>
       </div>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <Toaster />
     </div>
   );
 }
+
+/** Hover-only thin line between horizontally-stacked panels. */
+const RESIZE_HANDLE_H =
+  "w-[3px] bg-border/0 transition-colors hover:bg-primary/40 data-[resize-handle-state=drag]:bg-primary/60 data-[resize-handle-state=hover]:bg-primary/40";
+/** Same, but rotated for vertically-stacked panels. */
+const RESIZE_HANDLE_V =
+  "h-[3px] bg-border/0 transition-colors hover:bg-primary/40 data-[resize-handle-state=drag]:bg-primary/60 data-[resize-handle-state=hover]:bg-primary/40";
