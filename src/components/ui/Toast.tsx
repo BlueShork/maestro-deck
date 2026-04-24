@@ -10,12 +10,16 @@ const variantStyles: Record<ToastVariant, string> = {
   success:
     "border-emerald-500/25 bg-background/85 text-emerald-200 before:content-[''] before:h-1.5 before:w-1.5 before:rounded-full before:bg-emerald-400 before:shrink-0 before:mt-1.5",
   error: "border-destructive/60 bg-destructive/15 text-destructive-foreground",
+  // Inverse-contrast snackbar: near-black pill in light theme, near-white
+  // in dark theme. Used for transient device-action feedback.
+  action: "border-transparent bg-foreground/90 text-background",
 };
 
 const variantSize: Record<ToastVariant, string> = {
   default: "max-w-sm p-3 text-sm",
   success: "max-w-xs py-1.5 px-2.5 text-xs",
   error: "max-w-sm p-3 text-sm",
+  action: "max-w-xs py-1.5 px-3 text-xs",
 };
 
 export function Toaster() {
@@ -26,9 +30,17 @@ export function Toaster() {
   useEffect(() => {
     const open = toasts.filter((t) => t.open);
     if (open.length === 0) return;
-    const timers = open.map((t) =>
-      setTimeout(() => dismiss(t.id), t.variant === "success" ? 1800 : 4500),
-    );
+    const timers = open
+      .filter((t) => !t.persistent)
+      .map((t) => {
+        const delay =
+          t.variant === "action"
+            ? 1400
+            : t.variant === "success"
+              ? 1800
+              : 4500;
+        return setTimeout(() => dismiss(t.id), delay);
+      });
     return () => {
       timers.forEach(clearTimeout);
     };
@@ -57,18 +69,22 @@ export function Toaster() {
           <div className="min-w-0 flex-1">
             <ToastPrimitive.Title
               className={cn(
-                t.variant === "success" ? "font-normal" : "font-medium",
+                t.variant === "success" || t.variant === "action"
+                  ? "font-normal"
+                  : "font-medium",
               )}
             >
               {t.title}
             </ToastPrimitive.Title>
-            {t.description && t.variant !== "success" ? (
+            {t.description &&
+            t.variant !== "success" &&
+            t.variant !== "action" ? (
               <ToastPrimitive.Description className="mt-0.5 text-xs opacity-80">
                 {t.description}
               </ToastPrimitive.Description>
             ) : null}
           </div>
-          {t.variant !== "success" ? (
+          {t.variant !== "success" && t.variant !== "action" ? (
             <ToastPrimitive.Close className="opacity-60 transition-opacity hover:opacity-100">
               <X className="h-3.5 w-3.5" />
             </ToastPrimitive.Close>

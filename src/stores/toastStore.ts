@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ToastVariant = "default" | "success" | "error";
+export type ToastVariant = "default" | "success" | "error" | "action";
 
 export interface Toast {
   id: string;
@@ -9,6 +9,10 @@ export interface Toast {
   variant: ToastVariant;
   /** Controlled open state so Radix can run the exit animation. */
   open: boolean;
+  /** If true, skip the auto-dismiss timer — caller is responsible for
+   *  calling `dismiss(id)` explicitly (used for long-running ops like
+   *  the inspect-mode dump whose duration is unknown). */
+  persistent?: boolean;
 }
 
 interface ToastState {
@@ -62,4 +66,15 @@ export const toast = {
     useToastStore.getState().push({ title, description, variant: "success" }),
   error: (title: string, description?: string) =>
     useToastStore.getState().push({ title, description, variant: "error" }),
+  /** Snackbar-style, inverse-contrast toast — used for device actions
+   *  (tap sent, swipe sent, etc.). Quick and unobtrusive. */
+  action: (title: string, description?: string) =>
+    useToastStore.getState().push({ title, description, variant: "action" }),
+  /** Same look as `action`, but no auto-dismiss. Returns the id so the
+   *  caller can dismiss it when the underlying operation finishes. */
+  loading: (title: string, description?: string) =>
+    useToastStore
+      .getState()
+      .push({ title, description, variant: "action", persistent: true }),
+  dismiss: (id: string) => useToastStore.getState().dismiss(id),
 };

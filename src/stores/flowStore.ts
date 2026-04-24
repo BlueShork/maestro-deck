@@ -20,6 +20,14 @@ interface FlowState {
   setActiveLine: (line: number | null) => void;
   setCursor: (line: number, column: number) => void;
   insertAtCursor: (text: string) => void;
+  /**
+   * Append an action at the very end of the file, regardless of where the
+   * editor cursor currently is. Used by the inspect-mode right-click
+   * menu and the +tap/+assert buttons so captured actions accumulate at
+   * the bottom of the flow instead of being wedged between existing
+   * instructions at a stale cursor position.
+   */
+  appendAction: (text: string) => void;
 }
 
 export const useFlowStore = create<FlowState>((set) => ({
@@ -44,5 +52,16 @@ export const useFlowStore = create<FlowState>((set) => ({
       const col = Math.max(0, Math.min(line.length, s.cursorColumn - 1));
       lines[idx] = line.slice(0, col) + text + line.slice(col);
       return { content: lines.join("\n"), dirty: true };
+    }),
+  appendAction: (text) =>
+    set((s) => {
+      // Guarantee exactly one newline between the existing content and
+      // the appended snippet, and that the final file ends with a single
+      // trailing newline — avoids the snippet being glued onto the last
+      // instruction or producing a run of blank lines on repeat inserts.
+      const trimmed = s.content.replace(/\s+$/, "");
+      const snippet = text.endsWith("\n") ? text : `${text}\n`;
+      const content = trimmed.length === 0 ? snippet : `${trimmed}\n${snippet}`;
+      return { content, dirty: true };
     }),
 }));
