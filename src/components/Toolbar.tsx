@@ -1,4 +1,6 @@
 import {
+  Check,
+  LayoutPanelLeft,
   ListChecks,
   Loader2,
   MousePointer2,
@@ -9,6 +11,14 @@ import {
 
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu";
 import { Separator } from "@/components/ui/Separator";
 import {
   Tooltip,
@@ -18,10 +28,22 @@ import {
 } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { useInspectorStore } from "@/stores/inspectorStore";
+import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+
+/** Menu entries for the View dropdown. Order = on-screen left→right,
+ *  top→bottom, matching the panel layout in App.tsx. */
+const VIEW_ENTRIES: Array<{ id: PanelId; label: string }> = [
+  { id: "workspace", label: "Workspace" },
+  { id: "inspector", label: "Inspector" },
+  { id: "device", label: "Device" },
+  { id: "editor", label: "Editor" },
+  { id: "console", label: "Run console" },
+  { id: "metrics", label: "Performance" },
+];
 
 interface ToolbarProps {
   onRun: () => void;
@@ -38,6 +60,9 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
   const fps = useStreamStore((s) => s.fps);
   const showFps = useSettingsStore((s) => s.showFps);
   const folderPath = useWorkspaceStore((s) => s.folderPath);
+  const panels = usePanelsStore((s) => s.visible);
+  const togglePanel = usePanelsStore((s) => s.toggle);
+  const showAllPanels = usePanelsStore((s) => s.showAll);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -136,6 +161,49 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
               </Tooltip>
             </>
           )}
+
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" aria-label="Toggle panels">
+                    <LayoutPanelLeft className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>View</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Panels</DropdownMenuLabel>
+              {VIEW_ENTRIES.map(({ id, label }) => {
+                const visible = panels[id];
+                return (
+                  <DropdownMenuItem
+                    key={id}
+                    onSelect={(e) => {
+                      // Keep the menu open so users can toggle multiple
+                      // panels in one pass.
+                      e.preventDefault();
+                      togglePanel(id);
+                    }}
+                    className="justify-between gap-6"
+                  >
+                    <span>{label}</span>
+                    <Check
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        visible ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => showAllPanels()}>
+                Show all
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Tooltip>
             <TooltipTrigger asChild>
