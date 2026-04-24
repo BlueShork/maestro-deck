@@ -1,5 +1,13 @@
-import { AlertTriangle, ChevronDown, ChevronRight, Plus, RefreshCw } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Plus,
+  RefreshCw,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ScrollArea } from "@/components/ui/ScrollArea";
@@ -128,7 +136,7 @@ function SelectorCandidates({
   node: UINode;
   selectors: Selector[];
 }) {
-  const insertAtCursor = useFlowStore((s) => s.insertAtCursor);
+  const appendAction = useFlowStore((s) => s.appendAction);
 
   const insert = useCallback(
     async (selector: Selector, kind: MaestroAction["kind"]) => {
@@ -140,8 +148,7 @@ function SelectorCandidates({
       }
       try {
         const text = await ipc.generateCommand(action);
-        const withNewline = text.endsWith("\n") ? text : `${text}\n`;
-        insertAtCursor(withNewline);
+        appendAction(text);
         toast.success("Inserted", text.trim());
       } catch (err) {
         toast.error(
@@ -150,7 +157,7 @@ function SelectorCandidates({
         );
       }
     },
-    [insertAtCursor],
+    [appendAction],
   );
 
   if (selectors.length === 0) {
@@ -229,6 +236,34 @@ export function InspectorPanel() {
   );
   const sparse = stats !== null && stats.targetable < 3;
 
+  const [justCopied, setJustCopied] = useState(false);
+  useEffect(() => {
+    if (!justCopied) return;
+    const t = setTimeout(() => setJustCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [justCopied]);
+
+  const copyHierarchy = useCallback(async () => {
+    const raw = tree?.xml_raw;
+    if (!raw) {
+      toast.error("Nothing to copy", "The hierarchy is empty.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(raw);
+      setJustCopied(true);
+      toast.success(
+        "Hierarchy copied",
+        `${raw.length.toLocaleString()} chars on the clipboard.`,
+      );
+    } catch (err) {
+      toast.error(
+        "Copy failed",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }, [tree]);
+
   if (!enabled) {
     return (
       <div className="flex h-full flex-col items-start gap-2 p-3 text-[11px] text-muted-foreground">
@@ -265,6 +300,21 @@ export function InspectorPanel() {
           ) : null}
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => void copyHierarchy()}
+            disabled={!tree?.xml_raw}
+            aria-label="Copy hierarchy dump to clipboard"
+            className="h-6 w-6"
+            title="Copy raw hierarchy dump to clipboard"
+          >
+            {justCopied ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </Button>
           <Button
             size="icon"
             variant="ghost"

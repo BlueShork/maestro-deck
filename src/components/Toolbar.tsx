@@ -1,4 +1,11 @@
-import { ListChecks, MousePointer2, Play, Settings, Square } from "lucide-react";
+import {
+  ListChecks,
+  Loader2,
+  MousePointer2,
+  Play,
+  Settings,
+  Square,
+} from "lucide-react";
 
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +32,7 @@ interface ToolbarProps {
 
 export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProps) {
   const inspectEnabled = useInspectorStore((s) => s.enabled);
+  const inspectLoading = useInspectorStore((s) => s.loading);
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const running = useRunStore((s) => s.running);
   const fps = useStreamStore((s) => s.fps);
@@ -53,13 +61,25 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
                 size="icon"
                 variant={inspectEnabled ? "default" : "ghost"}
                 onClick={() => void toggleInspect()}
+                disabled={inspectLoading && !inspectEnabled}
                 aria-pressed={inspectEnabled}
+                aria-busy={inspectLoading}
                 aria-label="Toggle inspect mode"
               >
-                <MousePointer2 className="h-4 w-4" />
+                {inspectLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MousePointer2 className="h-4 w-4" />
+                )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Inspect (I)</TooltipContent>
+            <TooltipContent>
+              {inspectLoading
+                ? inspectEnabled
+                  ? "Refreshing hierarchy…"
+                  : "Dumping hierarchy…"
+                : "Inspect (I)"}
+            </TooltipContent>
           </Tooltip>
 
           <Separator orientation="vertical" className="mx-1 h-5" />

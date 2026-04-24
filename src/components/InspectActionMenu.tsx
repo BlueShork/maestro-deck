@@ -75,7 +75,7 @@ export function InspectActionMenu({
   selector,
   onClose,
 }: InspectActionMenuProps) {
-  const insertAtCursor = useFlowStore((s) => s.insertAtCursor);
+  const appendAction = useFlowStore((s) => s.appendAction);
   const ref = useRef<HTMLDivElement | null>(null);
 
   // Clamp to viewport so the menu doesn't overflow off-screen.
@@ -114,8 +114,7 @@ export function InspectActionMenu({
       try {
         const action: MaestroAction = { kind, selector };
         const text = await ipc.generateCommand(action);
-        const withNewline = text.endsWith("\n") ? text : `${text}\n`;
-        insertAtCursor(withNewline);
+        appendAction(text);
         toast.success("Inserted", text.trim());
       } catch (err) {
         toast.error(
@@ -126,7 +125,7 @@ export function InspectActionMenu({
         onClose();
       }
     },
-    [insertAtCursor, selector, onClose],
+    [appendAction, selector, onClose],
   );
 
   return (

@@ -164,6 +164,8 @@ export function DeviceView() {
   const hovered = useInspectorStore((s) => s.hovered);
   const setHovered = useInspectorStore((s) => s.setHovered);
   const select = useInspectorStore((s) => s.select);
+  const scheduleAutoRefresh = useInspectorStore((s) => s.scheduleAutoRefresh);
+  const refreshIfStale = useInspectorStore((s) => s.refreshIfStale);
 
   const [actionMenu, setActionMenu] = useState<{
     x: number;
@@ -264,11 +266,23 @@ export function DeviceView() {
         setHovered(null);
         return;
       }
+      // Catch manual navigation on the physical phone — if the cached
+      // tree is older than STALE_TREE_MS, trigger a refresh. Cheap:
+      // internally guarded against re-entry and against trees younger
+      // than the threshold, so calling on every mouse move is fine.
+      refreshIfStale();
       const h = toHierarchyCoords(coords.x, coords.y);
       const hit = findSmallestAt(tree.root, h.x, h.y);
       setHovered(hit);
     },
-    [inspectEnabled, tree, toDeviceCoords, toHierarchyCoords, setHovered],
+    [
+      inspectEnabled,
+      tree,
+      toDeviceCoords,
+      toHierarchyCoords,
+      setHovered,
+      refreshIfStale,
+    ],
   );
 
   const onClick = useCallback(
@@ -289,6 +303,7 @@ export function DeviceView() {
           deviceWidth,
           deviceHeight,
         );
+        toast.action("Tap sent");
       } catch (err) {
         toast.error(
           "Tap failed",
@@ -307,6 +322,10 @@ export function DeviceView() {
             err instanceof Error ? err.message : String(err),
           );
         }
+        // Tap may have navigated; schedule a debounced re-dump so the
+        // hierarchy reflects whatever is now on screen. Rapid taps
+        // collapse to a single dump at the end of the burst.
+        scheduleAutoRefresh();
       }
     },
     [
@@ -317,6 +336,7 @@ export function DeviceView() {
       current,
       deviceWidth,
       deviceHeight,
+      scheduleAutoRefresh,
     ],
   );
 

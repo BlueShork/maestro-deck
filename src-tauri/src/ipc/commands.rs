@@ -176,7 +176,7 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
 }
 
 #[tauri::command]
-pub fn enter_inspect_mode(state: State<'_, AppState>) -> AppResult<HierarchyTree> {
+pub async fn enter_inspect_mode(state: State<'_, AppState>) -> AppResult<HierarchyTree> {
     let serial = state
         .connected_device
         .read()
@@ -184,16 +184,28 @@ pub fn enter_inspect_mode(state: State<'_, AppState>) -> AppResult<HierarchyTree
         .map(|d| d.serial.clone())
         .ok_or(AppError::NoDevice)?;
 
-    let tree = hierarchy::dump_hierarchy(&serial)?;
-    let tree_arc = Arc::new(tree.clone());
-    *state.last_hierarchy.write() = Some(tree_arc);
+    // `maestro hierarchy` spawns a subprocess and blocks on its stdout, which
+    // can take 500–1500 ms. Run it on the blocking pool so the async runtime
+    // stays free to service frame events, input taps, and other commands —
+    // otherwise entering inspect mode freezes the whole app until the dump
+    // returns. Likewise, SpatialIndex::build walks the full tree and can be
+    // non-trivial on large hierarchies.
+    let tree = tokio::task::spawn_blocking(move || hierarchy::dump_hierarchy(&serial))
+        .await
+        .map_err(|e| AppError::HierarchyParse(format!("dump task panicked: {e}")))??;
 
-    if let Some(root) = tree.root.as_ref() {
-        let idx = SpatialIndex::build(root);
-        *state.spatial_index.write() = Some(Arc::new(idx));
-    } else {
-        *state.spatial_index.write() = None;
-    }
+    let tree_for_index = tree.clone();
+    let spatial = tokio::task::spawn_blocking(move || {
+        tree_for_index
+            .root
+            .as_ref()
+            .map(|root| Arc::new(SpatialIndex::build(root)))
+    })
+    .await
+    .map_err(|e| AppError::HierarchyParse(format!("index task panicked: {e}")))?;
+
+    *state.last_hierarchy.write() = Some(Arc::new(tree.clone()));
+    *state.spatial_index.write() = spatial;
 
     Ok(tree)
 }
