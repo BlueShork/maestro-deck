@@ -36,6 +36,10 @@ export function SettingsDialog({
   const setPerfMonitoringEnabled = useSettingsStore(
     (s) => s.setPerfMonitoringEnabled,
   );
+  const fastHierarchyEnabled = useSettingsStore((s) => s.fastHierarchyEnabled);
+  const setFastHierarchyEnabled = useSettingsStore(
+    (s) => s.setFastHierarchyEnabled,
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,6 +102,28 @@ export function SettingsDialog({
               checked={perfMonitoringEnabled}
               onCheckedChange={setPerfMonitoringEnabled}
               aria-label="Enable performance monitoring"
+            />
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col">
+              <span>
+                Fast hierarchy{" "}
+                <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                  experimental
+                </span>
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                Keeps a <code className="font-mono">maestro studio</code>{" "}
+                process warm in background and talks gRPC directly to the
+                on-device driver. First inspect takes ~15 s, subsequent
+                dumps drop from ~11 s to &lt;1 s. Falls back to the CLI
+                path if studio fails.
+              </span>
+            </div>
+            <Switch
+              checked={fastHierarchyEnabled}
+              onCheckedChange={setFastHierarchyEnabled}
+              aria-label="Fast hierarchy (experimental)"
             />
           </div>
           <div className="flex items-center justify-between">

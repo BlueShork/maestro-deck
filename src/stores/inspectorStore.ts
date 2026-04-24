@@ -1,8 +1,16 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import type { HierarchyTree, Selector, UINode } from "@/types";
+
+/**
+ * Read the current fast-hierarchy preference synchronously without
+ * subscribing. Zustand's `getState` always returns the latest value,
+ * so swapping the toggle in Settings takes effect on the next dump.
+ */
+const fastMode = () => useSettingsStore.getState().fastHierarchyEnabled;
 
 // Debounce window for post-tap auto-refresh. Short enough that single
 // taps feel responsive (dump wall-time is ~1 s anyway, 300 ms here sits
@@ -63,7 +71,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
     set({ loading: true });
     const t0 = performance.now();
     ipc
-      .enterInspectMode()
+      .enterInspectMode(fastMode())
       .then((tree) => {
         // eslint-disable-next-line no-console
         console.log(
@@ -115,7 +123,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       // backend returns a result.
       const toastId = toast.loading("Dumping hierarchy…");
       try {
-        const tree = await ipc.enterInspectMode();
+        const tree = await ipc.enterInspectMode(fastMode());
         treeUpdatedAt = Date.now();
         set({ enabled: true, tree, loading: false });
       } catch (err) {
@@ -144,7 +152,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       if (!get().enabled) return;
       set({ loading: true });
       try {
-        const tree = await ipc.enterInspectMode();
+        const tree = await ipc.enterInspectMode(fastMode());
         treeUpdatedAt = Date.now();
         set({
           tree,

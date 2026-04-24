@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 
 use crate::device::Device;
+use crate::hierarchy::studio::StudioKeeper;
 use crate::hierarchy::HierarchyTree;
 use crate::selector::SpatialIndex;
 
@@ -19,4 +20,10 @@ pub struct AppState {
     pub control_tx: AsyncMutex<Option<mpsc::Sender<Vec<u8>>>>,
     pub stream_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
     pub scrcpy_child: AsyncMutex<Option<tokio::process::Child>>,
+
+    // Background `maestro studio` process that keeps the on-device
+    // gRPC driver alive for the fast-hierarchy path. Lazily spawned
+    // on the first fast-mode inspect request and torn down when the
+    // device disconnects (see `commands::disconnect_device`).
+    pub studio: AsyncMutex<Option<Arc<StudioKeeper>>>,
 }

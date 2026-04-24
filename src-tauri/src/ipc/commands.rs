@@ -153,6 +153,14 @@ pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
     *state.last_hierarchy.write() = None;
     *state.spatial_index.write() = None;
 
+    // Tear down the background studio process if one was spawned for
+    // fast-hierarchy mode — it holds an adb forward + instrumentation
+    // session that must be released before another device can take
+    // over the forwarded port.
+    if let Some(keeper) = state.studio.lock().await.take() {
+        keeper.stop().await;
+    }
+
     if let Some(serial) = serial {
         teardown_scrcpy(&serial, state.inner()).await;
     }
@@ -176,13 +184,35 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
 }
 
 #[tauri::command]
-pub async fn enter_inspect_mode(state: State<'_, AppState>) -> AppResult<HierarchyTree> {
+pub async fn enter_inspect_mode(
+    fast_mode: bool,
+    state: State<'_, AppState>,
+) -> AppResult<HierarchyTree> {
     let serial = state
         .connected_device
         .read()
         .as_ref()
         .map(|d| d.serial.clone())
         .ok_or(AppError::NoDevice)?;
+
+    // Fast path: reuse a long-lived `maestro studio` subprocess that
+    // keeps the on-device driver installed and listening on port 7001,
+    // then talk gRPC directly to fetch the hierarchy. First call pays
+    // the studio startup cost (~10-15 s); subsequent calls return in
+    // <500 ms. Falls back to the CLI path if studio fails to start or
+    // the gRPC RPC itself errors, so the app stays usable even when
+    // the fast path is broken on a given setup.
+    if fast_mode {
+        match dump_via_grpc(&serial, state.inner()).await {
+            Ok(tree) => return finalize_hierarchy(tree, state.inner()).await,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "fast-hierarchy path failed, falling back to CLI dump"
+                );
+            }
+        }
+    }
 
     // `maestro hierarchy` spawns a subprocess and blocks on its stdout, which
     // can take 500–1500 ms. Run it on the blocking pool so the async runtime
@@ -194,10 +224,36 @@ pub async fn enter_inspect_mode(state: State<'_, AppState>) -> AppResult<Hierarc
         .await
         .map_err(|e| AppError::HierarchyParse(format!("dump task panicked: {e}")))??;
 
-    // Share the tree across the index build, the cached state, and the IPC
-    // return via a single Arc — only one actual deep clone is unavoidable
-    // (the one we hand back to the frontend serializer), the rest are just
-    // refcount bumps.
+    finalize_hierarchy(tree, state.inner()).await
+}
+
+/// Fast-mode helper: ensure a `maestro studio` keeper is running for
+/// the given device, then fetch the hierarchy over gRPC. Reuses an
+/// existing keeper if one is already up to avoid paying studio's
+/// 10-15 s startup cost on every inspect call.
+async fn dump_via_grpc(serial: &str, state: &AppState) -> AppResult<HierarchyTree> {
+    {
+        let mut slot = state.studio.lock().await;
+        let needs_spawn = match slot.as_ref() {
+            Some(k) => k.serial() != serial,
+            None => true,
+        };
+        if needs_spawn {
+            if let Some(existing) = slot.take() {
+                existing.stop().await;
+            }
+            let keeper = hierarchy::studio::StudioKeeper::start(serial).await?;
+            *slot = Some(Arc::new(keeper));
+        }
+    }
+    hierarchy::grpc_client::dump_hierarchy().await
+}
+
+/// Share the freshly-dumped tree across the cached state, spatial
+/// index, and IPC return via a single Arc. One unavoidable deep clone
+/// (for the frontend serializer); the rest are refcount bumps. Used
+/// by both the CLI and gRPC paths so they land in identical state.
+async fn finalize_hierarchy(tree: HierarchyTree, state: &AppState) -> AppResult<HierarchyTree> {
     let tree_arc = Arc::new(tree);
 
     let index_tree = tree_arc.clone();
@@ -213,9 +269,6 @@ pub async fn enter_inspect_mode(state: State<'_, AppState>) -> AppResult<Hierarc
     *state.last_hierarchy.write() = Some(tree_arc.clone());
     *state.spatial_index.write() = spatial;
 
-    // IPC requires an owned HierarchyTree (serde serializes by value). If
-    // we're the sole remaining holder we can unwrap without copying;
-    // otherwise fall back to cloning once.
     Ok(Arc::try_unwrap(tree_arc).unwrap_or_else(|arc| (*arc).clone()))
 }
 
