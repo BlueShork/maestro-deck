@@ -9,11 +9,23 @@ interface SettingsState {
   theme: ThemeMode;
   streamEnabled: boolean;
   perfMonitoringEnabled: boolean;
+  /**
+   * When enabled, inspect mode spawns `maestro studio` once at startup
+   * (slow: 10-15s) and then fetches the hierarchy over direct gRPC on
+   * each subsequent dump (<500ms). When disabled, each dump shells out
+   * to the `maestro hierarchy` CLI (simple but ~11s per dump).
+   *
+   * Experimental flag — depends on an undocumented port contract of
+   * the Maestro driver + a studio background process. Off by default
+   * until we've validated output parity against the CLI path.
+   */
+  fastHierarchyEnabled: boolean;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
   setStreamEnabled: (v: boolean) => void;
   setPerfMonitoringEnabled: (v: boolean) => void;
+  setFastHierarchyEnabled: (v: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -24,11 +36,13 @@ export const useSettingsStore = create<SettingsState>()(
       theme: "system",
       streamEnabled: true,
       perfMonitoringEnabled: false,
+      fastHierarchyEnabled: false,
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
       setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
+      setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
     }),
     {
       name: "maestro-deck.settings",
@@ -38,6 +52,7 @@ export const useSettingsStore = create<SettingsState>()(
         theme: s.theme,
         streamEnabled: s.streamEnabled,
         perfMonitoringEnabled: s.perfMonitoringEnabled,
+        fastHierarchyEnabled: s.fastHierarchyEnabled,
       }),
     },
   ),

@@ -62,7 +62,8 @@ export const ipc = {
   connectDevice: (serial: string, streamEnabled: boolean) =>
     call<void>("connect_device", { serial, streamEnabled }),
   disconnectDevice: () => call<void>("disconnect_device"),
-  enterInspectMode: () => call<HierarchyTree>("enter_inspect_mode"),
+  enterInspectMode: (fastMode: boolean) =>
+    call<HierarchyTree>("enter_inspect_mode", { fastMode }),
   queryElement: (x: number, y: number) =>
     call<UINode | null>("query_element", { x, y }),
   suggestSelectors: (node: UINode) =>

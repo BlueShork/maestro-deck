@@ -4,7 +4,18 @@
 //! Maestro's on-device driver. This driver exposes Compose semantics nodes,
 //! React Native widgets, and accessibility metadata that raw `uiautomator dump`
 //! does not surface, and stays in sync with whatever Maestro CLI is installed.
-//! `parse_xml` is kept for the unit-test fixture (UIAutomator XML format).
+//!
+//! Fast path (opt-in): spawn `maestro studio` once to install+start the
+//! on-device driver, then talk gRPC directly to it (port 7001 via adb
+//! forward). Bindings for that gRPC service are generated from
+//! `proto/maestro_android.proto` and re-exported via the `proto` submodule.
+//!
+//! `parse_xml` is kept for the unit-test fixture (UIAutomator XML format)
+//! and is also what consumes the driver's direct `ViewHierarchyResponse`.
+
+pub mod grpc_client;
+pub mod proto;
+pub mod studio;
 
 use std::collections::HashMap;
 use std::process::Command;
@@ -213,12 +224,20 @@ fn convert_maestro_node(node: MaestroNode, next_index: &mut usize) -> UINode {
 }
 
 /// Parse a UIAutomator XML dump into a tree.
+///
+/// Real-world Maestro / UiAutomator dumps commonly emit *several*
+/// top-level `<node>` children directly under `<hierarchy>` — one per
+/// visible window (system UI status bar + navigation bar + the app
+/// itself + any overlay like Samsung's edge panel trigger). We collect
+/// all of them into `top_level` and wrap them in a synthetic root
+/// when there's more than one so the inspector sees the full screen
+/// instead of only the last window dumped.
 pub fn parse_xml(xml: &str) -> AppResult<HierarchyTree> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
 
     let mut stack: Vec<UINode> = Vec::new();
-    let mut root: Option<UINode> = None;
+    let mut top_level: Vec<UINode> = Vec::new();
     let mut next_index: usize = 0;
 
     loop {
@@ -236,13 +255,13 @@ pub fn parse_xml(xml: &str) -> AppResult<HierarchyTree> {
             Event::Empty(e) => {
                 if e.name().as_ref() == b"node" {
                     let node = build_node(&e, &mut next_index, &reader)?;
-                    push_complete(node, &mut stack, &mut root);
+                    push_complete(node, &mut stack, &mut top_level);
                 }
             }
             Event::End(e) => {
                 if e.name().as_ref() == b"node" {
                     if let Some(node) = stack.pop() {
-                        push_complete(node, &mut stack, &mut root);
+                        push_complete(node, &mut stack, &mut top_level);
                     }
                 }
             }
@@ -251,15 +270,61 @@ pub fn parse_xml(xml: &str) -> AppResult<HierarchyTree> {
     }
 
     Ok(HierarchyTree {
-        root,
+        root: build_root(top_level, &mut next_index),
         xml_raw: xml.to_string(),
     })
 }
 
-fn push_complete(node: UINode, stack: &mut [UINode], root: &mut Option<UINode>) {
+fn push_complete(node: UINode, stack: &mut [UINode], top_level: &mut Vec<UINode>) {
     match stack.last_mut() {
         Some(parent) => parent.children.push(node),
-        None => *root = Some(node),
+        None => top_level.push(node),
+    }
+}
+
+/// Collapse top-level siblings into a single root. If the dump only
+/// had one top-level `<node>` (the classic UiAutomator fixture case),
+/// return it as-is to preserve existing semantics and tests. Otherwise
+/// synthesize a parent whose bounds span the union of the children,
+/// so hit-testing and overlay scaling on the frontend still work.
+fn build_root(children: Vec<UINode>, next_index: &mut usize) -> Option<UINode> {
+    match children.len() {
+        0 => None,
+        1 => children.into_iter().next(),
+        _ => {
+            let bounds = children.iter().fold(
+                Bounds {
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                },
+                |mut acc, c| {
+                    if c.bounds.right > acc.right {
+                        acc.right = c.bounds.right;
+                    }
+                    if c.bounds.bottom > acc.bottom {
+                        acc.bottom = c.bounds.bottom;
+                    }
+                    acc
+                },
+            );
+            let id = next_index.to_string();
+            *next_index += 1;
+            Some(UINode {
+                id,
+                resource_id: None,
+                text: None,
+                content_desc: None,
+                class_name: "hierarchy".to_string(),
+                package: String::new(),
+                bounds,
+                clickable: false,
+                enabled: true,
+                focused: false,
+                children,
+            })
+        }
     }
 }
 
@@ -268,7 +333,6 @@ fn build_node(
     next_index: &mut usize,
     reader: &Reader<&[u8]>,
 ) -> AppResult<UINode> {
-    let mut id = String::new();
     let mut resource_id: Option<String> = None;
     let mut text: Option<String> = None;
     let mut content_desc: Option<String> = None;
@@ -291,7 +355,14 @@ fn build_node(
             .decode_and_unescape_value(decoder)
             .map_err(|err| AppError::HierarchyParse(err.to_string()))?;
         match key {
-            b"index" => id = value.to_string(),
+            // Note: we deliberately ignore the XML `index` attribute
+            // here. UiAutomator dumps give every first-child node
+            // `index="0"`, so it's *not* unique across the tree — using
+            // it as the UINode id would collide between siblings at
+            // different levels and break hover/selection hit-tests in
+            // the inspector. The pre-order `next_index` counter below
+            // matches what parse_maestro_json does and guarantees
+            // uniqueness.
             b"resource-id" => resource_id = non_empty(&value),
             b"text" => text = non_empty(&value),
             b"content-desc" => content_desc = non_empty(&value),
@@ -308,9 +379,7 @@ fn build_node(
         }
     }
 
-    if id.is_empty() {
-        id = next_index.to_string();
-    }
+    let id = next_index.to_string();
     *next_index += 1;
 
     Ok(UINode {
