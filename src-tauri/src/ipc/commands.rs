@@ -194,9 +194,15 @@ pub async fn enter_inspect_mode(state: State<'_, AppState>) -> AppResult<Hierarc
         .await
         .map_err(|e| AppError::HierarchyParse(format!("dump task panicked: {e}")))??;
 
-    let tree_for_index = tree.clone();
+    // Share the tree across the index build, the cached state, and the IPC
+    // return via a single Arc — only one actual deep clone is unavoidable
+    // (the one we hand back to the frontend serializer), the rest are just
+    // refcount bumps.
+    let tree_arc = Arc::new(tree);
+
+    let index_tree = tree_arc.clone();
     let spatial = tokio::task::spawn_blocking(move || {
-        tree_for_index
+        index_tree
             .root
             .as_ref()
             .map(|root| Arc::new(SpatialIndex::build(root)))
@@ -204,10 +210,13 @@ pub async fn enter_inspect_mode(state: State<'_, AppState>) -> AppResult<Hierarc
     .await
     .map_err(|e| AppError::HierarchyParse(format!("index task panicked: {e}")))?;
 
-    *state.last_hierarchy.write() = Some(Arc::new(tree.clone()));
+    *state.last_hierarchy.write() = Some(tree_arc.clone());
     *state.spatial_index.write() = spatial;
 
-    Ok(tree)
+    // IPC requires an owned HierarchyTree (serde serializes by value). If
+    // we're the sole remaining holder we can unwrap without copying;
+    // otherwise fall back to cloning once.
+    Ok(Arc::try_unwrap(tree_arc).unwrap_or_else(|arc| (*arc).clone()))
 }
 
 #[tauri::command]

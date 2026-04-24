@@ -7,7 +7,7 @@ import {
   Plus,
   RefreshCw,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ScrollArea } from "@/components/ui/ScrollArea";
@@ -38,14 +38,18 @@ function nodeLabel(n: UINode): string {
   return short;
 }
 
-function TreeNode({
-  node,
-  depth,
-}: {
+interface TreeNodeProps {
   node: UINode;
   depth: number;
-}) {
+}
+
+function TreeNodeImpl({ node, depth }: TreeNodeProps) {
   const [open, setOpen] = useState(depth < 2);
+  // Each subscription is a derived boolean, so Zustand only re-renders
+  // the two TreeNodes that transition (the one losing hover/selection
+  // and the one gaining it) — siblings with a stable false return are
+  // skipped. `memo` below keeps parents from cascading re-renders into
+  // subtrees whose `node` ref hasn't changed.
   const selected = useInspectorStore((s) => s.selected?.id === node.id);
   const hovered = useInspectorStore((s) => s.hovered?.id === node.id);
   const select = useInspectorStore((s) => s.select);
@@ -94,6 +98,12 @@ function TreeNode({
     </div>
   );
 }
+
+// Shallow reference equality on `node` and `depth`: stable tree refs
+// (the common case between hierarchy refreshes) short-circuit here
+// instead of re-walking the subtree. A fresh dump produces new refs
+// throughout, so the whole tree re-renders — which is correct.
+const TreeNode = memo(TreeNodeImpl);
 
 function Properties({ node }: { node: UINode }) {
   const rows: [string, string][] = [
