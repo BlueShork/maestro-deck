@@ -51,6 +51,20 @@
   * {
     @apply border-border;
   }
+  html,
+  body {
+    /* Kill macOS rubber-band / elastic overscroll. Without this the
+       whole layout visibly bounces when the user hits the top or
+       bottom of any scrollable container (or scrolls over a non-
+       scrollable area on a trackpad), which looks like a web page
+       inside a browser, not a native app. `overscroll-behavior` is
+       the modern knob; the `overflow: hidden` on the root elements
+       is a belt-and-braces guard for WebKit on older macOS builds
+       where `overscroll-behavior` alone is sometimes ignored. */
+    overscroll-behavior: none;
+    overflow: hidden;
+    height: 100vh;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings:

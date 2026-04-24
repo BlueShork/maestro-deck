@@ -25,9 +25,12 @@ export const useStreamStore = create<StreamState>((set) => ({
   pushFrame: ({ width, height }) => {
     const now = performance.now();
     frameTimes.push(now);
-    while (frameTimes.length > 0 && now - frameTimes[0] > 1000) {
-      frameTimes.shift();
-    }
+    // Drop all timestamps older than 1s in one splice instead of shifting
+    // in a loop (shift is O(n); splice(0, k) is O(k) amortized — same big-O
+    // but one pass instead of many).
+    let cutoff = 0;
+    while (cutoff < frameTimes.length && now - frameTimes[cutoff] > 1000) cutoff++;
+    if (cutoff > 0) frameTimes.splice(0, cutoff);
     const fpsCanUpdate = now - lastFpsUpdate >= FPS_UPDATE_MS;
     set((s) => {
       const fps = fpsCanUpdate ? frameTimes.length : s.fps;

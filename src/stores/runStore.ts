@@ -36,12 +36,15 @@ export const useRunStore = create<RunState>((set) => ({
   setStopped: (exitCode) => set({ running: false, pid: null, exitCode }),
   appendLog: (stream, text) =>
     set((s) => {
-      const next = [
-        ...s.logs,
-        { id: nextId++, stream, text, timestamp: Date.now() },
-      ];
-      if (next.length > 2000) next.splice(0, next.length - 2000);
-      return { logs: next };
+      const entry = { id: nextId++, stream, text, timestamp: Date.now() };
+      // Below the cap: just copy + push. Above: drop the oldest in the
+      // same allocation instead of splicing a fresh spread.
+      const MAX = 2000;
+      if (s.logs.length < MAX) {
+        return { logs: [...s.logs, entry] };
+      }
+      // Drop oldest, keep last MAX-1, append new. One slice, not two.
+      return { logs: [...s.logs.slice(s.logs.length - MAX + 1), entry] };
     }),
   clearLogs: () => set({ logs: [] }),
 }));

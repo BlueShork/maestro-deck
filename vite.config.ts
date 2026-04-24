@@ -12,6 +12,19 @@ export default defineConfig(async () => ({
     },
   },
   clearScreen: false,
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("@codemirror") || id.includes("@lezer")) return "editor";
+            if (id.includes("@radix-ui")) return "radix";
+            if (id.includes("react-dom") || id.includes("/react/")) return "react";
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 1420,
     strictPort: true,
