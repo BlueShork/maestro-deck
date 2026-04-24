@@ -12,7 +12,7 @@ use std::process::Command;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::error::{AppError, AppResult};
 
@@ -61,7 +61,11 @@ const DEFAULT_BIN: &str = "maestro";
 /// Number of attempts when the on-device driver isn't ready yet (e.g. after a
 /// `maestro test` was killed and the driver process is restarting).
 const HIERARCHY_RETRIES: usize = 3;
-const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(800);
+/// Shorter than it was historically (800 ms): in practice the on-device
+/// driver recovers in ~100–200 ms, and a long sleep here compounds with the
+/// subprocess spawn cost to push total hierarchy time into multi-second
+/// territory on flaky/warmup paths.
+const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
 
 fn maestro_bin() -> String {
     std::env::var("MAESTRO_BIN").unwrap_or_else(|_| DEFAULT_BIN.to_string())
@@ -77,8 +81,10 @@ fn is_driver_warmup_error(stderr: &str) -> bool {
 
 pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
     let bin = maestro_bin();
+    let overall_start = std::time::Instant::now();
     let mut last_err: Option<String> = None;
     for attempt in 0..HIERARCHY_RETRIES {
+        let attempt_start = std::time::Instant::now();
         let output = Command::new(&bin)
             .args(["--device", serial, "hierarchy"])
             .output()
@@ -89,14 +95,31 @@ pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
                     AppError::Io(e)
                 }
             })?;
+        let subprocess_ms = attempt_start.elapsed().as_millis();
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-            debug!(bytes = stdout.len(), attempt, "maestro hierarchy returned");
-            return parse_maestro_json(&stdout);
+            let parse_start = std::time::Instant::now();
+            let result = parse_maestro_json(&stdout);
+            let parse_ms = parse_start.elapsed().as_millis();
+            info!(
+                attempt,
+                subprocess_ms,
+                parse_ms,
+                total_ms = overall_start.elapsed().as_millis(),
+                bytes = stdout.len(),
+                "hierarchy dump complete"
+            );
+            return result;
         }
 
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        info!(
+            attempt,
+            subprocess_ms,
+            warmup = is_driver_warmup_error(&stderr),
+            "hierarchy dump attempt failed"
+        );
         last_err = Some(stderr.clone());
         if attempt + 1 < HIERARCHY_RETRIES && is_driver_warmup_error(&stderr) {
             debug!(
