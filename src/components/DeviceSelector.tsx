@@ -1,4 +1,4 @@
-import { Plug, PlugZap, RefreshCw, Smartphone } from "lucide-react";
+import { Loader2, Plug, PlugZap, RefreshCw, Smartphone } from "lucide-react";
 import { useEffect } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -6,8 +6,18 @@ import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
 
 export function DeviceSelector() {
-  const { devices, current, loading, connecting, error, refresh, connect, disconnect } =
-    useDeviceStore();
+  const {
+    devices,
+    current,
+    loading,
+    connecting,
+    pendingSerial,
+    pendingAction,
+    error,
+    refresh,
+    connect,
+    disconnect,
+  } = useDeviceStore();
 
   useEffect(() => {
     void refresh();
@@ -47,6 +57,9 @@ export function DeviceSelector() {
       <ul className="flex flex-col gap-1">
         {devices.map((d) => {
           const active = current?.serial === d.serial;
+          const isPending = pendingSerial === d.serial;
+          const isConnecting = isPending && pendingAction === "connect";
+          const isDisconnecting = isPending && pendingAction === "disconnect";
           return (
             <li key={d.serial}>
               <button
@@ -54,23 +67,87 @@ export function DeviceSelector() {
                 onClick={() =>
                   active ? void disconnect() : void connect(d.serial)
                 }
-                disabled={connecting}
+                // While *any* device action is in flight we block clicks
+                // so the user can't race multiple connects.
+                disabled={connecting || isPending}
+                aria-busy={isPending}
                 className={cn(
-                  "group flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
-                  active
-                    ? "border-primary/40 bg-primary/10"
-                    : "hover:border-border hover:bg-accent/40",
+                  "group flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+                  // Pending state overrides connected state visually —
+                  // the shimmer/amber tint tells the user something is
+                  // happening so they don't assume the row is stuck.
+                  isConnecting &&
+                    "border-emerald-500/30 bg-emerald-500/5 animate-pulse",
+                  isDisconnecting &&
+                    "border-amber-500/40 bg-amber-500/5 animate-pulse",
+                  !isPending && active
+                    ? // Explicit green — primary is the app's theme blue
+                      // and doesn't read as "connected" at a glance.
+                      // Pulsing dot + tinted background + border gives
+                      // the device card an unambiguous "live" look.
+                      "border-emerald-500/50 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.15)]"
+                    : !isPending &&
+                        "border-transparent hover:border-border hover:bg-accent/40",
                 )}
               >
-                <Smartphone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="relative shrink-0">
+                  <Smartphone
+                    className={cn(
+                      "h-4 w-4",
+                      isConnecting && "text-emerald-500/70",
+                      isDisconnecting && "text-amber-500",
+                      !isPending && active && "text-emerald-500",
+                      !isPending && !active && "text-muted-foreground",
+                    )}
+                  />
+                  {active && !isPending ? (
+                    <span
+                      aria-hidden
+                      className="absolute -right-0.5 -top-0.5 flex h-1.5 w-1.5"
+                    >
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    </span>
+                  ) : null}
+                </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium">{d.model}</div>
-                  <div className="truncate font-mono text-[10px] text-muted-foreground">
-                    {d.serial} · Android {d.android_version}
+                  <div
+                    className={cn(
+                      "truncate text-xs font-medium",
+                      isDisconnecting && "text-amber-700 dark:text-amber-300",
+                      !isPending &&
+                        active &&
+                        "text-emerald-700 dark:text-emerald-300",
+                    )}
+                  >
+                    {d.model}
+                  </div>
+                  <div
+                    className={cn(
+                      "truncate font-mono text-[10px]",
+                      isConnecting && "text-emerald-600/70 dark:text-emerald-400/70",
+                      isDisconnecting && "text-amber-600/80 dark:text-amber-400/80",
+                      !isPending && active
+                        ? "text-emerald-600/80 dark:text-emerald-400/80"
+                        : !isPending && "text-muted-foreground",
+                    )}
+                  >
+                    {isConnecting
+                      ? "Connecting…"
+                      : isDisconnecting
+                        ? "Disconnecting…"
+                        : `${d.serial} · Android ${d.android_version}`}
                   </div>
                 </div>
-                {active ? (
-                  <PlugZap className="h-3.5 w-3.5 text-primary" />
+                {isPending ? (
+                  <Loader2
+                    className={cn(
+                      "h-3.5 w-3.5 animate-spin",
+                      isConnecting ? "text-emerald-500" : "text-amber-500",
+                    )}
+                  />
+                ) : active ? (
+                  <PlugZap className="h-3.5 w-3.5 text-emerald-500" />
                 ) : (
                   <Plug className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 )}

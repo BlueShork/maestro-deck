@@ -47,6 +47,8 @@ pub fn run() {
             suggest_selectors,
             generate_command,
             send_input,
+            set_dark_mode,
+            get_dark_mode,
             run_flow,
             stop_flow,
             list_workspace,
@@ -57,16 +59,6 @@ pub fn run() {
         ])
         .setup(|app| {
             ipc::register_events(app)?;
-            // Auto-open devtools in debug builds so frontend console
-            // output (timings, toasts, errors) is visible without having
-            // to remember Cmd+Opt+I each run.
-            #[cfg(debug_assertions)]
-            {
-                use tauri::Manager;
-                if let Some(window) = app.get_webview_window("main") {
-                    window.open_devtools();
-                }
-            }
             Ok(())
         })
         .run(tauri::generate_context!())

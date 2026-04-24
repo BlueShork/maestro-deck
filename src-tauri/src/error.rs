@@ -26,6 +26,13 @@ pub enum AppError {
     #[error("UI hierarchy parse error: {0}")]
     HierarchyParse(String),
 
+    // Specific to the gRPC fast path: the driver responded but with a
+    // degenerate/empty tree. Distinct from transport errors so the
+    // caller knows it's safe to kill the keeper and respawn rather than
+    // retry against the same zombie driver.
+    #[error("Driver returned stale hierarchy ({0}) — needs reinstall")]
+    StaleDriver(String),
+
     #[error("Maestro runner not found. Install via `curl -Ls 'https://get.maestro.mobile.dev' | bash` or set the path in Settings.")]
     RunnerNotFound,
 

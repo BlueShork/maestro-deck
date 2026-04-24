@@ -72,6 +72,8 @@ export const ipc = {
     call<string>("generate_command", { action }),
   sendInput: (event: InputEvent, screenW: number, screenH: number) =>
     call<void>("send_input", { event, screenW, screenH }),
+  setDarkMode: (enabled: boolean) => call<void>("set_dark_mode", { enabled }),
+  getDarkMode: () => call<boolean>("get_dark_mode"),
   runFlow: (filePath: string) => call<number>("run_flow", { filePath }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
