@@ -1,4 +1,5 @@
-import { Smartphone } from "lucide-react";
+import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
+import { Camera, Smartphone } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -8,17 +9,20 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { H264Decoder } from "@/lib/decoder";
 import { events, ipc } from "@/lib/ipc";
+import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { Bounds, Selector, UINode } from "@/types";
 
 function nodeArea(n: UINode): number {
@@ -376,6 +380,130 @@ export function DeviceView() {
     if (!inspectEnabled) setActionMenu(null);
   }, [inspectEnabled]);
 
+  const [capturing, setCapturing] = useState(false);
+  const takeScreenshot = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasFrame) return;
+    const folder = useWorkspaceStore.getState().folderPath;
+    if (!folder) {
+      toast.error("No workspace open", "Open a folder first to save screenshots.");
+      return;
+    }
+    setCapturing(true);
+    try {
+      const blob: Blob | null = await new Promise((resolve) =>
+        canvas.toBlob((b) => resolve(b), "image/png"),
+      );
+      if (!blob) throw new Error("canvas returned no blob");
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+
+      const dir = `${folder.replace(/\/$/, "")}/screenshots`;
+      if (!(await exists(dir))) {
+        await mkdir(dir, { recursive: true });
+      }
+
+      const ts = formatTimestamp(new Date());
+      let path = `${dir}/screenshot-${ts}.png`;
+      let i = 2;
+      while (await exists(path)) {
+        path = `${dir}/screenshot-${ts}-${i}.png`;
+        i += 1;
+      }
+
+      await writeFile(path, bytes);
+      toast.success("Screenshot saved", path);
+    } catch (err) {
+      toast.error(
+        "Screenshot failed",
+        err instanceof Error ? err.message : String(err),
+      );
+    } finally {
+      setCapturing(false);
+    }
+  }, [hasFrame]);
+
+  useShortcuts(
+    useMemo(
+      () => [
+        {
+          key: "s",
+          mod: true,
+          shift: true,
+          handler: () => void takeScreenshot(),
+        },
+      ],
+      [takeScreenshot],
+    ),
+  );
+
+  // Trackpad / mouse wheel → swipe gesture on the device. We batch
+  // wheel events in a ~50 ms window (trackpads fire at ~60 Hz) and
+  // emit one swipe per batch to avoid flooding the scrcpy control
+  // channel and still feel smooth enough for native scroll lists.
+  const wheelAccum = useRef(0);
+  const wheelCursor = useRef<{ x: number; y: number } | null>(null);
+  const wheelTimer = useRef<number | null>(null);
+  const wheelFlush = useCallback(() => {
+    wheelTimer.current = null;
+    const delta = wheelAccum.current;
+    const cursor = wheelCursor.current;
+    wheelAccum.current = 0;
+    // Drop tiny residual deltas — Android's scroll view treats a few
+    // pixels as a tap-cancel rather than a fling.
+    if (!cursor || Math.abs(delta) < 4 || scale === 0) return;
+
+    // `delta` is in display-space pixels; convert to stream-space (which
+    // is what scrcpy expects). `deviceDelta` ends up negative when the
+    // user scrolls down — i.e. finger should move *up* on the device
+    // to reveal content below. That matches Android's natural scroll.
+    const deviceDelta = delta / scale;
+    const y2 = Math.max(
+      0,
+      Math.min(deviceHeight - 1, cursor.y - Math.round(deviceDelta)),
+    );
+
+    void ipc
+      .sendInput(
+        {
+          kind: "swipe",
+          x1: cursor.x,
+          y1: cursor.y,
+          x2: cursor.x,
+          y2,
+          // Short duration keeps consecutive swipes from overlapping
+          // visibly — the scroll view sees a rapid sequence of short
+          // gestures that it interprets roughly like a fling.
+          duration_ms: 30,
+        },
+        deviceWidth,
+        deviceHeight,
+      )
+      .catch(() => {
+        // Silent: swipe failures during fast-scroll shouldn't spam
+        // toasts. `sendInput` already surfaces real device-loss issues
+        // via `deviceStore`.
+      });
+  }, [scale, deviceHeight, deviceWidth]);
+
+  const onWheel = useCallback(
+    (e: ReactWheelEvent) => {
+      if (!current) return;
+      const coords = toDeviceCoords(e.clientX, e.clientY);
+      if (!coords) return;
+
+      // Normalize so line/page scrolls (rare wheel mice) roughly match
+      // pixel scrolls from a trackpad.
+      const mult =
+        e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
+      wheelAccum.current += e.deltaY * mult;
+      wheelCursor.current = coords;
+
+      if (wheelTimer.current !== null) return;
+      wheelTimer.current = window.setTimeout(wheelFlush, 50);
+    },
+    [current, toDeviceCoords, wheelFlush],
+  );
+
   const overlayBounds: Bounds | null = hovered?.bounds ?? null;
 
   return (
@@ -386,6 +514,7 @@ export function DeviceView() {
       onPointerLeave={() => setHovered(null)}
       onPointerDown={(e) => void onClick(e)}
       onContextMenu={(e) => void onContextMenu(e)}
+      onWheel={onWheel}
     >
       {hasFrame ? null : (
         <EmptyState connected={!!current} streamEnabled={streamEnabled} />
@@ -422,6 +551,19 @@ export function DeviceView() {
         />
       ) : null}
 
+      {hasFrame ? (
+        <button
+          type="button"
+          onClick={() => void takeScreenshot()}
+          disabled={capturing}
+          title="Screenshot · ⌘⇧S"
+          aria-label="Take screenshot"
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Camera className="h-4 w-4" />
+        </button>
+      ) : null}
+
       {actionMenu ? (
         <InspectActionMenu
           x={actionMenu.x}
@@ -432,6 +574,14 @@ export function DeviceView() {
         />
       ) : null}
     </div>
+  );
+}
+
+function formatTimestamp(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
   );
 }
 
