@@ -33,6 +33,13 @@ const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long we allow the TCP connect + HTTP/2 handshake. Port is on
 /// localhost so this should be sub-second.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+/// A real UiAutomator dump is at least a few hundred bytes (header +
+/// one window node with bounds). An orphan studio whose on-device
+/// driver has died still accepts the RPC but replies with the bare
+/// `<hierarchy rotation="0"/>` wrapper (~84 bytes). Below this
+/// threshold we treat the response as "driver is a zombie" and fail
+/// so the caller can kill the keeper and respawn.
+const MIN_VALID_HIERARCHY_BYTES: usize = 200;
 
 async fn connect() -> AppResult<MaestroDriverClient<Channel>> {
     let uri = format!("http://127.0.0.1:{DRIVER_PORT}");
@@ -98,5 +105,14 @@ pub async fn dump_hierarchy() -> AppResult<HierarchyTree> {
         has_root = tree.root.is_some(),
         "gRPC dump parsed into UINode tree"
     );
+
+    if tree.root.is_none() || tree.xml_raw.len() < MIN_VALID_HIERARCHY_BYTES {
+        return Err(AppError::StaleDriver(format!(
+            "bytes={}, has_root={}",
+            tree.xml_raw.len(),
+            tree.root.is_some()
+        )));
+    }
+
     Ok(tree)
 }

@@ -11,6 +11,13 @@ interface DeviceState {
   current: Device | null;
   loading: boolean;
   connecting: boolean;
+  /**
+   * Serial of the device we are currently connecting/disconnecting,
+   * so the DeviceSelector can show an inline spinner on that exact
+   * row instead of a global one. `null` when idle.
+   */
+  pendingSerial: string | null;
+  pendingAction: "connect" | "disconnect" | null;
   error: string | null;
   refresh: () => Promise<void>;
   connect: (serial: string) => Promise<void>;
@@ -23,6 +30,8 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   current: null,
   loading: false,
   connecting: false,
+  pendingSerial: null,
+  pendingAction: null,
   error: null,
   refresh: async () => {
     set({ loading: true, error: null });
@@ -38,10 +47,20 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   connect: async (serial) => {
     const device = get().devices.find((d) => d.serial === serial);
     const streamEnabled = useSettingsStore.getState().streamEnabled;
-    set({ connecting: true, error: null });
+    set({
+      connecting: true,
+      pendingSerial: serial,
+      pendingAction: "connect",
+      error: null,
+    });
     try {
       await ipc.connectDevice(serial, streamEnabled);
-      set({ current: device ?? null, connecting: false });
+      set({
+        current: device ?? null,
+        connecting: false,
+        pendingSerial: null,
+        pendingAction: null,
+      });
       toast.success(
         "Device connected",
         streamEnabled
@@ -50,18 +69,25 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ connecting: false, error: message });
+      set({
+        connecting: false,
+        pendingSerial: null,
+        pendingAction: null,
+        error: message,
+      });
       toast.error("Connect failed", message);
     }
   },
   disconnect: async () => {
+    const serial = get().current?.serial ?? null;
+    set({ pendingSerial: serial, pendingAction: "disconnect" });
     try {
       await ipc.disconnectDevice();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error("Disconnect failed", message);
     } finally {
-      set({ current: null });
+      set({ current: null, pendingSerial: null, pendingAction: null });
       useStreamStore.getState().reset();
     }
   },

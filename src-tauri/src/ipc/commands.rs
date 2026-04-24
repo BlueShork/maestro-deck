@@ -246,7 +246,28 @@ async fn dump_via_grpc(serial: &str, state: &AppState) -> AppResult<HierarchyTre
             *slot = Some(Arc::new(keeper));
         }
     }
-    hierarchy::grpc_client::dump_hierarchy().await
+
+    match hierarchy::grpc_client::dump_hierarchy().await {
+        Ok(tree) => Ok(tree),
+        Err(e @ AppError::StaleDriver(_)) => {
+            // Driver is a zombie (orphan studio from a previous session,
+            // or on-device instrumentation died after sleep/wake). Drop
+            // the keeper so the next call respawns cleanly via the
+            // orphan-kill path in `StudioKeeper::start`.
+            if let Some(existing) = state.studio.lock().await.take() {
+                existing.stop().await;
+            }
+            Err(e)
+        }
+        Err(e) => {
+            // Transport errors, timeouts, parse errors: the keeper may
+            // just be warming up after spawn. Leave it alive — the CLI
+            // fallback in the caller will land the current request, and
+            // the next inspect call reuses the warmed-up keeper at
+            // ~300 ms instead of paying the full respawn cost again.
+            Err(e)
+        }
+    }
 }
 
 /// Share the freshly-dumped tree across the cached state, spatial
@@ -304,6 +325,44 @@ pub async fn send_input(
         return Err(AppError::NoDevice);
     }
     input::send(&event, state.inner(), screen_w, screen_h).await
+}
+
+#[tauri::command]
+pub async fn set_dark_mode(enabled: bool, state: State<'_, AppState>) -> AppResult<()> {
+    let serial = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.serial.clone())
+        .ok_or(AppError::NoDevice)?;
+    // `cmd uimode night yes|no` forces dark/light on Android 10+. It's a
+    // per-session override (doesn't touch Settings) — exactly what a
+    // test-harness needs. `spawn_blocking` because `exec_shell` shells
+    // out to adb synchronously.
+    let arg = if enabled { "yes" } else { "no" };
+    let cmd = format!("cmd uimode night {arg}");
+    tokio::task::spawn_blocking(move || adb::exec_shell(&serial, &cmd))
+        .await
+        .map_err(|e| AppError::Other(format!("set_dark_mode task panicked: {e}")))??;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_dark_mode(state: State<'_, AppState>) -> AppResult<bool> {
+    let serial = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.serial.clone())
+        .ok_or(AppError::NoDevice)?;
+    let out = tokio::task::spawn_blocking(move || adb::exec_shell(&serial, "cmd uimode night"))
+        .await
+        .map_err(|e| AppError::Other(format!("get_dark_mode task panicked: {e}")))??;
+    // Typical output: "Night mode: yes" / "Night mode: no". `yes` is
+    // returned whether the user forced it or auto-night resolved to
+    // dark, which matches what the UI actually shows — so treat any
+    // "yes" as "currently dark".
+    Ok(out.to_lowercase().contains("yes"))
 }
 
 #[tauri::command]

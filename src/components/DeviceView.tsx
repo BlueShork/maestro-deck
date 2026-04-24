@@ -1,5 +1,5 @@
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
-import { Camera, Smartphone } from "lucide-react";
+import { Camera, Moon, Smartphone, Sun } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -380,6 +380,52 @@ export function DeviceView() {
     if (!inspectEnabled) setActionMenu(null);
   }, [inspectEnabled]);
 
+  // Device-side dark-mode toggle. We mirror the device state locally
+  // so the icon can flip the moment the user clicks, without waiting
+  // for an adb round-trip. `null` means "unknown" — the button renders
+  // a neutral moon until the first getDarkMode call resolves.
+  const connectedSerial = useDeviceStore((s) => s.current?.serial ?? null);
+  const [darkMode, setDarkMode] = useState<boolean | null>(null);
+  const [togglingDark, setTogglingDark] = useState(false);
+  useEffect(() => {
+    if (!connectedSerial) {
+      setDarkMode(null);
+      return;
+    }
+    let cancelled = false;
+    ipc
+      .getDarkMode()
+      .then((v) => {
+        if (!cancelled) setDarkMode(v);
+      })
+      .catch(() => {
+        // Older Android (< 10) / MIUI / etc. may not expose `cmd uimode`.
+        // Swallow — the button still works, we just start from `off`.
+        if (!cancelled) setDarkMode(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connectedSerial]);
+  const toggleDarkMode = useCallback(async () => {
+    if (togglingDark) return;
+    const next = !(darkMode ?? false);
+    setTogglingDark(true);
+    // Optimistic flip — snap back on failure.
+    setDarkMode(next);
+    try {
+      await ipc.setDarkMode(next);
+    } catch (err) {
+      setDarkMode(!next);
+      toast.error(
+        "Dark mode toggle failed",
+        err instanceof Error ? err.message : String(err),
+      );
+    } finally {
+      setTogglingDark(false);
+    }
+  }, [darkMode, togglingDark]);
+
   const [capturing, setCapturing] = useState(false);
   const takeScreenshot = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -552,16 +598,33 @@ export function DeviceView() {
       ) : null}
 
       {hasFrame ? (
-        <button
-          type="button"
-          onClick={() => void takeScreenshot()}
-          disabled={capturing}
-          title="Screenshot · ⌘⇧S"
-          aria-label="Take screenshot"
-          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Camera className="h-4 w-4" />
-        </button>
+        <div className="absolute right-3 top-3 z-10 flex gap-2">
+          <button
+            type="button"
+            onClick={() => void toggleDarkMode()}
+            disabled={togglingDark || !connectedSerial}
+            title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
+            aria-label="Toggle device dark mode"
+            aria-pressed={darkMode ?? false}
+            className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {darkMode ? (
+              <Moon className="h-4 w-4" />
+            ) : (
+              <Sun className="h-4 w-4" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => void takeScreenshot()}
+            disabled={capturing}
+            title="Screenshot · ⌘⇧S"
+            aria-label="Take screenshot"
+            className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Camera className="h-4 w-4" />
+          </button>
+        </div>
       ) : null}
 
       {actionMenu ? (

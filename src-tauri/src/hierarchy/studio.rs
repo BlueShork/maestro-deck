@@ -47,6 +47,32 @@ impl StudioKeeper {
     /// as a TCP connection to the port succeeds — the caller can
     /// immediately issue RPCs against it.
     pub async fn start(serial: &str) -> AppResult<Self> {
+        // If a previous maestro-deck session was SIGKILLed or crashed,
+        // `kill_on_drop` never fires and the studio child outlives the
+        // app. On next launch, `await_ready` would connect instantly to
+        // that orphan's port 7001, but its on-device driver state is
+        // stale and returns an empty `<hierarchy/>` blob — the user
+        // sees "Empty hierarchy" forever. Detect and cull the orphan
+        // before we spawn so the new studio actually binds the port.
+        if is_port_listening(DRIVER_PORT).await {
+            warn!(
+                port = DRIVER_PORT,
+                "driver port already in use — killing orphan maestro studio"
+            );
+            kill_orphan_studios().await;
+            // Also nuke the on-device driver: after an abnormal shutdown
+            // (SIGKILL / crash / laptop sleep), the Android-side
+            // instrumentation can be in a zombie state where a fresh
+            // studio will happily reattach but subsequent RPCs return
+            // empty (`bytes=84, has_root=false`). force-stop guarantees
+            // the on-device side starts cold.
+            force_stop_driver(serial).await;
+            remove_adb_forward(serial).await;
+            // Give the kernel a beat to release TIME_WAIT on the socket
+            // before the fresh studio tries to bind.
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+
         let bin = super::maestro_bin();
         info!(
             serial,
@@ -128,14 +154,28 @@ impl StudioKeeper {
         }
     }
 
-    /// Graceful shutdown: kill the child and reap it. Safe to call
-    /// multiple times (idempotent).
+    /// Graceful shutdown: kill the child, reap it, and tear down the
+    /// adb forward the studio set up. Safe to call multiple times
+    /// (idempotent).
+    ///
+    /// Removing the adb forward is critical: SIGKILL'ing the studio
+    /// leaves adb's own `tcp:7001 → device:7001` forward in place, so
+    /// `localhost:7001` still accepts TCP connections even though
+    /// there's no driver on the device side. Any subsequent code that
+    /// uses "is port 7001 open?" as a driver-readiness signal (our
+    /// `await_ready`, the maestro CLI's own pre-flight check) would
+    /// then race against a dead driver and fail mysteriously. Removing
+    /// the forward here guarantees the next path — whether that's a
+    /// CLI fallback or a fresh `StudioKeeper::start` — starts from a
+    /// genuinely empty state.
     pub async fn stop(&self) {
         if let Some(mut child) = self.child.lock().await.take() {
             debug!(serial = %self.serial, "stopping maestro studio");
             let _ = child.kill().await;
             let _ = child.wait().await;
         }
+        remove_adb_forward(&self.serial).await;
+        force_stop_driver(&self.serial).await;
     }
 
     pub fn serial(&self) -> &str {
@@ -146,3 +186,76 @@ impl StudioKeeper {
 // Tokio's `Child` was spawned with `kill_on_drop(true)`, so when a
 // `StudioKeeper` is dropped the runtime will SIGKILL the subprocess
 // automatically — no explicit Drop impl needed here.
+
+/// Best-effort check whether something is already listening on `port`
+/// on localhost. A successful connect means yes; any error means we
+/// should try to spawn (and let the bind surface the real error).
+async fn is_port_listening(port: u16) -> bool {
+    TcpStream::connect(("127.0.0.1", port)).await.is_ok()
+}
+
+/// Package name of the on-device Maestro driver APK. Maestro installs
+/// this package + a `.test` instrumentation to host the gRPC server.
+/// Hardcoded because maestro hardcodes it too (see `maestro-android/…`
+/// in mobile-dev-inc/maestro).
+const DRIVER_PACKAGE: &str = "dev.mobile.maestro";
+
+/// Nuke any in-memory state the on-device driver is holding. Kills both
+/// the driver package and its test instrumentation, so the next spawn
+/// (studio or `maestro hierarchy` CLI) re-installs from scratch instead
+/// of reattaching to a zombie instrumentation left over after sleep /
+/// USB disconnect / crash. `force-stop` is idempotent and cheap (~100 ms)
+/// so we call it unconditionally on stop.
+async fn force_stop_driver(serial: &str) {
+    let bin = std::env::var("ADB_BIN").unwrap_or_else(|_| "adb".to_string());
+    let test_pkg = format!("{DRIVER_PACKAGE}.test");
+    for pkg in [DRIVER_PACKAGE, test_pkg.as_str()] {
+        let _ = Command::new(&bin)
+            .args(["-s", serial, "shell", "am", "force-stop", pkg])
+            .output()
+            .await;
+    }
+}
+
+/// Remove the host-side adb forward that `maestro studio` set up.
+/// Idempotent — if no forward exists `adb forward --remove` returns
+/// non-zero and we silently ignore it. We use `ADB_BIN` (matching the
+/// `device::adb` module) so a user with a non-default adb path still
+/// works.
+async fn remove_adb_forward(serial: &str) {
+    let bin = std::env::var("ADB_BIN").unwrap_or_else(|_| "adb".to_string());
+    let port_spec = format!("tcp:{DRIVER_PORT}");
+    let _ = Command::new(&bin)
+        .args(["-s", serial, "forward", "--remove", &port_spec])
+        .output()
+        .await;
+}
+
+/// Kill any `maestro studio` process lingering from a previous session.
+/// Matches against the full command line via `pgrep -f` so it catches
+/// both the CLI wrapper and the backing JVM (its classpath includes
+/// `maestro.cli.AppKt`). Unix-only for now — Tauri targets macOS/Linux
+/// first, and the app is not yet shipped on Windows.
+async fn kill_orphan_studios() {
+    #[cfg(unix)]
+    {
+        let Ok(output) = Command::new("pgrep")
+            .args(["-f", "maestro.*studio"])
+            .output()
+            .await
+        else {
+            return;
+        };
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let Ok(pid) = line.trim().parse::<u32>() else {
+                continue;
+            };
+            warn!(pid, "SIGKILL orphan maestro studio");
+            let _ = Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output()
+                .await;
+        }
+    }
+}
