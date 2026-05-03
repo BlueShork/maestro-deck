@@ -23,6 +23,9 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <a href="package.json"><img alt="Version" src="https://img.shields.io/badge/version-0.1.0--dev-orange.svg"></a>
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
+</p>
+
+<p align="center">
   <a href="https://sonarcloud.io/summary/new_code?id=BlueShork_maestro-deck"><img alt="SonarQube Cloud" src="https://sonarcloud.io/images/project_badges/sonarcloud-light.svg"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=BlueShork_maestro-deck"><img alt="Quality gate" src="https://sonarcloud.io/api/project_badges/quality_gate?project=BlueShork_maestro-deck&token=ad460cd2309b7ca91f43029430daf2d31295d3d1"></a>
 </p>
