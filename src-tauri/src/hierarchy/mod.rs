@@ -243,17 +243,13 @@ pub fn parse_xml(xml: &str) -> AppResult<HierarchyTree> {
             .map_err(|e| AppError::HierarchyParse(e.to_string()))?
         {
             Event::Eof => break,
-            Event::Start(e) => {
-                if e.name().as_ref() == b"node" {
-                    let node = build_node(&e, &mut next_index, &reader)?;
-                    stack.push(node);
-                }
+            Event::Start(e) if e.name().as_ref() == b"node" => {
+                let node = build_node(&e, &mut next_index, &reader)?;
+                stack.push(node);
             }
-            Event::Empty(e) => {
-                if e.name().as_ref() == b"node" {
-                    let node = build_node(&e, &mut next_index, &reader)?;
-                    push_complete(node, &mut stack, &mut top_level);
-                }
+            Event::Empty(e) if e.name().as_ref() == b"node" => {
+                let node = build_node(&e, &mut next_index, &reader)?;
+                push_complete(node, &mut stack, &mut top_level);
             }
             Event::End(e) if e.name().as_ref() == b"node" => {
                 if let Some(node) = stack.pop() {
