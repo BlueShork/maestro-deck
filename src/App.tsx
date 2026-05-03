@@ -49,7 +49,6 @@ export default function App() {
   useEffect(() => {
     const last = useWorkspaceStore.getState().lastOpenFile;
     if (last) void openFlowFile(last, { silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

@@ -73,7 +73,6 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
     ipc
       .enterInspectMode(fastMode())
       .then((tree) => {
-        // eslint-disable-next-line no-console
         console.log(`[inspect] background dump: ${(performance.now() - t0).toFixed(0)} ms`);
         if (!get().enabled) return;
         treeUpdatedAt = Date.now();
@@ -86,7 +85,6 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
         });
       })
       .catch(() => {
-        // eslint-disable-next-line no-console
         console.log(
           `[inspect] background dump failed after ${(performance.now() - t0).toFixed(0)} ms`,
         );
