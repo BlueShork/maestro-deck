@@ -8,7 +8,12 @@ updates:
       day: monday
       time: "06:00"
       timezone: Europe/Paris
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-and-patch:
+        update-types:
+          - minor
+          - patch
     labels:
       - dependencies
       - rust
@@ -24,7 +29,12 @@ updates:
       day: monday
       time: "06:00"
       timezone: Europe/Paris
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - minor
+          - patch
     labels:
       - dependencies
       - javascript
@@ -41,6 +51,11 @@ updates:
       time: "06:00"
       timezone: Europe/Paris
     open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch
     labels:
       - dependencies
       - github-actions

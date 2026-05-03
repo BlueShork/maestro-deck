@@ -149,7 +149,7 @@ pub fn spawn_server(serial: &str, scid: &str) -> AppResult<Child> {
     let opts = ServerOptions::default();
     let cmd = build_server_argv(&opts, scid).join(" ");
     info!(serial, scid, "spawning scrcpy server");
-    let mut child = Command::new("adb")
+    let mut child = Command::new(crate::device::adb::adb_bin())
         .args(["-s", serial, "shell", &cmd])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

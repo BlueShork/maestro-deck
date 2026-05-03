@@ -207,7 +207,7 @@ const DRIVER_PACKAGE: &str = "dev.mobile.maestro";
 /// USB disconnect / crash. `force-stop` is idempotent and cheap (~100 ms)
 /// so we call it unconditionally on stop.
 async fn force_stop_driver(serial: &str) {
-    let bin = std::env::var("ADB_BIN").unwrap_or_else(|_| "adb".to_string());
+    let bin = crate::device::adb::adb_bin();
     let test_pkg = format!("{DRIVER_PACKAGE}.test");
     for pkg in [DRIVER_PACKAGE, test_pkg.as_str()] {
         let _ = Command::new(&bin)
@@ -223,7 +223,7 @@ async fn force_stop_driver(serial: &str) {
 /// `device::adb` module) so a user with a non-default adb path still
 /// works.
 async fn remove_adb_forward(serial: &str) {
-    let bin = std::env::var("ADB_BIN").unwrap_or_else(|_| "adb".to_string());
+    let bin = crate::device::adb::adb_bin();
     let port_spec = format!("tcp:{DRIVER_PORT}");
     let _ = Command::new(&bin)
         .args(["-s", serial, "forward", "--remove", &port_spec])
