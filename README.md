@@ -1,4 +1,4 @@
-# Maestro Deck — open-source visual IDE for Maestro mobile tests (Android, iOS soon)
+<h1 align="center">Maestro Deck — open-source visual IDE for Maestro mobile tests</h1>
 
 <p align="center">
   <picture>
