@@ -21,7 +21,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <a href="package.json"><img alt="Version" src="https://img.shields.io/badge/version-0.1.0--dev-orange.svg"></a>
+  <a href="package.json"><img alt="Version" src="https://img.shields.io/github/package-json/v/blueshork/maestro-deck?color=orange"></a>
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
 </p>
 
@@ -32,7 +32,7 @@
 
 <!-- TODO: replace with a real demo GIF before going public (single screencast: connect device → inspect element → write flow → run). -->
 <p align="center">
-  <em>Demo GIF coming soon.</em>
+  <img src="docs/images/screenshot-app.png" alt="Maestro Deck screenshot" width="900">
 </p>
 
 ---
