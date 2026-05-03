@@ -17,7 +17,11 @@ pub fn parse_proc_stat(s: &str) -> Option<ProcStat> {
     let utime = parts.get(11)?.parse().ok()?;
     let stime = parts.get(12)?.parse().ok()?;
     let starttime = parts.get(19)?.parse().ok()?;
-    Some(ProcStat { utime_ticks: utime, stime_ticks: stime, starttime_ticks: starttime })
+    Some(ProcStat {
+        utime_ticks: utime,
+        stime_ticks: stime,
+        starttime_ticks: starttime,
+    })
 }
 
 #[cfg(test)]
@@ -85,12 +89,7 @@ mod tests_status {
 /// interval. `user_hz` is typically 100 on Android. Result is clamped to a
 /// lower bound of 0 and returned as a percentage of a single core
 /// (100% = one core saturated; 200% = two cores).
-pub fn cpu_percent(
-    prev: ProcStat,
-    curr: ProcStat,
-    elapsed_secs: f32,
-    user_hz: u32,
-) -> f32 {
+pub fn cpu_percent(prev: ProcStat, curr: ProcStat, elapsed_secs: f32, user_hz: u32) -> f32 {
     if elapsed_secs <= 0.0 || user_hz == 0 {
         return 0.0;
     }
@@ -109,7 +108,11 @@ mod tests_cpu {
     use super::*;
 
     fn s(u: u64, st: u64) -> ProcStat {
-        ProcStat { utime_ticks: u, stime_ticks: st, starttime_ticks: 0 }
+        ProcStat {
+            utime_ticks: u,
+            stime_ticks: st,
+            starttime_ticks: 0,
+        }
     }
 
     #[test]
@@ -163,10 +166,7 @@ pub fn parse_foreground_package(dumpsys_window: &str) -> Option<String> {
             if let Some(slash) = tok.find('/') {
                 let candidate = &tok[..slash];
                 // Filter out brace-prefixed junk like "Window{xxx"
-                if candidate.contains('.')
-                    && !candidate.contains('{')
-                    && !candidate.contains('=')
-                {
+                if candidate.contains('.') && !candidate.contains('{') && !candidate.contains('=') {
                     return Some(candidate.to_string());
                 }
             }
@@ -349,7 +349,8 @@ idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packe
 
     #[test]
     fn none_when_no_match() {
-        let stats = "idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packets\n";
+        let stats =
+            "idx iface acct_tag_hex uid_tag_int cnt_set rx_bytes rx_packets tx_bytes tx_packets\n";
         assert_eq!(parse_xt_qtaguid_for_uid(stats, 42), None);
     }
 }
@@ -443,10 +444,7 @@ Active interfaces:
 
     #[test]
     fn none_when_uid_missing() {
-        assert_eq!(
-            parse_netstats_detail_for_uid("nothing here", 42),
-            None
-        );
+        assert_eq!(parse_netstats_detail_for_uid("nothing here", 42), None);
     }
 
     #[test]

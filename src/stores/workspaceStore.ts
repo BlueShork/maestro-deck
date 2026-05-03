@@ -48,8 +48,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       setHasConfig: (hasConfig) => set({ hasConfig }),
       toggleExpanded: (path) =>
         set((s) => ({ expanded: { ...s.expanded, [path]: !s.expanded[path] } })),
-      setExpanded: (path, value) =>
-        set((s) => ({ expanded: { ...s.expanded, [path]: value } })),
+      setExpanded: (path, value) => set((s) => ({ expanded: { ...s.expanded, [path]: value } })),
       setLastOpenFile: (lastOpenFile) => set({ lastOpenFile }),
     }),
     {

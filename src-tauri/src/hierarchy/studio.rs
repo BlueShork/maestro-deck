@@ -132,8 +132,7 @@ impl StudioKeeper {
                 if let Ok(Some(status)) = child.try_wait() {
                     warn!(
                         ?status,
-                        "maestro studio exited before binding {}",
-                        DRIVER_PORT
+                        "maestro studio exited before binding {}", DRIVER_PORT
                     );
                     return Err(AppError::RunnerFailed(format!(
                         "maestro studio exited before port {DRIVER_PORT} was ready (status: {status})"
@@ -144,8 +143,7 @@ impl StudioKeeper {
             if TcpStream::connect(addr).await.is_ok() {
                 info!(
                     elapsed_ms = start.elapsed().as_millis(),
-                    "maestro studio ready — driver listening on {}",
-                    DRIVER_PORT
+                    "maestro studio ready — driver listening on {}", DRIVER_PORT
                 );
                 return Ok(());
             }

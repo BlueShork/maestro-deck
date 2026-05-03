@@ -80,8 +80,7 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         color: c.fg,
         backgroundColor: c.bg,
         fontSize: "13px",
-        fontFamily:
-          '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace',
+        fontFamily: '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace',
         fontVariantLigatures: "common-ligatures contextual",
       },
       ".cm-scroller": {
@@ -102,11 +101,10 @@ function buildTheme(c: Palette, dark: boolean): Extension {
       "&.cm-focused .cm-cursor": {
         animation: "cm-caret-pulse 1.1s ease-in-out infinite",
       },
-      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, ::selection":
-        {
-          background: c.selection,
-          borderRadius: "3px",
-        },
+      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, ::selection": {
+        background: c.selection,
+        borderRadius: "3px",
+      },
       ".cm-selectionMatch": {
         background: c.selectionMatch,
         borderRadius: "3px",
@@ -138,9 +136,7 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         color: c.fg,
         border: `1px solid ${c.border}`,
         borderRadius: "8px",
-        boxShadow: dark
-          ? "0 8px 24px -8px rgba(0,0,0,0.4)"
-          : "0 8px 24px -8px rgba(0,0,0,0.15)",
+        boxShadow: dark ? "0 8px 24px -8px rgba(0,0,0,0.4)" : "0 8px 24px -8px rgba(0,0,0,0.15)",
         overflow: "hidden",
       },
       ".cm-tooltip.cm-tooltip-autocomplete > ul": {
@@ -183,10 +179,7 @@ function buildHighlight(c: Palette): Extension {
   );
 }
 
-export const softProDarkExtensions: Extension[] = [
-  buildTheme(DARK, true),
-  buildHighlight(DARK),
-];
+export const softProDarkExtensions: Extension[] = [buildTheme(DARK, true), buildHighlight(DARK)];
 
 export const softProLightExtensions: Extension[] = [
   buildTheme(LIGHT, false),

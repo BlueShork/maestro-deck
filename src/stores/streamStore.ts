@@ -36,12 +36,7 @@ export const useStreamStore = create<StreamState>((set) => ({
       const fps = fpsCanUpdate ? frameTimes.length : s.fps;
       // Skip the state update entirely when nothing visible to subscribers
       // changed — Zustand still notifies on identical state otherwise.
-      if (
-        s.width === width &&
-        s.height === height &&
-        s.fps === fps &&
-        s.hasFrame
-      ) {
+      if (s.width === width && s.height === height && s.fps === fps && s.hasFrame) {
         return s;
       }
       if (fpsCanUpdate) lastFpsUpdate = now;

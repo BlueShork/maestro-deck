@@ -133,10 +133,7 @@ pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
         );
         last_err = Some(stderr.clone());
         if attempt + 1 < HIERARCHY_RETRIES && is_driver_warmup_error(&stderr) {
-            debug!(
-                attempt,
-                "driver not ready, retrying in {:?}", RETRY_DELAY
-            );
+            debug!(attempt, "driver not ready, retrying in {:?}", RETRY_DELAY);
             std::thread::sleep(RETRY_DELAY);
             continue;
         }

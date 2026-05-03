@@ -78,9 +78,7 @@ impl SpatialIndex {
                 });
             }
         }
-        best_targetable
-            .or(best_any)
-            .map(|c| c.node.clone())
+        best_targetable.or(best_any).map(|c| c.node.clone())
     }
 }
 

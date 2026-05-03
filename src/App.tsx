@@ -102,9 +102,7 @@ export default function App() {
         const wasStopped = useRunStore.getState().stopRequested;
         appendLog(
           "system",
-          wasStopped
-            ? "[runner stopped by user]"
-            : `[runner exited with code ${code}]`,
+          wasStopped ? "[runner stopped by user]" : `[runner exited with code ${code}]`,
         );
         setStopped(code);
         if (wasStopped) toast.success("Flow stopped");
@@ -124,9 +122,7 @@ export default function App() {
         }),
       ),
       events.onMetricsTargetChanged((p) => onTargetChanged(p.to)),
-      events.onMetricsStopped((p) =>
-        setStoppedReason(p.reason === "user" ? null : p.reason),
-      ),
+      events.onMetricsStopped((p) => setStoppedReason(p.reason === "user" ? null : p.reason)),
     ]).then((fns) => {
       if (cancelled) fns.forEach((fn) => fn());
       else cleanups = fns;
@@ -148,12 +144,9 @@ export default function App() {
   const WORKSPACE_SIZE = 15;
   const INSPECTOR_SIZE = 18;
   const mainSize =
-    100 -
-    (panels.workspace ? WORKSPACE_SIZE : 0) -
-    (panels.inspector ? INSPECTOR_SIZE : 0);
+    100 - (panels.workspace ? WORKSPACE_SIZE : 0) - (panels.inspector ? INSPECTOR_SIZE : 0);
 
-  const bottomVisible =
-    panels.console || (perfEnabled && panelOpen && panels.metrics);
+  const bottomVisible = panels.console || (perfEnabled && panelOpen && panels.metrics);
   const mainTopSize = bottomVisible ? 65 : 100;
   const mainBottomSize = 100 - mainTopSize;
   const deviceConnected = useDeviceStore((s) => Boolean(s.current));
@@ -227,10 +220,7 @@ export default function App() {
       {
         key: "s",
         mod: true,
-        handler: () =>
-          window.dispatchEvent(
-            new CustomEvent("flow:command", { detail: "save" }),
-          ),
+        handler: () => window.dispatchEvent(new CustomEvent("flow:command", { detail: "save" })),
         allowInInput: true,
       },
       { key: inspectKey, handler: () => void toggleInspect() },
@@ -248,10 +238,7 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <div className="min-h-0 flex-1">
-        <PanelGroup
-          direction="horizontal"
-          autoSaveId="maestro-deck.layout.outer"
-        >
+        <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.outer">
           {panels.workspace ? (
             <>
               <Panel
@@ -290,20 +277,9 @@ export default function App() {
           ) : null}
 
           <Panel id="main" order={3} defaultSize={mainSize} minSize={30}>
-            <PanelGroup
-              direction="vertical"
-              autoSaveId="maestro-deck.layout.main"
-            >
-              <Panel
-                id="main-top"
-                order={1}
-                defaultSize={mainTopSize}
-                minSize={20}
-              >
-                <PanelGroup
-                  direction="horizontal"
-                  autoSaveId="maestro-deck.layout.top"
-                >
+            <PanelGroup direction="vertical" autoSaveId="maestro-deck.layout.main">
+              <Panel id="main-top" order={1} defaultSize={mainTopSize} minSize={20}>
+                <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.top">
                   {streamEnabled && panels.device ? (
                     <>
                       <Panel
@@ -324,9 +300,7 @@ export default function App() {
                           <DeviceView />
                         </PanelShell>
                       </Panel>
-                      {panels.editor ? (
-                        <PanelResizeHandle className={RESIZE_HANDLE_H} />
-                      ) : null}
+                      {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
                     </>
                   ) : null}
 
@@ -337,9 +311,7 @@ export default function App() {
                       defaultSize={streamEnabled && panels.device ? 45 : 100}
                       minSize={20}
                       className={
-                        streamEnabled && panels.device
-                          ? "border-l border-border"
-                          : undefined
+                        streamEnabled && panels.device ? "border-l border-border" : undefined
                       }
                     >
                       <PanelShell id="editor">
@@ -353,32 +325,17 @@ export default function App() {
               {panels.console || (perfEnabled && panelOpen && panels.metrics) ? (
                 <>
                   <PanelResizeHandle className={RESIZE_HANDLE_V} />
-                  <Panel
-                    id="main-bottom"
-                    order={2}
-                    defaultSize={mainBottomSize}
-                    minSize={10}
-                  >
-                    <PanelGroup
-                      direction="horizontal"
-                      autoSaveId="maestro-deck.layout.bottom"
-                    >
+                  <Panel id="main-bottom" order={2} defaultSize={mainBottomSize} minSize={10}>
+                    <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
                       {panels.console ? (
                         <Panel
                           id="console"
                           order={1}
-                          defaultSize={
-                            perfEnabled && panelOpen && panels.metrics
-                              ? 70
-                              : 100
-                          }
+                          defaultSize={perfEnabled && panelOpen && panels.metrics ? 70 : 100}
                           minSize={20}
                         >
                           <PanelShell id="console">
-                            <RunConsole
-                              onRun={() => void onRun()}
-                              onStop={() => void onStop()}
-                            />
+                            <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
                           </PanelShell>
                         </Panel>
                       ) : null}

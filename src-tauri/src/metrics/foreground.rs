@@ -33,7 +33,11 @@ pub fn resolve_uid(serial: &str, package: &str) -> AppResult<Option<u32>> {
 pub fn resolve_uid_from_proc(serial: &str, pid: u32) -> AppResult<Option<u32>> {
     let cmd = format!("stat -c %u /proc/{pid}");
     let out = adb::exec_shell(serial, &cmd)?;
-    Ok(out.trim().split_whitespace().next().and_then(|s| s.parse().ok()))
+    Ok(out
+        .trim()
+        .split_whitespace()
+        .next()
+        .and_then(|s| s.parse().ok()))
 }
 
 /// Detect foreground, then resolve its PID + UID. Returns `None` if no
@@ -63,5 +67,9 @@ pub fn resolve_target(serial: &str) -> AppResult<Option<Target>> {
             }
         },
     };
-    Ok(Some(Target { package: pkg, pid, uid }))
+    Ok(Some(Target {
+        package: pkg,
+        pid,
+        uid,
+    }))
 }

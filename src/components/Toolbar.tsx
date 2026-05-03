@@ -20,12 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
 import { Separator } from "@/components/ui/Separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
@@ -112,12 +107,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
           {running ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={onStop}
-                  className="gap-1.5"
-                >
+                <Button size="sm" variant="destructive" onClick={onStop} className="gap-1.5">
                   <Square className="h-3.5 w-3.5" fill="currentColor" />
                   Stop
                 </Button>
@@ -128,12 +118,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    onClick={onRun}
-                    className={cn("gap-1.5")}
-                  >
+                  <Button size="sm" variant="default" onClick={onRun} className={cn("gap-1.5")}>
                     <Play className="h-3.5 w-3.5" fill="currentColor" />
                     Run
                   </Button>
@@ -154,9 +139,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {folderPath
-                    ? "Run every flow in the workspace"
-                    : "Open a folder to enable"}
+                  {folderPath ? "Run every flow in the workspace" : "Open a folder to enable"}
                 </TooltipContent>
               </Tooltip>
             </>
@@ -189,19 +172,12 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
                     className="justify-between gap-6"
                   >
                     <span>{label}</span>
-                    <Check
-                      className={cn(
-                        "h-3.5 w-3.5",
-                        visible ? "opacity-100" : "opacity-0",
-                      )}
-                    />
+                    <Check className={cn("h-3.5 w-3.5", visible ? "opacity-100" : "opacity-0")} />
                   </DropdownMenuItem>
                 );
               })}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => showAllPanels()}>
-                Show all
-              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => showAllPanels()}>Show all</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 

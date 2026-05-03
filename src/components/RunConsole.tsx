@@ -8,13 +8,7 @@ import { useRunStore } from "@/stores/runStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 
-export function RunConsole({
-  onRun,
-  onStop,
-}: {
-  onRun: () => void;
-  onStop: () => void;
-}) {
+export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () => void }) {
   const running = useRunStore((s) => s.running);
   const exitCode = useRunStore((s) => s.exitCode);
   const logs = useRunStore((s) => s.logs);
@@ -72,12 +66,7 @@ export function RunConsole({
               Perf
             </Button>
           )}
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={clearLogs}
-            disabled={logs.length === 0}
-          >
+          <Button size="xs" variant="ghost" onClick={clearLogs} disabled={logs.length === 0}>
             <Eraser className="h-3 w-3" />
             Clear
           </Button>
@@ -99,8 +88,7 @@ export function RunConsole({
         ref={scrollRef}
         onScroll={(e) => {
           const el = e.currentTarget;
-          stickRef.current =
-            el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+          stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         }}
         className="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
       >

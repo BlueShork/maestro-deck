@@ -49,8 +49,7 @@ export function DeviceSelector() {
 
       {!loading && devices.length === 0 && !error ? (
         <div className="rounded border border-dashed border-border p-2 text-[11px] text-muted-foreground">
-          No devices found. Plug in an Android device with USB debugging
-          enabled.
+          No devices found. Plug in an Android device with USB debugging enabled.
         </div>
       ) : null}
 
@@ -64,9 +63,7 @@ export function DeviceSelector() {
             <li key={d.serial}>
               <button
                 type="button"
-                onClick={() =>
-                  active ? void disconnect() : void connect(d.serial)
-                }
+                onClick={() => (active ? void disconnect() : void connect(d.serial))}
                 // While *any* device action is in flight we block clicks
                 // so the user can't race multiple connects.
                 disabled={connecting || isPending}
@@ -76,18 +73,15 @@ export function DeviceSelector() {
                   // Pending state overrides connected state visually —
                   // the shimmer/amber tint tells the user something is
                   // happening so they don't assume the row is stuck.
-                  isConnecting &&
-                    "border-emerald-500/30 bg-emerald-500/5 animate-pulse",
-                  isDisconnecting &&
-                    "border-amber-500/40 bg-amber-500/5 animate-pulse",
+                  isConnecting && "border-emerald-500/30 bg-emerald-500/5 animate-pulse",
+                  isDisconnecting && "border-amber-500/40 bg-amber-500/5 animate-pulse",
                   !isPending && active
                     ? // Explicit green — primary is the app's theme blue
                       // and doesn't read as "connected" at a glance.
                       // Pulsing dot + tinted background + border gives
                       // the device card an unambiguous "live" look.
                       "border-emerald-500/50 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.15)]"
-                    : !isPending &&
-                        "border-transparent hover:border-border hover:bg-accent/40",
+                    : !isPending && "border-transparent hover:border-border hover:bg-accent/40",
                 )}
               >
                 <div className="relative shrink-0">
@@ -101,10 +95,7 @@ export function DeviceSelector() {
                     )}
                   />
                   {active && !isPending ? (
-                    <span
-                      aria-hidden
-                      className="absolute -right-0.5 -top-0.5 flex h-1.5 w-1.5"
-                    >
+                    <span aria-hidden className="absolute -right-0.5 -top-0.5 flex h-1.5 w-1.5">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     </span>
@@ -115,9 +106,7 @@ export function DeviceSelector() {
                     className={cn(
                       "truncate text-xs font-medium",
                       isDisconnecting && "text-amber-700 dark:text-amber-300",
-                      !isPending &&
-                        active &&
-                        "text-emerald-700 dark:text-emerald-300",
+                      !isPending && active && "text-emerald-700 dark:text-emerald-300",
                     )}
                   >
                     {d.model}

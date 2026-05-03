@@ -1,17 +1,5 @@
-import {
-  ChevronRight,
-  Eye,
-  EyeOff,
-  MousePointerClick,
-  ScrollText,
-} from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  type ComponentType,
-} from "react";
+import { ChevronRight, Eye, EyeOff, MousePointerClick, ScrollText } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, type ComponentType } from "react";
 
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
@@ -68,13 +56,7 @@ export interface InspectActionMenuProps {
  * A context menu floating at (x, y) in viewport coordinates. Closes on Escape,
  * outside click, or after an action is inserted.
  */
-export function InspectActionMenu({
-  x,
-  y,
-  node,
-  selector,
-  onClose,
-}: InspectActionMenuProps) {
+export function InspectActionMenu({ x, y, node, selector, onClose }: InspectActionMenuProps) {
   const appendAction = useFlowStore((s) => s.appendAction);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -117,10 +99,7 @@ export function InspectActionMenu({
         appendAction(text);
         toast.success("Inserted", text.trim());
       } catch (err) {
-        toast.error(
-          "Generation failed",
-          err instanceof Error ? err.message : String(err),
-        );
+        toast.error("Generation failed", err instanceof Error ? err.message : String(err));
       } finally {
         onClose();
       }
@@ -137,9 +116,7 @@ export function InspectActionMenu({
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="border-b border-border px-3 py-2">
-        <div className="truncate text-[11px] font-medium">
-          {nodeLabel(node)}
-        </div>
+        <div className="truncate text-[11px] font-medium">{nodeLabel(node)}</div>
         <div className="truncate font-mono text-[10px] text-muted-foreground">
           {selectorPreview(selector)}
         </div>
@@ -157,9 +134,7 @@ export function InspectActionMenu({
                 onClick={() => void insert(item.kind)}
                 className={cn(
                   "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
-                  disabled
-                    ? "cursor-not-allowed text-muted-foreground/50"
-                    : "hover:bg-accent",
+                  disabled ? "cursor-not-allowed text-muted-foreground/50" : "hover:bg-accent",
                 )}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

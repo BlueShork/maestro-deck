@@ -6,8 +6,8 @@ use std::time::Instant;
 use crate::device::adb;
 use crate::error::{AppError, AppResult};
 use crate::metrics::parsers::{
-    cpu_percent, parse_gfxinfo, parse_netstats_detail_for_uid, parse_proc_stat,
-    parse_vm_rss_mb, parse_xt_qtaguid_for_uid, NetBytes, ProcStat,
+    cpu_percent, parse_gfxinfo, parse_netstats_detail_for_uid, parse_proc_stat, parse_vm_rss_mb,
+    parse_xt_qtaguid_for_uid, NetBytes, ProcStat,
 };
 
 const ANDROID_USER_HZ: u32 = 100;
@@ -56,7 +56,11 @@ pub fn fetch_cpu_mem(
         None => 0.0,
     };
 
-    Ok(CpuMemSample { cpu_pct, mem_mb, stat_snapshot: stat })
+    Ok(CpuMemSample {
+        cpu_pct,
+        mem_mb,
+        stat_snapshot: stat,
+    })
 }
 
 pub fn fetch_net(
@@ -67,7 +71,10 @@ pub fn fetch_net(
     // Try xt_qtaguid first. Fall back to `dumpsys netstats detail` if the
     // file is unreadable (Android 12+) or if it is readable but contains no
     // rows for this UID (e.g. counters disabled).
-    let bytes_opt: Option<NetBytes> = match adb::exec_shell(serial, "cat /proc/net/xt_qtaguid/stats") {
+    let bytes_opt: Option<NetBytes> = match adb::exec_shell(
+        serial,
+        "cat /proc/net/xt_qtaguid/stats",
+    ) {
         Ok(stats) => {
             let parsed = parse_xt_qtaguid_for_uid(&stats, uid);
             if parsed.is_none() {
@@ -124,7 +131,11 @@ pub fn fetch_net(
         None => (0.0, 0.0),
     };
 
-    Ok(NetSample { rx_kbps, tx_kbps, bytes_snapshot: bytes })
+    Ok(NetSample {
+        rx_kbps,
+        tx_kbps,
+        bytes_snapshot: bytes,
+    })
 }
 
 pub fn fetch_gfx(serial: &str, package: &str) -> AppResult<Option<GfxSample>> {
@@ -160,6 +171,8 @@ mod tests {
 
     #[test]
     fn split_separator_returns_none_without_marker() {
-        assert!("some stat output with no separator".split_once("\n---\n").is_none());
+        assert!("some stat output with no separator"
+            .split_once("\n---\n")
+            .is_none());
     }
 }

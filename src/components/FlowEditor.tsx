@@ -6,12 +6,7 @@ import {
   type CompletionContext,
   type CompletionResult,
 } from "@codemirror/autocomplete";
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  indentWithTab,
-} from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import {
   bracketMatching,
   foldGutter,
@@ -21,12 +16,7 @@ import {
   StreamLanguage,
 } from "@codemirror/language";
 import { yaml } from "@codemirror/legacy-modes/mode/yaml";
-import {
-  Compartment,
-  EditorState,
-  StateEffect,
-  StateField,
-} from "@codemirror/state";
+import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
@@ -91,9 +81,7 @@ const activeLineField = StateField.define<DecorationSet>({
       if (e.is(setActiveLine)) {
         if (e.value === null || e.value < 1) return Decoration.none;
         const line = tr.state.doc.line(Math.min(e.value, tr.state.doc.lines));
-        return Decoration.set([
-          Decoration.line({ class: "cm-active-run-line" }).range(line.from),
-        ]);
+        return Decoration.set([Decoration.line({ class: "cm-active-run-line" }).range(line.from)]);
       }
     }
     return deco.map(tr.changes);
@@ -196,9 +184,7 @@ export function FlowEditor() {
     if (!view) return;
     const apply = () =>
       view.dispatch({
-        effects: themeCompartment.current.reconfigure(
-          themeExtensions(resolveTheme(themeMode)),
-        ),
+        effects: themeCompartment.current.reconfigure(themeExtensions(resolveTheme(themeMode))),
       });
     apply();
     if (themeMode !== "system") return;

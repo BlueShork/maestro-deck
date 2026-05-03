@@ -71,10 +71,7 @@ pub async fn connect_device(
 /// Bring up scrcpy for the currently connected device. Used by the settings
 /// toggle to enable mirroring without forcing a full reconnect.
 #[tauri::command]
-pub async fn start_stream(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> AppResult<()> {
+pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
     let serial = state
         .connected_device
         .read()

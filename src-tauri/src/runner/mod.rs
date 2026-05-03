@@ -120,9 +120,7 @@ pub async fn kill_runner(pid: u32) -> AppResult<()> {
             let _ = tx.send(());
             Ok(())
         }
-        None => Err(AppError::RunnerFailed(format!(
-            "no runner with PID {pid}"
-        ))),
+        None => Err(AppError::RunnerFailed(format!("no runner with PID {pid}"))),
     }
 }
 

@@ -74,9 +74,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       .enterInspectMode(fastMode())
       .then((tree) => {
         // eslint-disable-next-line no-console
-        console.log(
-          `[inspect] background dump: ${(performance.now() - t0).toFixed(0)} ms`,
-        );
+        console.log(`[inspect] background dump: ${(performance.now() - t0).toFixed(0)} ms`);
         if (!get().enabled) return;
         treeUpdatedAt = Date.now();
         set({
@@ -178,10 +176,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
     refreshIfStale: () => {
       if (!get().enabled) return;
       if (dumpInFlight || autoRefreshTimer) return;
-      if (
-        treeUpdatedAt !== null &&
-        Date.now() - treeUpdatedAt < STALE_TREE_MS
-      ) {
+      if (treeUpdatedAt !== null && Date.now() - treeUpdatedAt < STALE_TREE_MS) {
         return;
       }
       runBackgroundDump();
