@@ -80,6 +80,7 @@ printf '__JAVA_START__%s__JAVA_END__' "${JAVA_HOME:-}"
 #[cfg(not(target_os = "macos"))]
 pub fn enrich_from_login_shell() {}
 
+#[cfg(target_os = "macos")]
 fn between<'a>(haystack: &'a str, start: &str, end: &str) -> Option<&'a str> {
     let s = haystack.find(start)? + start.len();
     let e = haystack[s..].find(end)? + s;
