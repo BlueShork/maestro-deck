@@ -1,3 +1,5 @@
+# Maestro Deck — open-source visual IDE for Maestro mobile tests (Android, iOS soon)
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/logo-horizontal-white.svg">
@@ -7,13 +9,25 @@
 </p>
 
 <p align="center">
-  A simple, open-source desktop app to inspect your Android device and write <a href="https://maestro.mobile.dev">Maestro</a> tests visually.
+  Inspect your Android device, build <a href="https://maestro.mobile.dev">Maestro</a> flows visually, and run them — all locally, from one desktop window.
+</p>
+
+<p align="center">
+  <a href="https://maestrodeck.cloud">Website</a> ·
+  <a href="https://maestrodeck.cloud/docs">Docs</a> ·
+  <a href="https://github.com/blueshork/maestro-deck/releases">Download</a> ·
+  <a href="https://github.com/blueshork/maestro-deck/discussions">Discussions</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <a href="package.json"><img alt="Version" src="https://img.shields.io/badge/version-0.1.0--dev-orange.svg"></a>
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
+</p>
+
+<!-- TODO: replace with a real demo GIF before going public (single screencast: connect device → inspect element → write flow → run). -->
+<p align="center">
+  <em>Demo GIF coming soon.</em>
 </p>
 
 ---
@@ -27,6 +41,26 @@ Maestro Deck mirrors your Android phone on your desktop, lets you tap and type o
 - **Open source.** Apache 2.0.
 
 > Early development. v0.1 targets a single Android device over USB.
+
+---
+
+## Why Maestro Deck
+
+Maestro is the YAML mobile-testing framework. Maestro Deck is the desktop app that makes writing those flows feel like clicking through your app instead of guessing selectors.
+
+|  | Maestro Deck | Maestro Studio | Appium Inspector |
+|---|---|---|---|
+| Install | Single signed app (DMG/AppImage/MSI) | `maestro studio` (browser) | Java + Appium server setup |
+| Footprint | Native Tauri shell (~80 MB RAM idle, system webview) | Electron-based, ~400+ MB RAM | JVM + Chromium inspector |
+| Cost | Free, open source (Apache 2.0) | Free, closed source | Free, open source |
+| Live mirroring | ✅ scrcpy-grade, 60 fps | ⚠️ Periodic screenshots | ⚠️ Screenshot-based |
+| Smart selectors | ✅ id → text → desc → point | ✅ | ⚠️ Manual |
+| Built-in YAML editor | ✅ CodeMirror + Maestro syntax | ✅ Basic | ❌ |
+| One-click run with logs | ✅ | ❌ (separate CLI) | ❌ |
+| Telemetry / account | None | mobile.dev account flows | None |
+| Cloud execution | Out of scope (stays local) | Paid mobile.dev cloud | N/A |
+
+If you already use Maestro Studio: Deck is a native, local-first alternative with a tighter mirror-inspect-edit-run loop and no cloud coupling.
 
 ---
 
