@@ -255,11 +255,9 @@ pub fn parse_xml(xml: &str) -> AppResult<HierarchyTree> {
                     push_complete(node, &mut stack, &mut top_level);
                 }
             }
-            Event::End(e) => {
-                if e.name().as_ref() == b"node" {
-                    if let Some(node) = stack.pop() {
-                        push_complete(node, &mut stack, &mut top_level);
-                    }
+            Event::End(e) if e.name().as_ref() == b"node" => {
+                if let Some(node) = stack.pop() {
+                    push_complete(node, &mut stack, &mut top_level);
                 }
             }
             _ => {}
@@ -413,11 +411,9 @@ pub fn parse_bounds(s: &str) -> Option<Bounds> {
     for &b in bytes {
         match b {
             b'-' | b'0'..=b'9' => current.push(b as char),
-            b',' | b']' => {
-                if !current.is_empty() {
-                    nums.push(current.parse().ok()?);
-                    current.clear();
-                }
+            b',' | b']' if !current.is_empty() => {
+                nums.push(current.parse().ok()?);
+                current.clear();
             }
             _ => {}
         }

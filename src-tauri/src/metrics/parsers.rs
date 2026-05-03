@@ -281,7 +281,7 @@ mod tests_uid {
     }
 
     #[test]
-    fn falls_back_to_userId_when_no_appId() {
+    fn falls_back_to_user_id_when_no_app_id() {
         // Older Android: only userId= is present, and it's the app UID
         let input = "Packages:\n  \
                      Package [com.example.app] (abcdef):\n    \
@@ -448,7 +448,7 @@ Active interfaces:
     }
 
     #[test]
-    fn handles_same_line_rx_tx_with_rxBytes_format() {
+    fn handles_same_line_rx_tx_with_rx_bytes_format() {
         // Android 14/15 format: single-line entry with rxBytes/txBytes
         let dump = "\
 Active interfaces:

@@ -34,7 +34,6 @@ pub fn resolve_uid_from_proc(serial: &str, pid: u32) -> AppResult<Option<u32>> {
     let cmd = format!("stat -c %u /proc/{pid}");
     let out = adb::exec_shell(serial, &cmd)?;
     Ok(out
-        .trim()
         .split_whitespace()
         .next()
         .and_then(|s| s.parse().ok()))

@@ -1,7 +1,7 @@
 //! Keep a background `maestro studio` process alive so the on-device
 //! driver stays installed and its gRPC server stays bound to
-//! `localhost:7001`. Studio does the heavy lifting (install driver APK
-//! + start instrumentation + set up adb forward); we piggyback on it
+//! `localhost:7001`. Studio does the heavy lifting (install driver APK,
+//! start instrumentation, set up adb forward); we piggyback on it
 //! to avoid reimplementing that flow ourselves.
 //!
 //! Once `start()` returns, callers can connect a tonic client to
