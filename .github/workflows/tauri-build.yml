@@ -35,4 +35,13 @@ jobs:
         with: { node-version: 20, cache: pnpm }
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm tauri:build
+
+      # On PR: just verify it compiles (skip bundling + code-sign).
+      # On tag push: full bundle for release artifacts.
+      - name: Build (PR — no bundle)
+        if: github.event_name == 'pull_request'
+        run: pnpm exec tauri build --no-bundle
+
+      - name: Build (tag — full bundle)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: pnpm tauri:build
