@@ -1,0 +1,58 @@
+name: Maestro Deck - Quality verification
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  frontend-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with: 
+          version: 9
+      - uses: actions/setup-node@v6
+        with: 
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --fronzen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  frontend-build:
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with: { version: 9 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 20, cache: pnpm}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+  rust-quality:
+    runs-on: ubuntu-latest
+    steps: 
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with: 
+          workspaces: src-tauri
+
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo check --manifest-path src-tauri/Cargo.toml
+  sonarcloud:
+    runs-on: ubuntu-latest
+    needs: [frontend-quality, rust-quality]
+    steps:
+      - uses: actions/checkout@v4
+        with: 
+          fetch-depth: 0
+      - uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
