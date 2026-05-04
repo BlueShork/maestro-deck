@@ -1,4 +1,5 @@
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { listen } from "@tauri-apps/api/event";
 import { tempDir } from "@tauri-apps/api/path";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -29,7 +30,7 @@ import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
-import { toast } from "@/stores/toastStore";
+import { toast, useToastStore } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
@@ -148,6 +149,41 @@ export default function App() {
     onTargetChanged,
     setStoppedReason,
   ]);
+
+  useEffect(() => {
+    let toastId: string | null = null;
+    const unlistenRecovering = listen<{ device_id: string; action: string }>(
+      "driver-recovering",
+      () => {
+        // dismiss any prior recovery toast in case events arrive out of order
+        if (toastId) {
+          useToastStore.getState().dismiss(toastId);
+        }
+        toastId = useToastStore.getState().push({
+          title: "Recovering driver…",
+          description: "Maestro driver was unresponsive — restarting it.",
+          variant: "default",
+          persistent: true,
+        });
+      },
+    );
+    const unlistenRecovered = listen<{ device_id: string }>(
+      "driver-recovered",
+      () => {
+        if (toastId) {
+          useToastStore.getState().dismiss(toastId);
+          toastId = null;
+        }
+      },
+    );
+    return () => {
+      void unlistenRecovering.then((u) => u());
+      void unlistenRecovered.then((u) => u());
+      if (toastId) {
+        useToastStore.getState().dismiss(toastId);
+      }
+    };
+  }, []);
 
   const panelOpen = useMetricsStore((s) => s.panelOpen);
   const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
