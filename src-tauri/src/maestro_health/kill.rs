@@ -195,6 +195,61 @@ pub fn kill_maestro_processes(
     Ok(out)
 }
 
+/// Best-effort recovery: force-stop the driver and remove the standard
+/// port forward. Errors are logged but not returned — callers (the
+/// pre-flight wrapper) continue regardless because `maestro` will surface
+/// its own error if the device is genuinely unusable.
+pub fn recover_driver(device_id: &str) {
+    let bin = adb_bin();
+
+    // 1. force-stop the driver app. Hardcoded package name; never read
+    //    from external input.
+    match Command::new(&bin)
+        .args([
+            "-s",
+            device_id,
+            "shell",
+            "am",
+            "force-stop",
+            MAESTRO_DRIVER_PACKAGE,
+        ])
+        .output()
+    {
+        Ok(o) if o.status.success() => {
+            tracing::info!(device = %device_id, "force-stopped maestro driver");
+        }
+        Ok(o) => {
+            tracing::warn!(
+                device = %device_id,
+                stderr = %String::from_utf8_lossy(&o.stderr),
+                "force-stop failed during recovery"
+            );
+        }
+        Err(e) => {
+            tracing::warn!(device = %device_id, error = %e, "force-stop errored");
+        }
+    }
+
+    // 2. remove the standard port forward. Hardcoded port; never read
+    //    from external input.
+    let arg = format!("tcp:{}", MAESTRO_DRIVER_PORT);
+    match Command::new(&bin)
+        .args(["-s", device_id, "forward", "--remove", &arg])
+        .output()
+    {
+        Ok(o) if o.status.success() => {
+            tracing::info!(device = %device_id, port = MAESTRO_DRIVER_PORT, "removed port forward");
+        }
+        Ok(_) => {
+            // Often "listener not found" — benign if no forward existed.
+            tracing::debug!(device = %device_id, "forward --remove returned non-zero (likely no listener)");
+        }
+        Err(e) => {
+            tracing::warn!(device = %device_id, error = %e, "forward --remove errored");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
