@@ -147,4 +147,40 @@ describe("autosaveEngine", () => {
     expect(write).toHaveBeenCalledTimes(2);
     expect(write).toHaveBeenLastCalledWith("/tmp/flow.yaml", "c");
   });
+
+  it("notifyPathChanged cancels pending timer and clears disabled flag for the new path", async () => {
+    const flow: { content: string; filePath: string | null; dirty: boolean } = {
+      content: "a",
+      filePath: "/tmp/old.yaml",
+      dirty: true,
+    };
+    const write = vi
+      .fn<(path: string, content: string) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("EACCES"))
+      .mockResolvedValue(undefined);
+    const onError = vi.fn();
+    const engine = createAutosaveEngine({
+      write,
+      onError,
+      getFlow: () => flow,
+      getEnabled: () => true,
+      delayMs: 1000,
+    });
+
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(write).toHaveBeenCalledTimes(1);
+
+    // Switch to a new file. Pending timer (none here) cancelled, disabled cleared.
+    flow.filePath = "/tmp/new.yaml";
+    engine.notifyPathChanged(flow.filePath);
+
+    flow.content = "z";
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith("/tmp/new.yaml", "z");
+  });
 });
