@@ -184,6 +184,7 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
 #[tauri::command]
 pub async fn enter_inspect_mode(
     fast_mode: bool,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<HierarchyTree> {
     let serial = state
@@ -192,6 +193,21 @@ pub async fn enter_inspect_mode(
         .as_ref()
         .map(|d| d.serial.clone())
         .ok_or(AppError::NoDevice)?;
+
+    // Pre-flight: if the on-device driver isn't responding, force-stop
+    // it and remove the port forward so the next maestro call spawns a
+    // fresh driver instead of hanging for 120s on DEADLINE_EXCEEDED.
+    let app_for_preflight = app.clone();
+    let serial_for_preflight = serial.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::maestro_health::preflight_with_recovery(
+            &app_for_preflight,
+            &serial_for_preflight,
+            "inspect",
+        );
+    })
+    .await
+    .ok();
 
     // Fast path: reuse a long-lived `maestro studio` subprocess that
     // keeps the on-device driver installed and listening on port 7001,
@@ -364,7 +380,30 @@ pub async fn get_dark_mode(state: State<'_, AppState>) -> AppResult<bool> {
 }
 
 #[tauri::command]
-pub async fn run_flow(file_path: String, app: AppHandle) -> AppResult<u32> {
+pub async fn run_flow(
+    file_path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<u32> {
+    let serial = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.serial.clone())
+        .ok_or(AppError::NoDevice)?;
+
+    let app_for_preflight = app.clone();
+    let serial_for_preflight = serial.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::maestro_health::preflight_with_recovery(
+            &app_for_preflight,
+            &serial_for_preflight,
+            "run_flow",
+        );
+    })
+    .await
+    .ok();
+
     runner::spawn_runner(app, &file_path).await
 }
 
