@@ -49,6 +49,8 @@ export function createAutosaveEngine(deps: AutosaveEngineDeps): AutosaveEngine {
       timer = setTimeout(flush, deps.delayMs);
     },
     notifyDirtyCleared(path: string | null): void {
+      // While inFlight, our own write's saved() call drives dirty→false;
+      // ignoring it here ensures only *external* saves clear the disabled flag.
       if (path && !inFlight) disabled.delete(path);
     },
     notifyPathChanged(path: string | null): void {
