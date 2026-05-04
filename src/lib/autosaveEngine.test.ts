@@ -69,4 +69,38 @@ describe("autosaveEngine", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(write).not.toHaveBeenCalled();
   });
+
+  it("skips a fire while a previous write is in flight", async () => {
+    let resolveFirst: (() => void) | null = null;
+    const write = vi.fn(
+      (_path: string, _content: string) =>
+        new Promise<void>((resolve) => {
+          if (resolveFirst === null) {
+            resolveFirst = resolve;
+          } else {
+            resolve();
+          }
+        }),
+    );
+    const { deps } = makeDeps({ write });
+    const engine = createAutosaveEngine(deps);
+
+    // First save is now in-flight, never resolves.
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    // Second debounce while first is still pending — must skip.
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    // Resolve the first; a subsequent edit must save again.
+    resolveFirst?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(2);
+  });
 });
