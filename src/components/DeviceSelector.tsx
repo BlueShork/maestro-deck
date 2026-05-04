@@ -1,9 +1,14 @@
-import { Loader2, Plug, PlugZap, RefreshCw, Smartphone } from "lucide-react";
-import { useEffect } from "react";
+import { Loader2, Plug, PlugZap, RefreshCw, Smartphone, Stethoscope } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { HealthcheckModal } from "@/components/HealthcheckModal";
+import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
+import { toast } from "@/stores/toastStore";
+import type { HealthReport } from "@/types";
+import { isHealthReportClean } from "@/types";
 
 export function DeviceSelector() {
   const {
@@ -18,6 +23,25 @@ export function DeviceSelector() {
     connect,
     disconnect,
   } = useDeviceStore();
+
+  const [checkingSerial, setCheckingSerial] = useState<string | null>(null);
+  const [report, setReport] = useState<HealthReport | null>(null);
+
+  const onHealthcheck = async (serial: string) => {
+    setCheckingSerial(serial);
+    try {
+      const r = await ipc.checkDeviceHealth(serial);
+      if (isHealthReportClean(r)) {
+        toast.success("Device clean", "No Maestro residue detected.");
+      } else {
+        setReport(r);
+      }
+    } catch (err) {
+      toast.error("Healthcheck failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setCheckingSerial(null);
+    }
+  };
 
   useEffect(() => {
     void refresh();
@@ -128,23 +152,51 @@ export function DeviceSelector() {
                         : `${d.serial} · Android ${d.android_version}`}
                   </div>
                 </div>
-                {isPending ? (
-                  <Loader2
-                    className={cn(
-                      "h-3.5 w-3.5 animate-spin",
-                      isConnecting ? "text-emerald-500" : "text-amber-500",
-                    )}
-                  />
-                ) : active ? (
-                  <PlugZap className="h-3.5 w-3.5 text-emerald-500" />
-                ) : (
-                  <Plug className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                )}
+                <div className="flex items-center gap-1">
+                  {active && !isPending && (
+                    <span
+                      role="button"
+                      aria-label="Healthcheck device"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void onHealthcheck(d.serial);
+                      }}
+                      className="rounded p-0.5 hover:bg-emerald-500/20"
+                    >
+                      {checkingSerial === d.serial ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-500" />
+                      ) : (
+                        <Stethoscope className="h-3.5 w-3.5 text-emerald-500" />
+                      )}
+                    </span>
+                  )}
+                  {isPending ? (
+                    <Loader2
+                      className={cn(
+                        "h-3.5 w-3.5 animate-spin",
+                        isConnecting ? "text-emerald-500" : "text-amber-500",
+                      )}
+                    />
+                  ) : active ? (
+                    <PlugZap className="h-3.5 w-3.5 text-emerald-500" />
+                  ) : (
+                    <Plug className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  )}
+                </div>
               </button>
             </li>
           );
         })}
       </ul>
+
+      {report && (
+        <HealthcheckModal
+          open={true}
+          onOpenChange={(o) => !o && setReport(null)}
+          serial={report.device_id}
+          report={report}
+        />
+      )}
     </div>
   );
 }
