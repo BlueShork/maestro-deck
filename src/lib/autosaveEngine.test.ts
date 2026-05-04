@@ -183,4 +183,13 @@ describe("autosaveEngine", () => {
     expect(write).toHaveBeenCalledTimes(2);
     expect(write).toHaveBeenLastCalledWith("/tmp/new.yaml", "z");
   });
+
+  it("dispose prevents a pending timer from firing", async () => {
+    const { deps, write } = makeDeps();
+    const engine = createAutosaveEngine(deps);
+    engine.notifyChange();
+    engine.dispose();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(write).not.toHaveBeenCalled();
+  });
 });
