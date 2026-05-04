@@ -405,35 +405,14 @@ pub async fn run_flow(
     .await
     .ok();
 
-    // Replicate the known-working manual cleanup before spawning the
-    // runner: kill the host-side studio subprocess, scrub any adb
-    // forward it left behind, force-stop just the main driver package
-    // (NOT `.test` — that mirrors the manual flow that works), and give
-    // the OS a beat to release sockets. Then maestro test sees a clean
-    // slate and bootstraps the driver itself, the same way it does when
-    // run from a fresh shell.
-    if let Some(keeper) = state.studio.lock().await.take() {
-        keeper.pause().await;
-    }
-    let adb = crate::device::adb::adb_bin();
-    let _ = tokio::process::Command::new(&adb)
-        .args(["-s", &serial, "forward", "--remove", "tcp:7001"])
-        .output()
-        .await;
-    let _ = tokio::process::Command::new(&adb)
-        .args(["-s", &serial, "shell", "am", "force-stop", "dev.mobile.maestro"])
-        .output()
-        .await;
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Schedule a background re-warm of the studio after the runner exits
-    // so the next inspect call stays fast.
-    let on_exit: Option<Box<dyn FnOnce(AppHandle) + Send + 'static>> =
-        Some(Box::new(|app: AppHandle| {
-            crate::hierarchy::studio::schedule_studio_restart(app);
-        }));
-
-    runner::spawn_runner(app, &file_path, on_exit).await
+    // NOTE: previous attempts to pause/stop the studio keeper before
+    // spawning the runner consistently broke launchApp inside the
+    // Tauri-spawned `maestro test` (DEADLINE_EXCEEDED or Connection
+    // refused). The same cleanup sequence works from a fresh shell,
+    // so the issue is contextual to the spawned subprocess. Until we
+    // have a reliable fix, we leave the studio alone here. The
+    // pre-flight above still handles the genuinely-hung-driver case.
+    runner::spawn_runner(app, &file_path, None).await
 }
 
 #[tauri::command]
