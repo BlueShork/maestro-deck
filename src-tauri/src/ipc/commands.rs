@@ -405,14 +405,34 @@ pub async fn run_flow(
     .await
     .ok();
 
-    // NOTE: previous attempts to pause/stop the studio keeper before
-    // spawning the runner consistently broke launchApp inside the
-    // Tauri-spawned `maestro test` (DEADLINE_EXCEEDED or Connection
-    // refused). The same cleanup sequence works from a fresh shell,
-    // so the issue is contextual to the spawned subprocess. Until we
-    // have a reliable fix, we leave the studio alone here. The
-    // pre-flight above still handles the genuinely-hung-driver case.
-    runner::spawn_runner(app, &file_path, None).await
+    // Ensure no `maestro studio` JVM is hogging port 7001 before we
+    // spawn the test. Two cases to cover:
+    //   1. The studio we currently manage (state.studio): tear it down
+    //      via the keeper so the on-device driver state is clean.
+    //   2. ORPHAN studios from a previous Maestro Deck session — the
+    //      JVM survives Cmd+Q and `kill_on_drop`, leaks the port, and
+    //      makes maestro test's dadb forwarder time out for 2 minutes
+    //      on its first deviceInfo call. pkill catches them by their
+    //      distinctive Maestro CLI cmdline pattern.
+    if let Some(keeper) = state.studio.lock().await.take() {
+        keeper.pause().await;
+    }
+    let _ = tokio::process::Command::new("pkill")
+        .args(["-9", "-f", "maestro.cli.AppKt.*studio"])
+        .output()
+        .await;
+    // Short beat for the OS to release the listening socket after the
+    // JVM dies, so maestro test's own forwarder can bind cleanly.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    // Schedule a background re-warm of the studio after the runner exits
+    // so the next inspect call stays fast.
+    let on_exit: Option<Box<dyn FnOnce(AppHandle) + Send + 'static>> =
+        Some(Box::new(|app: AppHandle| {
+            crate::hierarchy::studio::schedule_studio_restart(app);
+        }));
+
+    runner::spawn_runner(app, &file_path, on_exit).await
 }
 
 #[tauri::command]
