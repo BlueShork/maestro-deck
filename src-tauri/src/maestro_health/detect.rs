@@ -36,6 +36,13 @@ fn is_orphan_candidate(name: &str) -> bool {
         || lower.contains(".am") // covers `com.android.commands.am`
 }
 
+/// Public mirror of the orphan whitelist for the kill module.
+/// Kept distinct from the private predicate so future changes to
+/// detection don't accidentally widen the kill whitelist.
+pub fn is_orphan_candidate_public(name: &str) -> bool {
+    is_orphan_candidate(name)
+}
+
 /// Parse `adb shell ps -A -o PID,NAME` output. Skips the header line.
 /// Returns process entries that match the orphan whitelist, excluding
 /// `driver_pid` (which is reported separately as `driver_running`).

@@ -4,6 +4,7 @@ use std::process::Command;
 
 use crate::device::adb::adb_bin;
 use crate::error::{AppError, AppResult};
+use crate::maestro_health::detect;
 
 use super::{HealthReport, KillReport, MAESTRO_DRIVER_PACKAGE, MAESTRO_DRIVER_PORT};
 
@@ -58,6 +59,72 @@ fn do_unforward(device_id: &str, port: u16) -> AppResult<()> {
     let arg = format!("tcp:{}", port);
     let output = Command::new(&bin)
         .args(["-s", device_id, "forward", "--remove", &arg])
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::AdbNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+    if !output.status.success() {
+        return Err(AppError::AdbFailed(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Given the stdout of `adb shell ps -p <pid> -o PID,NAME`, verify that
+/// `pid` is still mapped to `expected_name` AND that the name still
+/// matches the orphan whitelist. Both conditions must hold.
+fn reverify_pid(ps_out: &str, pid: u32, expected_name: &str) -> bool {
+    for (idx, line) in ps_out.lines().enumerate() {
+        if idx == 0 && line.trim_start().starts_with("PID") {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let pid_tok = match parts.next() { Some(t) => t, None => continue };
+        let name = match parts.next() { Some(n) => n, None => continue };
+        if pid_tok.parse::<u32>().ok() != Some(pid) {
+            continue;
+        }
+        if name != expected_name {
+            return false;
+        }
+        return detect::is_orphan_candidate_public(name);
+    }
+    false
+}
+
+fn fetch_pid_name(device_id: &str, pid: u32) -> AppResult<String> {
+    let bin = adb_bin();
+    let output = Command::new(&bin)
+        .args([
+            "-s",
+            device_id,
+            "shell",
+            "ps",
+            "-p",
+            &pid.to_string(),
+            "-o",
+            "PID,NAME",
+        ])
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::AdbNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn do_kill_pid(device_id: &str, pid: u32) -> AppResult<()> {
+    let bin = adb_bin();
+    let output = Command::new(&bin)
+        .args(["-s", device_id, "shell", "kill", &pid.to_string()])
         .output()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -130,5 +197,38 @@ mod tests {
         assert_eq!(should_unforward(&report), None);
         report.port_forwarded = Some("tcp:7001 tcp:7001".into());
         assert_eq!(should_unforward(&report), Some(MAESTRO_DRIVER_PORT));
+    }
+
+    #[test]
+    fn pid_reverify_accepts_matching_name() {
+        let ps_out = "\
+PID NAME
+12345 com.android.commands.am
+";
+        assert!(reverify_pid(ps_out, 12345, "com.android.commands.am"));
+    }
+
+    #[test]
+    fn pid_reverify_rejects_name_mismatch() {
+        let ps_out = "\
+PID NAME
+12345 com.unrelated.app
+";
+        assert!(!reverify_pid(ps_out, 12345, "com.android.commands.am"));
+    }
+
+    #[test]
+    fn pid_reverify_rejects_when_pid_gone() {
+        let ps_out = "PID NAME\n";
+        assert!(!reverify_pid(ps_out, 12345, "anything"));
+    }
+
+    #[test]
+    fn pid_reverify_rejects_non_whitelisted_name() {
+        let ps_out = "\
+PID NAME
+12345 com.unrelated.app
+";
+        assert!(!reverify_pid(ps_out, 12345, "com.unrelated.app"));
     }
 }
