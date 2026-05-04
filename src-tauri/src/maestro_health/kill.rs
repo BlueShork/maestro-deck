@@ -40,6 +40,40 @@ fn force_stop_driver(device_id: &str, report: &HealthReport) -> AppResult<bool> 
     Ok(true)
 }
 
+/// Returns `Some(port)` iff the report references the Maestro driver
+/// port. Other ports are intentionally ignored to avoid disrupting
+/// unrelated user setup.
+fn should_unforward(report: &HealthReport) -> Option<u16> {
+    let raw = report.port_forwarded.as_deref()?;
+    let target = format!("tcp:{}", MAESTRO_DRIVER_PORT);
+    if raw.contains(&target) {
+        Some(MAESTRO_DRIVER_PORT)
+    } else {
+        None
+    }
+}
+
+fn do_unforward(device_id: &str, port: u16) -> AppResult<()> {
+    let bin = adb_bin();
+    let arg = format!("tcp:{}", port);
+    let output = Command::new(&bin)
+        .args(["-s", device_id, "forward", "--remove", &arg])
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::AdbNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+    if !output.status.success() {
+        return Err(AppError::AdbFailed(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+    Ok(())
+}
+
 pub fn kill_maestro_processes(_device_id: &str, _report: HealthReport) -> AppResult<KillReport> {
     unimplemented!("filled in by Task 9")
 }
@@ -70,5 +104,31 @@ mod tests {
     fn maestro_driver_package_is_hardcoded() {
         assert_eq!(MAESTRO_DRIVER_PACKAGE, "dev.mobile.maestro");
         let _ = ProcessInfo { pid: 1, name: "x".into() };
+    }
+
+    #[test]
+    fn port_unforward_skipped_when_no_forward() {
+        let report = HealthReport {
+            device_id: "abc".into(),
+            driver_running: None,
+            port_forwarded: None,
+            orphan_processes: vec![],
+            adb_available: true,
+        };
+        assert_eq!(should_unforward(&report), None);
+    }
+
+    #[test]
+    fn port_unforward_only_for_7001() {
+        let mut report = HealthReport {
+            device_id: "abc".into(),
+            driver_running: None,
+            port_forwarded: Some("tcp:9999 tcp:9999".into()),
+            orphan_processes: vec![],
+            adb_available: true,
+        };
+        assert_eq!(should_unforward(&report), None);
+        report.port_forwarded = Some("tcp:7001 tcp:7001".into());
+        assert_eq!(should_unforward(&report), Some(MAESTRO_DRIVER_PORT));
     }
 }
