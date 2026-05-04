@@ -51,4 +51,14 @@ describe("autosaveEngine", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(write).not.toHaveBeenCalled();
   });
+
+  it("does not write when dirty is false", async () => {
+    const { deps, write } = makeDeps({
+      getFlow: () => ({ content: "a", filePath: "/tmp/flow.yaml", dirty: false }),
+    });
+    const engine = createAutosaveEngine(deps);
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).not.toHaveBeenCalled();
+  });
 });
