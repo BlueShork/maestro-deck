@@ -1,6 +1,8 @@
 //! Read-only detection of Maestro residue on a device.
 
+use std::net::{SocketAddr, TcpStream};
 use std::process::Command;
+use std::time::Duration;
 use crate::device::adb::adb_bin;
 use crate::error::{AppError, AppResult};
 use super::HealthReport;
@@ -166,6 +168,20 @@ fn parse_forward_list(stdout: &str, device_id: &str) -> Option<String> {
     None
 }
 
+/// Probe a TCP port on localhost. Returns `true` if the port accepts a
+/// connection within `timeout_ms`, `false` otherwise. Used to detect a
+/// hung Maestro driver: when the gRPC server stops responding, the
+/// kernel-level connect either refuses or times out.
+fn ping_driver_at(port: u16, timeout_ms: u64) -> bool {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(timeout_ms)).is_ok()
+}
+
+/// Ping the standard Maestro driver port (forwarded by `adb forward`).
+pub fn ping_driver(timeout_ms: u64) -> bool {
+    ping_driver_at(super::MAESTRO_DRIVER_PORT, timeout_ms)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,5 +296,28 @@ PID NAME
     #[test]
     fn parse_ps_handles_empty() {
         assert_eq!(parse_ps_orphans("", None), vec![]);
+    }
+
+    use std::net::TcpListener;
+
+    #[test]
+    fn ping_driver_at_succeeds_when_port_listens() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        // Hold the listener open for the duration of the test so connect()
+        // succeeds. We don't accept() — `connect_timeout` only needs the
+        // SYN/ACK handshake which the kernel handles before accept.
+        assert!(ping_driver_at(port, 1_000));
+        drop(listener);
+    }
+
+    #[test]
+    fn ping_driver_at_fails_when_no_listener() {
+        // Bind then immediately drop, so the port is almost certainly
+        // unbound by the time we connect. Connection refused = false.
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        assert!(!ping_driver_at(port, 200));
     }
 }
