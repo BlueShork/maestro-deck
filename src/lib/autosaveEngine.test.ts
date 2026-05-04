@@ -96,7 +96,9 @@ describe("autosaveEngine", () => {
     expect(write).toHaveBeenCalledTimes(1);
 
     // Resolve the first; a subsequent edit must save again.
-    resolveFirst?.();
+    // (Local copy avoids TS narrowing the captured let-binding to never.)
+    const resolver = resolveFirst as (() => void) | null;
+    resolver?.();
     await Promise.resolve();
     await Promise.resolve();
     engine.notifyChange();
