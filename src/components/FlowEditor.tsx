@@ -21,6 +21,8 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
+  gutter,
+  GutterMarker,
   highlightActiveLine,
   highlightActiveLineGutter,
   keymap,
@@ -36,6 +38,7 @@ import { themeExtensions } from "@/lib/editor-theme";
 import { openFlowFile } from "@/lib/flow-io";
 import { resolveTheme } from "@/lib/theme";
 import { useFlowStore } from "@/stores/flowStore";
+import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -74,6 +77,53 @@ function maestroCompletions(ctx: CompletionContext): CompletionResult | null {
 
 const setActiveLine = StateEffect.define<number | null>();
 
+type StepStatusMap = Map<number, "running" | "done" | "failed">;
+
+const setStepStatuses = StateEffect.define<StepStatusMap>();
+
+const stepStatusField = StateField.define<StepStatusMap>({
+  create: () => new Map(),
+  update(map, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setStepStatuses)) return e.value;
+    }
+    return map;
+  },
+});
+
+class StepMarker extends GutterMarker {
+  constructor(readonly status: "running" | "done" | "failed") {
+    super();
+  }
+  override eq(other: GutterMarker): boolean {
+    return other instanceof StepMarker && other.status === this.status;
+  }
+  override toDOM(): HTMLElement {
+    const el = document.createElement("span");
+    el.className = `cm-step-marker ${this.status}`;
+    if (this.status === "done") el.textContent = "●";
+    else if (this.status === "failed") el.textContent = "✕";
+    else el.textContent = "◐";
+    return el;
+  }
+}
+
+const stepGutter = gutter({
+  class: "cm-step-status",
+  lineMarker(view, line) {
+    const map = view.state.field(stepStatusField, false);
+    if (!map) return null;
+    const lineNo = view.state.doc.lineAt(line.from).number;
+    const status = map.get(lineNo);
+    return status ? new StepMarker(status) : null;
+  },
+  lineMarkerChange(update) {
+    return update.transactions.some((tr) =>
+      tr.effects.some((e) => e.is(setStepStatuses)),
+    );
+  },
+});
+
 const activeLineField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(deco, tr) {
@@ -94,6 +144,7 @@ export function FlowEditor() {
   const filePath = useFlowStore((s) => s.filePath);
   const dirty = useFlowStore((s) => s.dirty);
   const activeLine = useFlowStore((s) => s.activeLine);
+  const steps = useRunStore((s) => s.steps);
   const setContent = useFlowStore((s) => s.setContent);
   const setCursor = useFlowStore((s) => s.setCursor);
   const saved = useFlowStore((s) => s.saved);
@@ -110,6 +161,8 @@ export function FlowEditor() {
     const state = EditorState.create({
       doc: content,
       extensions: [
+        stepStatusField,
+        stepGutter,
         lineNumbers(),
         foldGutter({ markerDOM: () => document.createElement("span") }),
         history(),
@@ -175,6 +228,18 @@ export function FlowEditor() {
   useEffect(() => {
     viewRef.current?.dispatch({ effects: setActiveLine.of(activeLine) });
   }, [activeLine]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const map: StepStatusMap = new Map();
+    for (const s of steps) {
+      if (s.status === "running" || s.status === "done" || s.status === "failed") {
+        map.set(s.line, s.status);
+      }
+    }
+    view.dispatch({ effects: setStepStatuses.of(map) });
+  }, [steps]);
 
   // Swap CodeMirror theme when settings change (also re-applies when the
   // OS switches between light/dark under "system" mode because resolveTheme

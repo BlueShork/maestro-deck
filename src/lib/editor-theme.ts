@@ -131,6 +131,33 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         backgroundColor: c.activeRunBg,
         boxShadow: `inset 2px 0 0 ${c.activeRunBorder}`,
       },
+      ".cm-step-status": {
+        width: "14px",
+        padding: "0",
+      },
+      ".cm-step-marker": {
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "14px",
+        height: "100%",
+        fontSize: "9px",
+        lineHeight: "1",
+      },
+      ".cm-step-marker.done": {
+        color: "rgb(16 185 129)",
+      },
+      ".cm-step-marker.failed": {
+        color: "rgb(239 68 68)",
+      },
+      ".cm-step-marker.running": {
+        color: "rgb(59 130 246)",
+        animation: "cm-step-spin 0.9s linear infinite",
+      },
+      "@keyframes cm-step-spin": {
+        from: { transform: "rotate(0deg)" },
+        to: { transform: "rotate(360deg)" },
+      },
       ".cm-tooltip": {
         backgroundColor: c.surface,
         color: c.fg,
