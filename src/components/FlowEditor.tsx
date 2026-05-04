@@ -45,6 +45,7 @@ import { Button } from "@/components/ui/Button";
 import { themeExtensions } from "@/lib/editor-theme";
 import { openFlowFile } from "@/lib/flow-io";
 import { resolveTheme } from "@/lib/theme";
+import { useAutosave } from "@/lib/useAutosave";
 import { useFlowStore } from "@/stores/flowStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -156,6 +157,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
   const setContent = useFlowStore((s) => s.setContent);
   const setCursor = useFlowStore((s) => s.setCursor);
   const saved = useFlowStore((s) => s.saved);
+  useAutosave();
 
   const themeMode = useSettingsStore((s) => s.theme);
 
