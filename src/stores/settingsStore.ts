@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 export type ThemeMode = "light" | "dark" | "system";
+export type ConsoleMode = "simple" | "technical";
 
 interface SettingsState {
   inspectKey: string;
@@ -20,12 +21,14 @@ interface SettingsState {
    * until we've validated output parity against the CLI path.
    */
   fastHierarchyEnabled: boolean;
+  consoleMode: ConsoleMode;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
   setStreamEnabled: (v: boolean) => void;
   setPerfMonitoringEnabled: (v: boolean) => void;
   setFastHierarchyEnabled: (v: boolean) => void;
+  setConsoleMode: (m: ConsoleMode) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -37,12 +40,14 @@ export const useSettingsStore = create<SettingsState>()(
       streamEnabled: true,
       perfMonitoringEnabled: false,
       fastHierarchyEnabled: false,
+      consoleMode: "simple",
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
       setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
+      setConsoleMode: (consoleMode) => set({ consoleMode }),
     }),
     {
       name: "maestro-deck.settings",
@@ -53,6 +58,7 @@ export const useSettingsStore = create<SettingsState>()(
         streamEnabled: s.streamEnabled,
         perfMonitoringEnabled: s.perfMonitoringEnabled,
         fastHierarchyEnabled: s.fastHierarchyEnabled,
+        consoleMode: s.consoleMode,
       }),
     },
   ),
