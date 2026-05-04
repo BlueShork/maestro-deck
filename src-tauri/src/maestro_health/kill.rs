@@ -141,8 +141,58 @@ fn do_kill_pid(device_id: &str, pid: u32) -> AppResult<()> {
     Ok(())
 }
 
-pub fn kill_maestro_processes(_device_id: &str, _report: HealthReport) -> AppResult<KillReport> {
-    unimplemented!("filled in by Task 9")
+pub fn kill_maestro_processes(
+    device_id: &str,
+    report: HealthReport,
+) -> AppResult<KillReport> {
+    let mut out = KillReport::default();
+
+    // Step 1 — driver
+    match force_stop_driver(device_id, &report) {
+        Ok(killed) => out.driver_killed = killed,
+        Err(e) => out.errors.push(format!("driver force-stop failed: {}", e)),
+    }
+
+    // Step 2 — port forward
+    if let Some(port) = should_unforward(&report) {
+        match do_unforward(device_id, port) {
+            Ok(()) => out.port_unforwarded = true,
+            Err(e) => out.errors.push(format!("forward --remove failed: {}", e)),
+        }
+    } else if report.port_forwarded.is_some() {
+        out.errors.push(format!(
+            "port forward {:?} skipped (only tcp:{} is whitelisted)",
+            report.port_forwarded, MAESTRO_DRIVER_PORT
+        ));
+    }
+
+    // Step 3 — orphans
+    for orphan in &report.orphan_processes {
+        let ps_out = match fetch_pid_name(device_id, orphan.pid) {
+            Ok(s) => s,
+            Err(e) => {
+                out.errors.push(format!(
+                    "ps -p {} failed: {} — skipping",
+                    orphan.pid, e
+                ));
+                continue;
+            }
+        };
+        if !reverify_pid(&ps_out, orphan.pid, &orphan.name) {
+            out.orphans_skipped
+                .push((orphan.pid, "name changed or pid gone".into()));
+            continue;
+        }
+        match do_kill_pid(device_id, orphan.pid) {
+            Ok(()) => out.orphans_killed.push(orphan.pid),
+            Err(e) => {
+                out.orphans_skipped
+                    .push((orphan.pid, format!("kill failed: {}", e)));
+            }
+        }
+    }
+
+    Ok(out)
 }
 
 #[cfg(test)]

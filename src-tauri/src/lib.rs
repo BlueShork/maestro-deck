@@ -44,6 +44,7 @@ pub fn run() {
             connect_device,
             disconnect_device,
             check_device_health,
+            kill_maestro_processes,
             enter_inspect_mode,
             query_element,
             suggest_selectors,

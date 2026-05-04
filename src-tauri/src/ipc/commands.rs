@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 use crate::device::{adb, Device};
 use crate::error::{AppError, AppResult};
-use crate::maestro_health::{self, HealthReport};
+use crate::maestro_health::{self, HealthReport, KillReport};
 use crate::hierarchy::{self, HierarchyTree, UINode};
 use crate::input::{self, InputEvent};
 use crate::metrics;
@@ -397,6 +397,11 @@ pub async fn stop_metrics() -> AppResult<()> {
 #[tauri::command]
 pub fn check_device_health(serial: String) -> AppResult<HealthReport> {
     maestro_health::detect::check_device_health(&serial)
+}
+
+#[tauri::command]
+pub fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult<KillReport> {
+    maestro_health::kill::kill_maestro_processes(&serial, report)
 }
 
 impl serde::Serialize for HierarchyTree {
