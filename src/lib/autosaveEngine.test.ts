@@ -105,4 +105,46 @@ describe("autosaveEngine", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(write).toHaveBeenCalledTimes(2);
   });
+
+  it("disables autosave for a path after a write error and re-enables on external dirty-clear", async () => {
+    const flow: { content: string; filePath: string | null; dirty: boolean } = {
+      content: "a",
+      filePath: "/tmp/flow.yaml",
+      dirty: true,
+    };
+    const write = vi
+      .fn<(path: string, content: string) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("EACCES"))
+      .mockResolvedValue(undefined);
+    const onError = vi.fn();
+    const engine = createAutosaveEngine({
+      write,
+      onError,
+      getFlow: () => flow,
+      getEnabled: () => true,
+      delayMs: 1000,
+    });
+
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith("EACCES");
+
+    flow.content = "b";
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    flow.dirty = false;
+    engine.notifyDirtyCleared(flow.filePath);
+    flow.dirty = true;
+    flow.content = "c";
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith("/tmp/flow.yaml", "c");
+  });
 });
