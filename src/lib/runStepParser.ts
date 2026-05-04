@@ -42,7 +42,7 @@ export function parseLine(raw: string): StepEvent | null {
 
   for (const p of PATTERNS) {
     let arg: string | null = null;
-    let rest: string | null = null;
+    let rest: string;
 
     if (p.re) {
       const m = p.re.exec(line);
