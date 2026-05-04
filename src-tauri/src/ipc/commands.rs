@@ -405,16 +405,26 @@ pub async fn run_flow(
     .await
     .ok();
 
-    // Pause the studio keeper so `maestro test` doesn't fight its dadb
-    // forwarder. We use `pause()` (soft) on purpose: it kills only the
-    // host-side studio subprocess and leaves the on-device driver + adb
-    // forward intact. The test then sees a live port 7001 backed by a
-    // hot driver and connects immediately. A full `stop()` would remove
-    // the forward and kill the driver, leaving maestro test with
-    // "Connection refused" because it expects something already up.
+    // Replicate the known-working manual cleanup before spawning the
+    // runner: kill the host-side studio subprocess, scrub any adb
+    // forward it left behind, force-stop just the main driver package
+    // (NOT `.test` — that mirrors the manual flow that works), and give
+    // the OS a beat to release sockets. Then maestro test sees a clean
+    // slate and bootstraps the driver itself, the same way it does when
+    // run from a fresh shell.
     if let Some(keeper) = state.studio.lock().await.take() {
         keeper.pause().await;
     }
+    let adb = crate::device::adb::adb_bin();
+    let _ = tokio::process::Command::new(&adb)
+        .args(["-s", &serial, "forward", "--remove", "tcp:7001"])
+        .output()
+        .await;
+    let _ = tokio::process::Command::new(&adb)
+        .args(["-s", &serial, "shell", "am", "force-stop", "dev.mobile.maestro"])
+        .output()
+        .await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Schedule a background re-warm of the studio after the runner exits
     // so the next inspect call stays fast.
