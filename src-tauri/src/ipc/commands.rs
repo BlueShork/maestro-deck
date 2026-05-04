@@ -421,19 +421,26 @@ pub async fn run_flow(
         .args(["-9", "-f", "maestro.cli.AppKt.*studio"])
         .output()
         .await;
-    // Force-stop both maestro packages on device — `.maestro` hosts the
-    // process and `.test` registers the instrumentation that runs the
-    // gRPC server inside it. Empirically: stopping only `.maestro`
-    // leaves a zombie state where maestro test detects a "running"
-    // driver and tries to connect, getting "Connection refused" because
-    // the instrumentation is dead.
+    // Force-stop ONLY `dev.mobile.maestro` (the host process) on
+    // device. We do NOT touch `dev.mobile.maestro.test` — empirically,
+    // force-stopping the test package invalidates instrumentation
+    // metadata that maestro test relies on to bootstrap. This matches
+    // the manual CLI sequence the user has confirmed works:
+    //   adb shell am force-stop dev.mobile.maestro
+    //   adb forward --remove tcp:7001
+    //   pkill -f maestro
+    //   maestro test <flow>
     let adb = crate::device::adb::adb_bin();
-    for pkg in ["dev.mobile.maestro", "dev.mobile.maestro.test"] {
-        let _ = tokio::process::Command::new(&adb)
-            .args(["-s", &serial, "shell", "am", "force-stop", pkg])
-            .output()
-            .await;
-    }
+    let _ = tokio::process::Command::new(&adb)
+        .args(["-s", &serial, "shell", "am", "force-stop", "dev.mobile.maestro"])
+        .output()
+        .await;
+    // Also remove any leftover host-side adb forward on the maestro
+    // port so maestro test sets up its own from a clean slate.
+    let _ = tokio::process::Command::new(&adb)
+        .args(["-s", &serial, "forward", "--remove", "tcp:7001"])
+        .output()
+        .await;
     // Poll until pidof confirms the driver process is really gone. am
     // force-stop returns before Android has fully reaped the process,
     // and a fixed sleep was racy in practice. Give up after 2s — the
