@@ -421,22 +421,38 @@ pub async fn run_flow(
         .args(["-9", "-f", "maestro.cli.AppKt.*studio"])
         .output()
         .await;
-    // Force-stop the device-side driver app. Empirically required:
-    // when studio dies, its instrumentation (which runs the gRPC server
-    // inside `dev.mobile.maestro`) goes down with it, but the app
-    // process itself stays cached by Android. Maestro test then
-    // detects a "running" driver, tries to connect to localhost:7001,
-    // and gets "Connection refused" because there's no gRPC server
-    // behind it. Forcing the package down makes maestro test bootstrap
-    // a fresh instrumentation from scratch.
+    // Force-stop both maestro packages on device — `.maestro` hosts the
+    // process and `.test` registers the instrumentation that runs the
+    // gRPC server inside it. Empirically: stopping only `.maestro`
+    // leaves a zombie state where maestro test detects a "running"
+    // driver and tries to connect, getting "Connection refused" because
+    // the instrumentation is dead.
     let adb = crate::device::adb::adb_bin();
-    let _ = tokio::process::Command::new(&adb)
-        .args(["-s", &serial, "shell", "am", "force-stop", "dev.mobile.maestro"])
-        .output()
-        .await;
-    // Short beat for the OS to release the listening socket and for
-    // Android to fully tear down the app process.
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    for pkg in ["dev.mobile.maestro", "dev.mobile.maestro.test"] {
+        let _ = tokio::process::Command::new(&adb)
+            .args(["-s", &serial, "shell", "am", "force-stop", pkg])
+            .output()
+            .await;
+    }
+    // Poll until pidof confirms the driver process is really gone. am
+    // force-stop returns before Android has fully reaped the process,
+    // and a fixed sleep was racy in practice. Give up after 2s — the
+    // spawn_runner that follows will surface a clear maestro error
+    // rather than us hanging indefinitely.
+    for _ in 0..20 {
+        let out = tokio::process::Command::new(&adb)
+            .args(["-s", &serial, "shell", "pidof", "dev.mobile.maestro"])
+            .output()
+            .await;
+        let still_alive = match out {
+            Ok(o) => !String::from_utf8_lossy(&o.stdout).trim().is_empty(),
+            Err(_) => false,
+        };
+        if !still_alive {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 
     // Schedule a background re-warm of the studio after the runner exits
     // so the next inspect call stays fast.
