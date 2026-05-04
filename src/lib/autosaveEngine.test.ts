@@ -41,4 +41,14 @@ describe("autosaveEngine", () => {
     expect(write).toHaveBeenCalledTimes(1);
     expect(write).toHaveBeenCalledWith("/tmp/flow.yaml", "a: 1");
   });
+
+  it("does not write when filePath is null", async () => {
+    const { deps, write } = makeDeps({
+      getFlow: () => ({ content: "a", filePath: null, dirty: true }),
+    });
+    const engine = createAutosaveEngine(deps);
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).not.toHaveBeenCalled();
+  });
 });
