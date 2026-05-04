@@ -421,8 +421,21 @@ pub async fn run_flow(
         .args(["-9", "-f", "maestro.cli.AppKt.*studio"])
         .output()
         .await;
-    // Short beat for the OS to release the listening socket after the
-    // JVM dies, so maestro test's own forwarder can bind cleanly.
+    // Force-stop the device-side driver app. Empirically required:
+    // when studio dies, its instrumentation (which runs the gRPC server
+    // inside `dev.mobile.maestro`) goes down with it, but the app
+    // process itself stays cached by Android. Maestro test then
+    // detects a "running" driver, tries to connect to localhost:7001,
+    // and gets "Connection refused" because there's no gRPC server
+    // behind it. Forcing the package down makes maestro test bootstrap
+    // a fresh instrumentation from scratch.
+    let adb = crate::device::adb::adb_bin();
+    let _ = tokio::process::Command::new(&adb)
+        .args(["-s", &serial, "shell", "am", "force-stop", "dev.mobile.maestro"])
+        .output()
+        .await;
+    // Short beat for the OS to release the listening socket and for
+    // Android to fully tear down the app process.
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     // Schedule a background re-warm of the studio after the runner exits
