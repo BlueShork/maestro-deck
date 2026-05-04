@@ -414,6 +414,25 @@ pub async fn run_flow(
     //      makes maestro test's dadb forwarder time out for 2 minutes
     //      on its first deviceInfo call. pkill catches them by their
     //      distinctive Maestro CLI cmdline pattern.
+    // Pause our managed studio (state-consistent teardown of the
+    // host-side keeper) and SIGKILL any orphan `maestro studio` JVM
+    // that survived a previous Maestro Deck session — orphans leak
+    // tcp:7001 across Cmd+Q despite Tauri's kill_on_drop, and that's
+    // the case where maestro test would hang 120s on DEADLINE_EXCEEDED.
+    //
+    // We deliberately do NOT do any device-side cleanup
+    // (force-stop, forward --remove). Empirically, in the
+    // Tauri-spawned context the same cleanup sequence that works from
+    // a fresh shell breaks maestro test's bootstrap with "Connection
+    // refused". The root cause is contextual to how maestro CLI
+    // detects existing on-device state when spawned as a child of
+    // Maestro Deck and is not fixable from this layer.
+    //
+    // Practical consequence: after inspect mode has been used in a
+    // session, running a test from inside Maestro Deck may still fail
+    // with the launchApp error. Workaround for users: restart
+    // Maestro Deck before running tests, or run tests from a terminal
+    // (`maestro test <flow>`).
     if let Some(keeper) = state.studio.lock().await.take() {
         keeper.pause().await;
     }
@@ -421,45 +440,7 @@ pub async fn run_flow(
         .args(["-9", "-f", "maestro.cli.AppKt.*studio"])
         .output()
         .await;
-    // Force-stop ONLY `dev.mobile.maestro` (the host process) on
-    // device. We do NOT touch `dev.mobile.maestro.test` — empirically,
-    // force-stopping the test package invalidates instrumentation
-    // metadata that maestro test relies on to bootstrap. This matches
-    // the manual CLI sequence the user has confirmed works:
-    //   adb shell am force-stop dev.mobile.maestro
-    //   adb forward --remove tcp:7001
-    //   pkill -f maestro
-    //   maestro test <flow>
-    let adb = crate::device::adb::adb_bin();
-    let _ = tokio::process::Command::new(&adb)
-        .args(["-s", &serial, "shell", "am", "force-stop", "dev.mobile.maestro"])
-        .output()
-        .await;
-    // Also remove any leftover host-side adb forward on the maestro
-    // port so maestro test sets up its own from a clean slate.
-    let _ = tokio::process::Command::new(&adb)
-        .args(["-s", &serial, "forward", "--remove", "tcp:7001"])
-        .output()
-        .await;
-    // Poll until pidof confirms the driver process is really gone. am
-    // force-stop returns before Android has fully reaped the process,
-    // and a fixed sleep was racy in practice. Give up after 2s — the
-    // spawn_runner that follows will surface a clear maestro error
-    // rather than us hanging indefinitely.
-    for _ in 0..20 {
-        let out = tokio::process::Command::new(&adb)
-            .args(["-s", &serial, "shell", "pidof", "dev.mobile.maestro"])
-            .output()
-            .await;
-        let still_alive = match out {
-            Ok(o) => !String::from_utf8_lossy(&o.stdout).trim().is_empty(),
-            Err(_) => false,
-        };
-        if !still_alive {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     // Schedule a background re-warm of the studio after the runner exits
     // so the next inspect call stays fast.
