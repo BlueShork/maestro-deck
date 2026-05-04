@@ -19,6 +19,7 @@ import { Toaster } from "@/components/ui/Toast";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { parseFlow } from "@/lib/flowAst";
+import { buildPartialFlow } from "@/lib/partialFlow";
 import { useShortcuts } from "@/lib/keyboard";
 import { parseLine as parseRunLine } from "@/lib/runStepParser";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
@@ -261,6 +262,38 @@ export default function App() {
     }
   }, [setRunning, appendLog, initSteps, resetSteps]);
 
+  const onRunFrom = useCallback(
+    async (line: number) => {
+      const { content } = useFlowStore.getState();
+      const partial = buildPartialFlow(content, line);
+      if (!partial) return;
+      try {
+        const dir = await tempDir();
+        const tempPath = `${dir.replace(/\/$/, "")}/maestro-deck-flow.yaml`;
+        await writeTextFile(tempPath, partial.content);
+        const truncatedAst = parseFlow(partial.content);
+        const remappedSteps = truncatedAst.steps.map((s) => ({
+          ...s,
+          line: partial.lineMap.get(s.line) ?? s.line,
+        }));
+        resetSteps();
+        initSteps(remappedSteps);
+        const pid = await ipc.runFlow(tempPath);
+        setRunning(pid);
+        appendLog(
+          "system",
+          `[runner started pid ${pid} · from line ${partial.firstStepOriginalLine}]`,
+        );
+      } catch (err) {
+        toast.error(
+          "Run from here failed",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    },
+    [setRunning, appendLog, initSteps, resetSteps],
+  );
+
   const onStop = useCallback(async () => {
     if (runningPid === null) return;
     useRunStore.getState().requestStop();
@@ -372,7 +405,7 @@ export default function App() {
                       }
                     >
                       <PanelShell id="editor">
-                        <FlowEditor />
+                        <FlowEditor onRunFrom={onRunFrom} />
                       </PanelShell>
                     </Panel>
                   ) : null}

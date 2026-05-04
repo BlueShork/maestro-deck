@@ -31,7 +31,15 @@ import {
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { FileDown, FileUp, Save } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu";
+import { parseFlow } from "@/lib/flowAst";
 
 import { Button } from "@/components/ui/Button";
 import { themeExtensions } from "@/lib/editor-theme";
@@ -139,7 +147,7 @@ const activeLineField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-export function FlowEditor() {
+export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void } = {}) {
   const content = useFlowStore((s) => s.content);
   const filePath = useFlowStore((s) => s.filePath);
   const dirty = useFlowStore((s) => s.dirty);
@@ -155,6 +163,8 @@ export function FlowEditor() {
   const viewRef = useRef<EditorView | null>(null);
   const themeCompartment = useRef(new Compartment());
   const syncingFromStore = useRef(false);
+
+  const [menu, setMenu] = useState<{ x: number; y: number; line: number } | null>(null);
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -259,6 +269,23 @@ export function FlowEditor() {
     return () => mq.removeEventListener("change", listener);
   }, [themeMode]);
 
+  const onEditorContextMenu = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      if (!onRunFrom) return;
+      const view = viewRef.current;
+      if (!view) return;
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+      if (pos === null) return;
+      const clickedLine = view.state.doc.lineAt(pos).number;
+      const ast = parseFlow(view.state.doc.toString());
+      const target = ast.steps.find((s) => s.line >= clickedLine);
+      if (!target) return;
+      e.preventDefault();
+      setMenu({ x: e.clientX, y: e.clientY, line: target.line });
+    },
+    [onRunFrom],
+  );
+
   const onOpen = useCallback(async () => {
     try {
       const picked = await openDialog({
@@ -340,7 +367,39 @@ export function FlowEditor() {
           </Button>
         </div>
       </div>
-      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden" />
+      <div
+        ref={hostRef}
+        className="min-h-0 flex-1 overflow-hidden"
+        onContextMenu={onEditorContextMenu}
+      />
+      {menu && onRunFrom ? (
+        <DropdownMenu open onOpenChange={(open) => !open && setMenu(null)}>
+          <DropdownMenuTrigger asChild>
+            <span
+              aria-hidden
+              style={{
+                position: "fixed",
+                left: menu.x,
+                top: menu.y,
+                width: 0,
+                height: 0,
+                pointerEvents: "none",
+              }}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" sideOffset={0}>
+            <DropdownMenuItem
+              onSelect={() => {
+                const line = menu.line;
+                setMenu(null);
+                onRunFrom(line);
+              }}
+            >
+              Run from line {menu.line}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }
