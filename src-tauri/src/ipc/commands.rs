@@ -392,6 +392,7 @@ pub async fn run_flow(
         .map(|d| d.serial.clone())
         .ok_or(AppError::NoDevice)?;
 
+    // Pre-flight: kick a hung driver if needed (see preflight spec).
     let app_for_preflight = app.clone();
     let serial_for_preflight = serial.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -404,7 +405,23 @@ pub async fn run_flow(
     .await
     .ok();
 
-    runner::spawn_runner(app, &file_path, None).await
+    // Stop the studio keeper so `maestro test` has exclusive access to
+    // the driver and port 7001. Without this, the studio's adb forward
+    // collides with `dadb.TcpForwarder` inside the test process and the
+    // first launchApp times out. See:
+    //   docs/superpowers/specs/2026-05-04-maestro-studio-pause-around-tests-design.md
+    if let Some(keeper) = state.studio.lock().await.take() {
+        keeper.stop().await;
+    }
+
+    // Schedule a background re-warm of the studio after the runner exits
+    // so the next inspect call stays fast.
+    let on_exit: Option<Box<dyn FnOnce(AppHandle) + Send + 'static>> =
+        Some(Box::new(|app: AppHandle| {
+            crate::hierarchy::studio::schedule_studio_restart(app);
+        }));
+
+    runner::spawn_runner(app, &file_path, on_exit).await
 }
 
 #[tauri::command]
