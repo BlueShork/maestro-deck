@@ -21,6 +21,7 @@ interface SettingsState {
    * until we've validated output parity against the CLI path.
    */
   fastHierarchyEnabled: boolean;
+  autoSaveEnabled: boolean;
   consoleMode: ConsoleMode;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
@@ -28,6 +29,7 @@ interface SettingsState {
   setStreamEnabled: (v: boolean) => void;
   setPerfMonitoringEnabled: (v: boolean) => void;
   setFastHierarchyEnabled: (v: boolean) => void;
+  setAutoSaveEnabled: (v: boolean) => void;
   setConsoleMode: (m: ConsoleMode) => void;
 }
 
@@ -40,6 +42,7 @@ export const useSettingsStore = create<SettingsState>()(
       streamEnabled: true,
       perfMonitoringEnabled: false,
       fastHierarchyEnabled: false,
+      autoSaveEnabled: true,
       consoleMode: "simple",
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
@@ -47,6 +50,7 @@ export const useSettingsStore = create<SettingsState>()(
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
       setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
+      setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
       setConsoleMode: (consoleMode) => set({ consoleMode }),
     }),
     {
@@ -58,6 +62,7 @@ export const useSettingsStore = create<SettingsState>()(
         streamEnabled: s.streamEnabled,
         perfMonitoringEnabled: s.perfMonitoringEnabled,
         fastHierarchyEnabled: s.fastHierarchyEnabled,
+        autoSaveEnabled: s.autoSaveEnabled,
         consoleMode: s.consoleMode,
       }),
     },
