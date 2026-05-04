@@ -43,6 +43,7 @@ pub fn run() {
             list_devices,
             connect_device,
             disconnect_device,
+            check_device_health,
             enter_inspect_mode,
             query_element,
             suggest_selectors,

@@ -1,8 +1,31 @@
 //! Read-only detection of Maestro residue on a device.
 
-use crate::error::AppResult;
+use std::process::Command;
+use crate::device::adb::adb_bin;
+use crate::error::{AppError, AppResult};
 use super::HealthReport;
 use super::ProcessInfo;
+
+/// Runs `adb -s <device_id> <args...>` and returns stdout. Distinguishes
+/// "adb not on PATH" from generic adb failures so the UI can show the
+/// right message.
+fn run_adb_for_device(device_id: &str, args: &[&str]) -> AppResult<String> {
+    let bin = adb_bin();
+    let mut full_args: Vec<&str> = vec!["-s", device_id];
+    full_args.extend_from_slice(args);
+    let output = Command::new(&bin).args(&full_args).output().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            AppError::AdbNotFound
+        } else {
+            AppError::Io(e)
+        }
+    })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(AppError::AdbFailed(stderr));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
 
 /// Returns true if the process name is a Maestro residue candidate.
 /// Strict whitelist: substring match against known markers.
@@ -57,8 +80,56 @@ fn parse_pidof(stdout: &str) -> Option<u32> {
         .and_then(|tok| tok.parse::<u32>().ok())
 }
 
-pub fn check_device_health(_device_id: &str) -> AppResult<HealthReport> {
-    unimplemented!("filled in by Task 2-5")
+pub fn check_device_health(device_id: &str) -> AppResult<HealthReport> {
+    // Check 1 — driver running
+    let driver_running = match run_adb_for_device(
+        device_id,
+        &["shell", "pidof", super::MAESTRO_DRIVER_PACKAGE],
+    ) {
+        Ok(out) => parse_pidof(&out),
+        // `pidof` exits non-zero when the package isn't running; that's
+        // not a real adb failure, just an empty result.
+        Err(AppError::AdbFailed(_)) => None,
+        Err(e) => return Err(e),
+    };
+
+    // Check 2 — port forwarding
+    // `forward --list` is host-side, not device-scoped. Run without -s
+    // and filter by device.
+    let bin = adb_bin();
+    let forward_out = std::process::Command::new(&bin)
+        .args(["forward", "--list"])
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::AdbNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+    let port_forwarded = if forward_out.status.success() {
+        parse_forward_list(
+            &String::from_utf8_lossy(&forward_out.stdout),
+            device_id,
+        )
+    } else {
+        None
+    };
+
+    // Check 3 — orphan processes
+    let ps_out = run_adb_for_device(
+        device_id,
+        &["shell", "ps", "-A", "-o", "PID,NAME"],
+    )?;
+    let orphan_processes = parse_ps_orphans(&ps_out, driver_running);
+
+    Ok(HealthReport {
+        device_id: device_id.to_string(),
+        driver_running,
+        port_forwarded,
+        orphan_processes,
+        adb_available: true,
+    })
 }
 
 /// Parse `adb forward --list` output. Lines look like:
