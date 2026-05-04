@@ -36,6 +36,8 @@ export function SettingsDialog({
   const setPerfMonitoringEnabled = useSettingsStore((s) => s.setPerfMonitoringEnabled);
   const fastHierarchyEnabled = useSettingsStore((s) => s.fastHierarchyEnabled);
   const setFastHierarchyEnabled = useSettingsStore((s) => s.setFastHierarchyEnabled);
+  const autoSaveEnabled = useSettingsStore((s) => s.autoSaveEnabled);
+  const setAutoSaveEnabled = useSettingsStore((s) => s.setAutoSaveEnabled);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -117,6 +119,19 @@ export function SettingsDialog({
               checked={fastHierarchyEnabled}
               onCheckedChange={setFastHierarchyEnabled}
               aria-label="Fast hierarchy (experimental)"
+            />
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col">
+              <span>Auto-save modified flows</span>
+              <span className="text-[11px] text-muted-foreground">
+                Automatically saves the open YAML 1 second after you stop typing.
+              </span>
+            </div>
+            <Switch
+              checked={autoSaveEnabled}
+              onCheckedChange={setAutoSaveEnabled}
+              aria-label="Auto-save modified flows"
             />
           </div>
           <div className="flex items-center justify-between">
