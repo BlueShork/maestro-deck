@@ -51,3 +51,50 @@ pub struct KillReport {
     pub orphans_skipped: Vec<(u32, String)>,
     pub errors: Vec<String>,
 }
+
+use tauri::{AppHandle, Emitter};
+
+#[derive(Debug, Clone, Serialize)]
+struct DriverRecoveringPayload<'a> {
+    device_id: &'a str,
+    action: &'a str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DriverRecoveredPayload<'a> {
+    device_id: &'a str,
+}
+
+/// Pre-flight check before any operation that depends on the Maestro
+/// gRPC driver. If the driver port responds within `PING_TIMEOUT_MS`,
+/// returns immediately. Otherwise emits `driver-recovering`, runs the
+/// recovery (kill driver + remove forward), and emits `driver-recovered`.
+///
+/// `action` is an opaque tag (e.g. "run_flow", "inspect") forwarded in
+/// the event payload so the frontend can phrase the toast appropriately
+/// or distinguish concurrent flows.
+///
+/// Never returns an error: recovery failure is non-fatal — the caller
+/// proceeds and lets the underlying maestro CLI surface its own error
+/// if the device is genuinely unusable.
+pub fn preflight_with_recovery(app: &AppHandle, device_id: &str, action: &'static str) {
+    const PING_TIMEOUT_MS: u64 = 2_000;
+
+    if detect::ping_driver(PING_TIMEOUT_MS) {
+        return;
+    }
+
+    tracing::info!(device = %device_id, action, "driver ping failed — recovering");
+
+    let _ = app.emit(
+        "driver-recovering",
+        DriverRecoveringPayload { device_id, action },
+    );
+
+    kill::recover_driver(device_id);
+
+    let _ = app.emit(
+        "driver-recovered",
+        DriverRecoveredPayload { device_id },
+    );
+}
