@@ -43,7 +43,11 @@ fn maestro_bin() -> String {
 
 /// Spawn `maestro test <flow>` and stream stdout/stderr to the frontend via
 /// Tauri events. The PID is returned so the frontend can request a stop.
-pub async fn spawn_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
+pub async fn spawn_runner(
+    app: AppHandle,
+    flow_path: &str,
+    on_exit: Option<Box<dyn FnOnce(AppHandle) + Send + 'static>>,
+) -> AppResult<u32> {
     let bin = maestro_bin();
     info!(bin = %bin, flow = %flow_path, "spawning maestro");
 
@@ -93,6 +97,7 @@ pub async fn spawn_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
     RUNNERS.lock().await.insert(pid, kill_tx);
 
     let app_exit = app.clone();
+    let on_exit_hook = on_exit;
     tokio::spawn(async move {
         let code = tokio::select! {
             status = child.wait() => status.ok().and_then(|s| s.code()),
@@ -104,6 +109,13 @@ pub async fn spawn_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
             }
         };
         RUNNERS.lock().await.remove(&pid);
+        // Fire the optional post-exit hook BEFORE emitting the exit event.
+        // The hook may schedule background work (e.g. studio restart) that
+        // we want kicked off as early as possible — the frontend doesn't
+        // need to wait for it, since the hook just spawns and returns.
+        if let Some(hook) = on_exit_hook {
+            hook(app_exit.clone());
+        }
         let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
     });
 

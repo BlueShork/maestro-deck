@@ -404,7 +404,7 @@ pub async fn run_flow(
     .await
     .ok();
 
-    runner::spawn_runner(app, &file_path).await
+    runner::spawn_runner(app, &file_path, None).await
 }
 
 #[tauri::command]
