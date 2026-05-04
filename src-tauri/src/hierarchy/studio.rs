@@ -257,3 +257,37 @@ async fn kill_orphan_studios() {
         }
     }
 }
+
+/// Re-warm the `maestro studio` keeper for the currently-connected
+/// device on a background tokio task. Safe to call from anywhere with an
+/// `AppHandle`; never blocks and never returns an error to the caller.
+///
+/// Use this after a `maestro test` run completes so the next inspect
+/// call hits the fast gRPC path instead of paying the ~10–15 s studio
+/// startup cost.
+///
+/// If no device is connected when the task runs, it logs and returns —
+/// the studio is meaningless without a target device.
+pub fn schedule_studio_restart(app: tauri::AppHandle) {
+    use tauri::Manager;
+
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<crate::state::AppState>();
+        let serial = match state.connected_device.read().as_ref() {
+            Some(d) => d.serial.clone(),
+            None => {
+                tracing::debug!("no device connected — skipping studio restart");
+                return;
+            }
+        };
+        match StudioKeeper::start(&serial).await {
+            Ok(keeper) => {
+                *state.studio.lock().await = Some(std::sync::Arc::new(keeper));
+                tracing::info!(serial = %serial, "studio re-warmed after test");
+            }
+            Err(e) => {
+                tracing::warn!(serial = %serial, error = ?e, "studio restart failed");
+            }
+        }
+    });
+}
