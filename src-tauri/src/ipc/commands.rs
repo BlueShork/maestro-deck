@@ -405,13 +405,15 @@ pub async fn run_flow(
     .await
     .ok();
 
-    // Stop the studio keeper so `maestro test` has exclusive access to
-    // the driver and port 7001. Without this, the studio's adb forward
-    // collides with `dadb.TcpForwarder` inside the test process and the
-    // first launchApp times out. See:
-    //   docs/superpowers/specs/2026-05-04-maestro-studio-pause-around-tests-design.md
+    // Pause the studio keeper so `maestro test` doesn't fight its dadb
+    // forwarder. We use `pause()` (soft) on purpose: it kills only the
+    // host-side studio subprocess and leaves the on-device driver + adb
+    // forward intact. The test then sees a live port 7001 backed by a
+    // hot driver and connects immediately. A full `stop()` would remove
+    // the forward and kill the driver, leaving maestro test with
+    // "Connection refused" because it expects something already up.
     if let Some(keeper) = state.studio.lock().await.take() {
-        keeper.stop().await;
+        keeper.pause().await;
     }
 
     // Schedule a background re-warm of the studio after the runner exits

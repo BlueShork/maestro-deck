@@ -176,6 +176,23 @@ impl StudioKeeper {
         force_stop_driver(&self.serial).await;
     }
 
+    /// Soft pause: kill only the host-side `maestro studio` subprocess.
+    /// The on-device driver (`dev.mobile.maestro` + `.test` instrumentation)
+    /// and the `adb forward tcp:7001` are intentionally left in place so a
+    /// concurrent `maestro test` can talk to the driver immediately
+    /// without paying a reinstall cost.
+    ///
+    /// Use this instead of `stop()` when you need the host-side studio
+    /// out of the way (e.g. its dadb forwarder was conflicting with the
+    /// test process) but still want the device-side driver hot.
+    pub async fn pause(&self) {
+        if let Some(mut child) = self.child.lock().await.take() {
+            debug!(serial = %self.serial, "pausing maestro studio (soft)");
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
+    }
+
     pub fn serial(&self) -> &str {
         &self.serial
     }
