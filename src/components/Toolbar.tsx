@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Check,
   LayoutPanelLeft,
   ListChecks,
@@ -180,6 +181,22 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
               <DropdownMenuItem onSelect={() => showAllPanels()}>Show all</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() =>
+                  window.open("https://www.maestrodeck.cloud/docs", "_blank", "noopener,noreferrer")
+                }
+                aria-label="Open documentation"
+              >
+                <BookOpen className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Documentation</TooltipContent>
+          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>
