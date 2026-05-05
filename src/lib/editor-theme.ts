@@ -139,7 +139,7 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         display: "flex",
         alignItems: "center",
         justifyContent: "flex-end",
-        paddingRight: "4px",
+        paddingRight: "1px",
       },
       ".cm-step-marker": {
         display: "inline-block",
