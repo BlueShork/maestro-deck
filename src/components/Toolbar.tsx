@@ -10,6 +10,8 @@ import {
   Square,
 } from "lucide-react";
 
+import { openUrl } from "@tauri-apps/plugin-opener";
+
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
 import {
@@ -187,9 +189,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
               <Button
                 size="icon"
                 variant="ghost"
-                onClick={() =>
-                  window.open("https://www.maestrodeck.cloud/docs", "_blank", "noopener,noreferrer")
-                }
+                onClick={() => void openUrl("https://www.maestrodeck.cloud/docs")}
                 aria-label="Open documentation"
               >
                 <BookOpen className="h-4 w-4" />

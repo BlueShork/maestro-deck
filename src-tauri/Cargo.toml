@@ -24,6 +24,7 @@ protox = "0.7"
 tauri = { version = "2.1", features = [] }
 tauri-plugin-dialog = "2.0"
 tauri-plugin-fs = "2.0"
+tauri-plugin-opener = "2.0"
 
 # Async runtime
 tokio = { version = "1.41", features = ["full"] }

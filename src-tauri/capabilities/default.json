@@ -24,6 +24,10 @@
     "fs:allow-remove",
     "fs:allow-exists",
     {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://www.maestrodeck.cloud/*" }]
+    },
+    {
       "identifier": "fs:scope",
       "allow": [
         { "path": "$HOME/**" },
