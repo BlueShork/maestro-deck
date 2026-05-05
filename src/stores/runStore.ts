@@ -17,6 +17,7 @@ export type StepStatus = "pending" | "running" | "done" | "failed";
 export interface StepRunState {
   index: number;
   line: number;
+  endLine: number;
   command: string;
   arg: string | null;
   status: StepStatus;
@@ -80,6 +81,7 @@ export const useRunStore = create<RunState>((set) => ({
       steps: steps.map((s) => ({
         index: s.index,
         line: s.line,
+        endLine: s.endLine,
         command: s.command,
         arg: s.arg,
         status: "pending" as StepStatus,

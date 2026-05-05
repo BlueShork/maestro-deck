@@ -93,7 +93,8 @@ function maestroCompletions(ctx: CompletionContext): CompletionResult | null {
 
 const setActiveLine = StateEffect.define<number | null>();
 
-type StepStatusMap = Map<number, "running" | "done" | "failed">;
+type StepStatus = "running" | "done" | "failed";
+type StepStatusMap = Map<number, { status: StepStatus; endLine: number }>;
 
 const setStepStatuses = StateEffect.define<StepStatusMap>();
 
@@ -109,7 +110,7 @@ const stepStatusField = StateField.define<StepStatusMap>({
 
 class StepLineMarker extends GutterMarker {
   override elementClass: string;
-  constructor(readonly status: "running" | "done" | "failed") {
+  constructor(readonly status: StepStatus) {
     super();
     this.elementClass = `cm-step-line-${status}`;
   }
@@ -123,10 +124,16 @@ const stepLineClassExt = gutterLineClass.compute([stepStatusField], (state) => {
   if (map.size === 0) return RangeSet.empty;
   const builder = new RangeSetBuilder<GutterMarker>();
   const sorted = [...map.entries()].sort((a, b) => a[0] - b[0]);
-  for (const [lineNo, status] of sorted) {
-    if (lineNo < 1 || lineNo > state.doc.lines) continue;
-    const pos = state.doc.line(lineNo).from;
-    builder.add(pos, pos, new StepLineMarker(status));
+  const totalLines = state.doc.lines;
+  for (const [startLine, { status, endLine }] of sorted) {
+    const from = Math.max(1, startLine);
+    const to = Math.min(totalLines, Math.max(endLine, startLine));
+    if (from > totalLines) continue;
+    const marker = new StepLineMarker(status);
+    for (let ln = from; ln <= to; ln++) {
+      const pos = state.doc.line(ln).from;
+      builder.add(pos, pos, marker);
+    }
   }
   return builder.finish();
 });
@@ -245,7 +252,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
     const map: StepStatusMap = new Map();
     for (const s of steps) {
       if (s.status === "running" || s.status === "done" || s.status === "failed") {
-        map.set(s.line, s.status);
+        map.set(s.line, { status: s.status, endLine: s.endLine });
       }
     }
     view.dispatch({ effects: setStepStatuses.of(map) });

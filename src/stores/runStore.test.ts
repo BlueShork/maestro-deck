@@ -3,9 +3,9 @@ import { useRunStore } from "./runStore";
 import type { Step } from "@/lib/flowAst";
 
 const mkSteps = (): Step[] => [
-  { index: 0, line: 3, command: "launchApp", arg: "com.example" },
-  { index: 1, line: 4, command: "tapOn", arg: "Login" },
-  { index: 2, line: 5, command: "tapOn", arg: "Login" },
+  { index: 0, line: 3, endLine: 3, command: "launchApp", arg: "com.example" },
+  { index: 1, line: 4, endLine: 4, command: "tapOn", arg: "Login" },
+  { index: 2, line: 5, endLine: 5, command: "tapOn", arg: "Login" },
 ];
 
 describe("runStore.steps", () => {

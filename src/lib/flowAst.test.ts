@@ -11,9 +11,24 @@ describe("parseFlow", () => {
 `;
     const ast = parseFlow(yaml);
     expect(ast.steps).toEqual([
-      { index: 0, line: 3, command: "launchApp", arg: null },
-      { index: 1, line: 4, command: "tapOn", arg: "Login" },
-      { index: 2, line: 5, command: "assertVisible", arg: "Welcome" },
+      { index: 0, line: 3, endLine: 3, command: "launchApp", arg: null },
+      { index: 1, line: 4, endLine: 4, command: "tapOn", arg: "Login" },
+      { index: 2, line: 5, endLine: 5, command: "assertVisible", arg: "Welcome" },
+    ]);
+  });
+
+  it("captures the full multi-line range for object-form steps", () => {
+    const yaml = `appId: x
+---
+- assertVisible:
+    text: "Summarize text"
+- assertVisible:
+    text: "Get advice"
+`;
+    const ast = parseFlow(yaml);
+    expect(ast.steps).toEqual([
+      { index: 0, line: 3, endLine: 4, command: "assertVisible", arg: "Summarize text" },
+      { index: 1, line: 5, endLine: 6, command: "assertVisible", arg: "Get advice" },
     ]);
   });
 
@@ -39,8 +54,8 @@ describe("parseFlow", () => {
     const yaml = `- launchApp\n- tapOn: "X"\n`;
     const ast = parseFlow(yaml);
     expect(ast.steps).toEqual([
-      { index: 0, line: 1, command: "launchApp", arg: null },
-      { index: 1, line: 2, command: "tapOn", arg: "X" },
+      { index: 0, line: 1, endLine: 1, command: "launchApp", arg: null },
+      { index: 1, line: 2, endLine: 2, command: "tapOn", arg: "X" },
     ]);
   });
 

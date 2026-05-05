@@ -3,6 +3,7 @@ import yaml from "js-yaml";
 export interface Step {
   index: number;
   line: number;
+  endLine: number;
   command: string;
   arg: string | null;
 }
@@ -32,10 +33,11 @@ export function parseFlow(source: string): FlowAst {
     const raw = parsed[i];
     const step = normalize(raw);
     if (!step) continue;
-    const lineInDoc = findItemLine(flowDoc.body, i);
+    const range = findItemRange(flowDoc.body, i);
     steps.push({
       index: steps.length,
-      line: flowDoc.startLine + lineInDoc,
+      line: flowDoc.startLine + range.start,
+      endLine: flowDoc.startLine + range.end,
       command: step.command,
       arg: step.arg,
     });
@@ -80,16 +82,26 @@ function splitDocs(source: string): DocSlice[] {
   return slices;
 }
 
-function findItemLine(body: string, itemIndex: number): number {
+function findItemRange(body: string, itemIndex: number): { start: number; end: number } {
   const lines = body.split("\n");
+  const isItem = (s: string): boolean => /^- /.test(s) || /^-$/.test(s.trimEnd());
   let count = 0;
+  let start = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (/^- /.test(lines[i]) || /^-$/.test(lines[i].trimEnd())) {
-      if (count === itemIndex) return i;
-      count++;
+    if (!isItem(lines[i])) continue;
+    if (count === itemIndex) {
+      start = i;
+    } else if (count === itemIndex + 1) {
+      let end = i - 1;
+      while (end > start && lines[end].trim() === "") end--;
+      return { start, end };
     }
+    count++;
   }
-  return 0;
+  if (start === -1) return { start: 0, end: 0 };
+  let end = lines.length - 1;
+  while (end > start && lines[end].trim() === "") end--;
+  return { start, end };
 }
 
 function normalize(raw: unknown): { command: string; arg: string | null } | null {
