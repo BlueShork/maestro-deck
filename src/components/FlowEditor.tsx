@@ -16,13 +16,20 @@ import {
   StreamLanguage,
 } from "@codemirror/language";
 import { yaml } from "@codemirror/legacy-modes/mode/yaml";
-import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
+import {
+  Compartment,
+  EditorState,
+  RangeSet,
+  RangeSetBuilder,
+  StateEffect,
+  StateField,
+} from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
   EditorView,
-  gutter,
   GutterMarker,
+  gutterLineClass,
   highlightActiveLine,
   highlightActiveLineGutter,
   keymap,
@@ -100,37 +107,28 @@ const stepStatusField = StateField.define<StepStatusMap>({
   },
 });
 
-class StepMarker extends GutterMarker {
+class StepLineMarker extends GutterMarker {
+  override elementClass: string;
   constructor(readonly status: "running" | "done" | "failed") {
     super();
+    this.elementClass = `cm-step-line-${status}`;
   }
   override eq(other: GutterMarker): boolean {
-    return other instanceof StepMarker && other.status === this.status;
-  }
-  override toDOM(): HTMLElement {
-    const el = document.createElement("span");
-    el.className = `cm-step-marker ${this.status}`;
-    if (this.status === "done") el.textContent = "●";
-    else if (this.status === "failed") el.textContent = "✕";
-    else el.textContent = "◐";
-    return el;
+    return other instanceof StepLineMarker && other.status === this.status;
   }
 }
 
-const stepGutter = gutter({
-  class: "cm-step-status",
-  lineMarker(view, line) {
-    const map = view.state.field(stepStatusField, false);
-    if (!map) return null;
-    const lineNo = view.state.doc.lineAt(line.from).number;
-    const status = map.get(lineNo);
-    return status ? new StepMarker(status) : null;
-  },
-  lineMarkerChange(update) {
-    return update.transactions.some((tr) =>
-      tr.effects.some((e) => e.is(setStepStatuses)),
-    );
-  },
+const stepLineClassExt = gutterLineClass.compute([stepStatusField], (state) => {
+  const map = state.field(stepStatusField);
+  if (map.size === 0) return RangeSet.empty;
+  const builder = new RangeSetBuilder<GutterMarker>();
+  const sorted = [...map.entries()].sort((a, b) => a[0] - b[0]);
+  for (const [lineNo, status] of sorted) {
+    if (lineNo < 1 || lineNo > state.doc.lines) continue;
+    const pos = state.doc.line(lineNo).from;
+    builder.add(pos, pos, new StepLineMarker(status));
+  }
+  return builder.finish();
 });
 
 const activeLineField = StateField.define<DecorationSet>({
@@ -174,7 +172,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
       doc: content,
       extensions: [
         stepStatusField,
-        stepGutter,
+        stepLineClassExt,
         lineNumbers(),
         foldGutter({ markerDOM: () => document.createElement("span") }),
         history(),

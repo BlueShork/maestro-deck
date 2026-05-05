@@ -131,60 +131,25 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         backgroundColor: c.activeRunBg,
         boxShadow: `inset 2px 0 0 ${c.activeRunBorder}`,
       },
-      ".cm-step-status": {
-        width: "22px",
-        padding: "0",
+      ".cm-gutterElement.cm-step-line-done": {
+        backgroundColor: "rgba(16,185,129,0.22)",
+        color: dark ? "rgb(110 231 183)" : "rgb(6 95 70)",
+        fontWeight: "600",
       },
-      ".cm-step-status .cm-gutterElement": {
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "flex-end",
-        paddingRight: "1px",
+      ".cm-gutterElement.cm-step-line-failed": {
+        backgroundColor: "rgba(239,68,68,0.22)",
+        color: dark ? "rgb(252 165 165)" : "rgb(127 29 29)",
+        fontWeight: "600",
       },
-      ".cm-step-marker": {
-        display: "inline-block",
-        width: "10px",
-        height: "10px",
-        lineHeight: "10px",
-        textAlign: "center",
-        borderRadius: "50%",
-        fontSize: "0",
+      ".cm-gutterElement.cm-step-line-running": {
+        backgroundColor: "rgba(59,130,246,0.22)",
+        color: dark ? "rgb(147 197 253)" : "rgb(30 64 175)",
+        fontWeight: "600",
+        animation: "cm-step-pulse 1.2s ease-in-out infinite",
       },
-      ".cm-step-marker.done": {
-        backgroundColor: "rgb(16 185 129)",
-        boxShadow: "0 0 0 1px rgba(16,185,129,0.25)",
-      },
-      ".cm-step-marker.failed": {
-        backgroundColor: "rgb(239 68 68)",
-        boxShadow: "0 0 0 1px rgba(239,68,68,0.25)",
-        position: "relative",
-      },
-      ".cm-step-marker.failed::before, .cm-step-marker.failed::after": {
-        content: '""',
-        position: "absolute",
-        top: "50%",
-        left: "50%",
-        width: "6px",
-        height: "1.5px",
-        backgroundColor: "white",
-        borderRadius: "1px",
-      },
-      ".cm-step-marker.failed::before": {
-        transform: "translate(-50%, -50%) rotate(45deg)",
-      },
-      ".cm-step-marker.failed::after": {
-        transform: "translate(-50%, -50%) rotate(-45deg)",
-      },
-      ".cm-step-marker.running": {
-        backgroundColor: "transparent",
-        border: "1.5px solid rgb(59 130 246)",
-        borderTopColor: "transparent",
-        boxSizing: "border-box",
-        animation: "cm-step-spin 0.9s linear infinite",
-      },
-      "@keyframes cm-step-spin": {
-        from: { transform: "rotate(0deg)" },
-        to: { transform: "rotate(360deg)" },
+      "@keyframes cm-step-pulse": {
+        "0%, 100%": { backgroundColor: "rgba(59,130,246,0.18)" },
+        "50%": { backgroundColor: "rgba(59,130,246,0.36)" },
       },
       ".cm-tooltip": {
         backgroundColor: c.surface,
