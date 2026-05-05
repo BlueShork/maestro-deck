@@ -405,51 +405,10 @@ pub async fn run_flow(
     .await
     .ok();
 
-    // Ensure no `maestro studio` JVM is hogging port 7001 before we
-    // spawn the test. Two cases to cover:
-    //   1. The studio we currently manage (state.studio): tear it down
-    //      via the keeper so the on-device driver state is clean.
-    //   2. ORPHAN studios from a previous Maestro Deck session — the
-    //      JVM survives Cmd+Q and `kill_on_drop`, leaks the port, and
-    //      makes maestro test's dadb forwarder time out for 2 minutes
-    //      on its first deviceInfo call. pkill catches them by their
-    //      distinctive Maestro CLI cmdline pattern.
-    // Pause our managed studio (state-consistent teardown of the
-    // host-side keeper) and SIGKILL any orphan `maestro studio` JVM
-    // that survived a previous Maestro Deck session — orphans leak
-    // tcp:7001 across Cmd+Q despite Tauri's kill_on_drop, and that's
-    // the case where maestro test would hang 120s on DEADLINE_EXCEEDED.
-    //
-    // We deliberately do NOT do any device-side cleanup
-    // (force-stop, forward --remove). Empirically, in the
-    // Tauri-spawned context the same cleanup sequence that works from
-    // a fresh shell breaks maestro test's bootstrap with "Connection
-    // refused". The root cause is contextual to how maestro CLI
-    // detects existing on-device state when spawned as a child of
-    // Maestro Deck and is not fixable from this layer.
-    //
-    // Practical consequence: after inspect mode has been used in a
-    // session, running a test from inside Maestro Deck may still fail
-    // with the launchApp error. Workaround for users: restart
-    // Maestro Deck before running tests, or run tests from a terminal
-    // (`maestro test <flow>`).
-    if let Some(keeper) = state.studio.lock().await.take() {
-        keeper.pause().await;
-    }
-    let _ = tokio::process::Command::new("pkill")
-        .args(["-9", "-f", "maestro.cli.AppKt.*studio"])
-        .output()
-        .await;
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-
-    // Schedule a background re-warm of the studio after the runner exits
-    // so the next inspect call stays fast.
-    let on_exit: Option<Box<dyn FnOnce(AppHandle) + Send + 'static>> =
-        Some(Box::new(|app: AppHandle| {
-            crate::hierarchy::studio::schedule_studio_restart(app);
-        }));
-
-    runner::spawn_runner(app, &file_path, on_exit).await
+    // With maestro 2.5.x, `maestro test` uses an adb-socket
+    // (AdbSocketFactory) instead of a host TCP forward, so it cohabits
+    // peacefully with our running studio. No cleanup needed.
+    runner::spawn_runner(app, &serial, &file_path, None).await
 }
 
 #[tauri::command]

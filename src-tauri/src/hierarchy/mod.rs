@@ -97,7 +97,7 @@ pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
     for attempt in 0..HIERARCHY_RETRIES {
         let attempt_start = std::time::Instant::now();
         let output = Command::new(&bin)
-            .args(["--device", serial, "hierarchy"])
+            .args(["--udid", serial, "hierarchy"])
             .output()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {

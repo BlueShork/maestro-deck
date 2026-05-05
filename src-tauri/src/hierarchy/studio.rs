@@ -85,7 +85,7 @@ impl StudioKeeper {
         // `--no-window` tells studio to skip opening a browser tab on
         // start; we only need the side-effect (driver installed +
         // gRPC port forwarded), not the web UI.
-        cmd.args(["--device", serial, "studio", "--no-window"])
+        cmd.args(["--udid", serial, "studio", "--no-window"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -99,6 +99,20 @@ impl StudioKeeper {
             }
         })?;
 
+        // Maestro 2.5.x replaced the host-side `adb forward` with an
+        // in-process adb-socket factory, so studio no longer exposes
+        // anything on localhost:7001. Our gRPC client still wants plain
+        // TCP, so we set up the forward ourselves. It's held by the
+        // adb-server, independent of any maestro process — `maestro
+        // test`'s adb-socket talks via a different path and won't
+        // collide with this forward.
+        let port_spec = format!("tcp:{DRIVER_PORT}");
+        let adb = crate::device::adb::adb_bin();
+        let _ = Command::new(&adb)
+            .args(["-s", serial, "forward", &port_spec, &port_spec])
+            .output()
+            .await;
+
         let keeper = Self {
             child: Mutex::new(Some(child)),
             serial: serial.to_string(),
@@ -108,14 +122,16 @@ impl StudioKeeper {
         Ok(keeper)
     }
 
-    /// Poll `localhost:7001` until it accepts connections (driver up
-    /// and adb forward in place) or we time out. Also bails early if
-    /// the studio process itself exits — no point polling a port that
-    /// will never open.
+    /// Wait until the on-device instrumentation is actually serving on
+    /// port 7001. With our manual `adb forward`, a plain TCP connect to
+    /// `localhost:7001` would succeed immediately (adb-server holds the
+    /// listener) regardless of whether the device side is ready — so we
+    /// poll the device directly via `ss -tlnp`. Bails early if studio
+    /// exits prematurely.
     async fn await_ready(&self) -> AppResult<()> {
         let deadline = Instant::now() + STUDIO_READY_TIMEOUT;
-        let addr = ("127.0.0.1", DRIVER_PORT);
         let start = Instant::now();
+        let adb = crate::device::adb::adb_bin();
 
         loop {
             if Instant::now() >= deadline {
@@ -125,9 +141,6 @@ impl StudioKeeper {
                 )));
             }
 
-            // Surface studio's own failure faster than waiting for the
-            // overall timeout — if the child has already exited, the
-            // port is never coming up.
             if let Some(child) = self.child.lock().await.as_mut() {
                 if let Ok(Some(status)) = child.try_wait() {
                     warn!(
@@ -140,10 +153,34 @@ impl StudioKeeper {
                 }
             }
 
-            if TcpStream::connect(addr).await.is_ok() {
+            // Probe the on-device side: `ss -tlnp` lists listening TCP
+            // sockets. Port 7001 (0x1B59) appears in the local-addr
+            // column once the maestro instrumentation has bound it.
+            // We grep with both decimal and hex forms because `ss` on
+            // some Android builds renders local addr in hex (proc-net
+            // style: `0100007F:1B59`).
+            let listening = match Command::new(&adb)
+                .args(["-s", &self.serial, "shell", "ss", "-tln"])
+                .output()
+                .await
+            {
+                Ok(out) => {
+                    let s = String::from_utf8_lossy(&out.stdout);
+                    s.lines().any(|line| {
+                        line.contains(":7001 ")
+                            || line.contains(":7001\t")
+                            || line.contains(":1B59 ")
+                            || line.contains(":1B59\t")
+                    })
+                }
+                Err(_) => false,
+            };
+
+            if listening {
                 info!(
                     elapsed_ms = start.elapsed().as_millis(),
-                    "maestro studio ready — driver listening on {}", DRIVER_PORT
+                    "maestro studio ready — instrumentation listening on device {}",
+                    DRIVER_PORT
                 );
                 return Ok(());
             }
