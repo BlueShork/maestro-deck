@@ -132,13 +132,14 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         boxShadow: `inset 2px 0 0 ${c.activeRunBorder}`,
       },
       ".cm-step-status": {
-        width: "18px",
+        width: "22px",
         padding: "0",
       },
       ".cm-step-status .cm-gutterElement": {
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "flex-end",
+        paddingRight: "4px",
       },
       ".cm-step-marker": {
         display: "inline-block",
