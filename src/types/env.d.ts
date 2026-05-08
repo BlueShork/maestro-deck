@@ -7,3 +7,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Vite's `?raw` suffix returns the file contents as a plain string.
+declare module "*.md?raw" {
+  const content: string;
+  export default content;
+}

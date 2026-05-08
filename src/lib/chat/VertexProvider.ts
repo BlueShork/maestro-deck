@@ -62,22 +62,33 @@ export class VertexProvider implements ChatProvider {
       `https://${this.region}-aiplatform.googleapis.com/v1/projects/${this.projectId}` +
       `/locations/${this.region}/publishers/${publisher}/models/${model}:${endpoint}`;
 
+    const systemPrompt = messages
+      .filter((m) => m.role === "system")
+      .map((m) => m.content)
+      .join("\n\n");
+    const nonSystem = messages.filter((m) => m.role !== "system");
+
     const body = isAnthropic
       ? {
           anthropic_version: "vertex-2023-10-16",
           stream: true,
           max_tokens: 4096,
-          messages: messages
-            .filter((m) => m.role !== "system")
-            .map((m) => ({ role: m.role, content: m.content })),
+          // cache_control marks the system block as cacheable on Vertex
+          // (same semantics as the direct Anthropic API). Implicit cache
+          // already covers Gemini, so the else-branch needs no marker.
+          system: systemPrompt
+            ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+            : undefined,
+          messages: nonSystem.map((m) => ({ role: m.role, content: m.content })),
         }
       : {
-          contents: messages
-            .filter((m) => m.role !== "system")
-            .map((m) => ({
-              role: m.role === "assistant" ? "model" : "user",
-              parts: [{ text: m.content }],
-            })),
+          systemInstruction: systemPrompt
+            ? { role: "system", parts: [{ text: systemPrompt }] }
+            : undefined,
+          contents: nonSystem.map((m) => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }],
+          })),
         };
 
     const resp = await fetch(url, {

@@ -9,6 +9,15 @@ interface AnthropicEvent {
   delta?: { type?: string; text?: string };
 }
 
+function buildSystemBlocks(messages: ChatMessage[]) {
+  const text = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  if (!text) return undefined;
+  return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
+}
+
 export class AnthropicProvider implements ChatProvider {
   readonly id = "anthropic" as const;
 
@@ -41,6 +50,12 @@ export class AnthropicProvider implements ChatProvider {
         model,
         max_tokens: 4096,
         stream: true,
+        // Mark the system prompt as cacheable — Anthropic hashes it and on
+        // subsequent requests within ~5 min reads from the cache, billing
+        // that portion at ~10% of the input rate. Requires the prompt to
+        // be ≥1024 tokens (Sonnet/Opus) or ≥2048 (Haiku); below that the
+        // marker is ignored, no harm done.
+        system: buildSystemBlocks(messages),
         messages: messages
           .filter((m) => m.role !== "system")
           .map((m) => ({ role: m.role, content: m.content })),

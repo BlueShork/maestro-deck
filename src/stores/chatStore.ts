@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { getProvider } from "@/lib/chat/registry";
+import { BILLY_SYSTEM_PROMPT } from "@/lib/chat/systemPrompt";
 import type { ChatMessage, ProviderId } from "@/types/chat";
 
 interface ChatState {
@@ -74,9 +75,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
+      const systemMsg: ChatMessage = {
+        id: "system",
+        role: "system",
+        content: BILLY_SYSTEM_PROMPT,
+        createdAt: 0,
+      };
       const stream = provider.stream({
         model: get().currentModel,
-        messages: [...get().messages.filter((m) => m.id !== assistantId)],
+        messages: [systemMsg, ...get().messages.filter((m) => m.id !== assistantId)],
         signal: abort.signal,
       });
 
