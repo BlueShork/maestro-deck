@@ -73,8 +73,8 @@ export function MessageList({ onOpenSettings }: MessageListProps) {
   }
 
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto px-3 py-3">
-      <div className="flex flex-col gap-3">
+    <div ref={ref} className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-8">
+      <div className="flex min-w-0 flex-col gap-5">
         {messages.map((m) => (
           <ChatMessage key={m.id} message={m} />
         ))}
