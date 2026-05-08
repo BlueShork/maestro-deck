@@ -13,7 +13,10 @@ function listYamlPaths(node: WorkspaceNode | null, root: string | null): string[
   const walk = (n: WorkspaceNode) => {
     if (n.kind === "file") {
       if (/\.ya?ml$/.test(n.name)) {
-        const rel = root && n.path.startsWith(root) ? n.path.slice(root.length).replace(/^[/\\]/, "") : n.path;
+        const rel =
+          root && n.path.startsWith(root)
+            ? n.path.slice(root.length).replace(/^[/\\]/, "")
+            : n.path;
         out.push(rel);
       }
       return;
