@@ -94,9 +94,5 @@ export interface KillReport {
 }
 
 export function isHealthReportClean(r: HealthReport): boolean {
-  return (
-    r.driver_running === null &&
-    r.port_forwarded === null &&
-    r.orphan_processes.length === 0
-  );
+  return r.driver_running === null && r.port_forwarded === null && r.orphan_processes.length === 0;
 }

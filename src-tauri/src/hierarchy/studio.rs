@@ -179,8 +179,7 @@ impl StudioKeeper {
             if listening {
                 info!(
                     elapsed_ms = start.elapsed().as_millis(),
-                    "maestro studio ready — instrumentation listening on device {}",
-                    DRIVER_PORT
+                    "maestro studio ready — instrumentation listening on device {}", DRIVER_PORT
                 );
                 return Ok(());
             }

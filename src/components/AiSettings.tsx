@@ -6,13 +6,7 @@ import { invalidateProvider } from "@/lib/chat/registry";
 import { cn } from "@/lib/utils";
 import type { ProviderId } from "@/types/chat";
 
-const REGIONS = [
-  "us-east5",
-  "us-central1",
-  "europe-west1",
-  "europe-west4",
-  "asia-southeast1",
-];
+const REGIONS = ["us-east5", "us-central1", "europe-west1", "europe-west4", "asia-southeast1"];
 
 export function AiSettings() {
   const [provider, setProvider] = useState<ProviderId>("anthropic");
@@ -105,8 +99,8 @@ export function AiSettings() {
       <div className="flex flex-col gap-1">
         <span className="text-xs font-medium text-muted-foreground">AI assistant</span>
         <p className="text-[11px] text-muted-foreground">
-          Bring your own key. Credentials are stored encrypted in a local Stronghold vault and
-          never leave this machine except when calling the provider you configure.
+          Bring your own key. Credentials are stored encrypted in a local Stronghold vault and never
+          leave this machine except when calling the provider you configure.
         </p>
       </div>
 
@@ -146,7 +140,11 @@ export function AiSettings() {
             />
           </label>
           <div className="flex gap-2">
-            <Button size="sm" onClick={saveAnthropic} disabled={busy || !apiKey || apiKey.startsWith("•")}>
+            <Button
+              size="sm"
+              onClick={saveAnthropic}
+              disabled={busy || !apiKey || apiKey.startsWith("•")}
+            >
               Save
             </Button>
             {anthropicSaved && (
@@ -195,8 +193,7 @@ export function AiSettings() {
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[11px] text-muted-foreground">
-              Service account JSON{" "}
-              {vertexSaved && <em className="text-emerald-500">(saved)</em>}
+              Service account JSON {vertexSaved && <em className="text-emerald-500">(saved)</em>}
             </span>
             <textarea
               value={serviceAccountJson}
@@ -213,7 +210,9 @@ export function AiSettings() {
             <Button
               size="sm"
               onClick={saveVertex}
-              disabled={busy || !projectId || !serviceAccountJson || serviceAccountJson.startsWith("•")}
+              disabled={
+                busy || !projectId || !serviceAccountJson || serviceAccountJson.startsWith("•")
+              }
             >
               Save
             </Button>

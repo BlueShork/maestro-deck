@@ -242,19 +242,19 @@ function SimpleSummary({
   failedAt: number;
 }) {
   if (stopRequested) {
-    return <div className="mt-2 text-muted-foreground">⏹  Test stopped</div>;
+    return <div className="mt-2 text-muted-foreground">⏹ Test stopped</div>;
   }
   if (exitCode === 0 && failedAt === -1) {
     return (
       <div className="mt-2 text-emerald-600 dark:text-emerald-400">
-        ✅  Test passed — {totalSteps} step{totalSteps === 1 ? "" : "s"} in{" "}
+        ✅ Test passed — {totalSteps} step{totalSteps === 1 ? "" : "s"} in{" "}
         {formatDuration(totalMs) || "<0.1s"}
       </div>
     );
   }
   return (
     <div className="mt-2 text-red-600 dark:text-red-400">
-      ❌  Test failed{failedAt >= 0 ? ` at step ${failedAt + 1}` : ""}
+      ❌ Test failed{failedAt >= 0 ? ` at step ${failedAt + 1}` : ""}
     </div>
   );
 }

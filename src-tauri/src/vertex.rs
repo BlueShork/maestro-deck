@@ -58,8 +58,7 @@ pub async fn vertex_get_access_token(
     let key = EncodingKey::from_rsa_pem(sa.private_key.as_bytes())
         .map_err(|e| format!("invalid private key: {e}"))?;
 
-    let assertion = encode(&header, &claims, &key)
-        .map_err(|e| format!("jwt encode: {e}"))?;
+    let assertion = encode(&header, &claims, &key).map_err(|e| format!("jwt encode: {e}"))?;
 
     let resp = reqwest::Client::new()
         .post(&sa.token_uri)
@@ -91,7 +90,9 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_invalid_json() {
-        let err = vertex_get_access_token("not-json".into()).await.unwrap_err();
+        let err = vertex_get_access_token("not-json".into())
+            .await
+            .unwrap_err();
         assert!(err.contains("invalid service account JSON"), "got: {err}");
     }
 

@@ -45,10 +45,7 @@ export function ModelPicker() {
             {i > 0 && <DropdownMenuSeparator />}
             <DropdownMenuLabel>{PROVIDER_LABEL[p]}</DropdownMenuLabel>
             {grouped[p].map((m) => (
-              <DropdownMenuItem
-                key={`${p}:${m.id}`}
-                onSelect={() => setProvider(p, m.id)}
-              >
+              <DropdownMenuItem key={`${p}:${m.id}`} onSelect={() => setProvider(p, m.id)}>
                 {m.label}
               </DropdownMenuItem>
             ))}

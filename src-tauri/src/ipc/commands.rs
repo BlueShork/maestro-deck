@@ -8,9 +8,9 @@ use tracing::{info, warn};
 
 use crate::device::{adb, Device};
 use crate::error::{AppError, AppResult};
-use crate::maestro_health::{self, HealthReport, KillReport};
 use crate::hierarchy::{self, HierarchyTree, UINode};
 use crate::input::{self, InputEvent};
+use crate::maestro_health::{self, HealthReport, KillReport};
 use crate::metrics;
 use crate::runner;
 use crate::scrcpy;

@@ -24,14 +24,18 @@ describe("runStore.steps", () => {
 
   it("applyEvent transitions started → running", () => {
     useRunStore.getState().initSteps(mkSteps());
-    useRunStore.getState().applyEvent({ kind: "started", command: "launchApp", arg: "com.example" });
+    useRunStore
+      .getState()
+      .applyEvent({ kind: "started", command: "launchApp", arg: "com.example" });
     expect(useRunStore.getState().steps[0].status).toBe("running");
     expect(useRunStore.getState().steps[0].startedAt).not.toBeNull();
   });
 
   it("applyEvent transitions completed → done with duration", async () => {
     useRunStore.getState().initSteps(mkSteps());
-    useRunStore.getState().applyEvent({ kind: "started", command: "launchApp", arg: "com.example" });
+    useRunStore
+      .getState()
+      .applyEvent({ kind: "started", command: "launchApp", arg: "com.example" });
     await new Promise((r) => setTimeout(r, 5));
     useRunStore
       .getState()
@@ -44,9 +48,7 @@ describe("runStore.steps", () => {
 
   it("applyEvent failed sets error", () => {
     useRunStore.getState().initSteps(mkSteps());
-    useRunStore
-      .getState()
-      .applyEvent({ kind: "started", command: "tapOn", arg: "Login" });
+    useRunStore.getState().applyEvent({ kind: "started", command: "tapOn", arg: "Login" });
     useRunStore
       .getState()
       .applyEvent({ kind: "failed", command: "tapOn", arg: "Login", error: "Element not found" });

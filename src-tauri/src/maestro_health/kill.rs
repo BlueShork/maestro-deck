@@ -84,8 +84,14 @@ fn reverify_pid(ps_out: &str, pid: u32, expected_name: &str) -> bool {
             continue;
         }
         let mut parts = line.split_whitespace();
-        let pid_tok = match parts.next() { Some(t) => t, None => continue };
-        let name = match parts.next() { Some(n) => n, None => continue };
+        let pid_tok = match parts.next() {
+            Some(t) => t,
+            None => continue,
+        };
+        let name = match parts.next() {
+            Some(n) => n,
+            None => continue,
+        };
         if pid_tok.parse::<u32>().ok() != Some(pid) {
             continue;
         }
@@ -141,10 +147,7 @@ fn do_kill_pid(device_id: &str, pid: u32) -> AppResult<()> {
     Ok(())
 }
 
-pub fn kill_maestro_processes(
-    device_id: &str,
-    report: HealthReport,
-) -> AppResult<KillReport> {
+pub fn kill_maestro_processes(device_id: &str, report: HealthReport) -> AppResult<KillReport> {
     let mut out = KillReport::default();
 
     // Step 1 — driver
@@ -171,10 +174,8 @@ pub fn kill_maestro_processes(
         let ps_out = match fetch_pid_name(device_id, orphan.pid) {
             Ok(s) => s,
             Err(e) => {
-                out.errors.push(format!(
-                    "ps -p {} failed: {} — skipping",
-                    orphan.pid, e
-                ));
+                out.errors
+                    .push(format!("ps -p {} failed: {} — skipping", orphan.pid, e));
                 continue;
             }
         };
@@ -275,7 +276,10 @@ mod tests {
     #[test]
     fn maestro_driver_package_is_hardcoded() {
         assert_eq!(MAESTRO_DRIVER_PACKAGE, "dev.mobile.maestro");
-        let _ = ProcessInfo { pid: 1, name: "x".into() };
+        let _ = ProcessInfo {
+            pid: 1,
+            name: "x".into(),
+        };
     }
 
     #[test]

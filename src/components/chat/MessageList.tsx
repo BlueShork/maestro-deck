@@ -15,6 +15,7 @@ export function MessageList({ onOpenSettings }: MessageListProps) {
   const messages = useChatStore((s) => s.messages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const isOpen = useChatStore((s) => s.isOpen);
+  const scrollBump = useChatStore((s) => s.scrollBump);
   const ref = useRef<HTMLDivElement | null>(null);
 
   // null = unknown (still checking), boolean = result
@@ -40,7 +41,7 @@ export function MessageList({ onOpenSettings }: MessageListProps) {
     const el = ref.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, isStreaming]);
+  }, [messages, isStreaming, scrollBump]);
 
   if (messages.length === 0) {
     if (hasCreds === null) {
@@ -65,9 +66,7 @@ export function MessageList({ onOpenSettings }: MessageListProps) {
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
         <Sparkles className="h-8 w-8 text-primary" />
         <p className="text-base font-semibold">Billy Assistant</p>
-        <p className="max-w-xs text-sm text-muted-foreground">
-          Hello, how can I help you today?
-        </p>
+        <p className="max-w-xs text-sm text-muted-foreground">Hello, how can I help you today?</p>
       </div>
     );
   }

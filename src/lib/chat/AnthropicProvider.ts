@@ -68,7 +68,11 @@ export class AnthropicProvider implements ChatProvider {
     }
 
     for await (const evt of readSSE(resp.body) as AsyncIterable<AnthropicEvent>) {
-      if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && evt.delta.text) {
+      if (
+        evt.type === "content_block_delta" &&
+        evt.delta?.type === "text_delta" &&
+        evt.delta.text
+      ) {
         yield evt.delta.text;
       }
     }

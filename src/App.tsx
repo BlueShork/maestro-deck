@@ -170,15 +170,12 @@ export default function App() {
         });
       },
     );
-    const unlistenRecovered = listen<{ device_id: string }>(
-      "driver-recovered",
-      () => {
-        if (toastId) {
-          useToastStore.getState().dismiss(toastId);
-          toastId = null;
-        }
-      },
-    );
+    const unlistenRecovered = listen<{ device_id: string }>("driver-recovered", () => {
+      if (toastId) {
+        useToastStore.getState().dismiss(toastId);
+        toastId = null;
+      }
+    });
     return () => {
       void unlistenRecovering.then((u) => u());
       void unlistenRecovered.then((u) => u());
@@ -292,10 +289,7 @@ export default function App() {
           `[runner started pid ${pid} · from line ${partial.firstStepOriginalLine}]`,
         );
       } catch (err) {
-        toast.error(
-          "Run from here failed",
-          err instanceof Error ? err.message : String(err),
-        );
+        toast.error("Run from here failed", err instanceof Error ? err.message : String(err));
       }
     },
     [setRunning, appendLog, initSteps, resetSteps],
@@ -466,13 +460,7 @@ export default function App() {
           {chatOpen ? (
             <>
               <PanelResizeHandle className={RESIZE_HANDLE_H} />
-              <Panel
-                id="chat"
-                order={4}
-                defaultSize={CHAT_SIZE}
-                minSize={20}
-                maxSize={50}
-              >
+              <Panel id="chat" order={4} defaultSize={CHAT_SIZE} minSize={20} maxSize={50}>
                 <ChatPanel onOpenSettings={() => setSettingsOpen(true)} />
               </Panel>
             </>

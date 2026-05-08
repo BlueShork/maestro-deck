@@ -75,8 +75,7 @@ export const ipc = {
   stopStream: () => call<void>("stop_stream"),
   startMetrics: () => call<void>("start_metrics"),
   stopMetrics: () => call<void>("stop_metrics"),
-  checkDeviceHealth: (serial: string) =>
-    call<HealthReport>("check_device_health", { serial }),
+  checkDeviceHealth: (serial: string) => call<HealthReport>("check_device_health", { serial }),
   killMaestroProcesses: (serial: string, report: HealthReport) =>
     call<KillReport>("kill_maestro_processes", { serial, report }),
 };

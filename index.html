@@ -28,7 +28,11 @@
       html,
       body {
         margin: 0;
-        font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+        font-family:
+          ui-sans-serif,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
       }
       html {
         background: hsl(40 30% 99%);
@@ -117,12 +121,23 @@
         background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
       }
       @keyframes pulse {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50%      { transform: scale(0.96); opacity: 0.85; }
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(0.96);
+          opacity: 0.85;
+        }
       }
       @keyframes slide {
-        0%   { transform: translateX(-100%); }
-        100% { transform: translateX(350%); }
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(350%);
+        }
       }
     </style>
   </head>

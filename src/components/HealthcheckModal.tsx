@@ -58,22 +58,21 @@ export function HealthcheckModal({ open, onOpenChange, serial, report }: Props) 
           </DialogTitle>
           <DialogDescription>
             The following Maestro artifacts are still present on{" "}
-            <span className="font-mono">{serial}</span>. Kill them to recover
-            without restarting Maestro Deck.
+            <span className="font-mono">{serial}</span>. Kill them to recover without restarting
+            Maestro Deck.
           </DialogDescription>
         </DialogHeader>
 
         <ul className="flex flex-col gap-1 text-sm">
           {report.driver_running !== null && (
             <li>
-              · Driver app <span className="font-mono">dev.mobile.maestro</span>{" "}
-              running (pid {report.driver_running})
+              · Driver app <span className="font-mono">dev.mobile.maestro</span> running (pid{" "}
+              {report.driver_running})
             </li>
           )}
           {report.port_forwarded !== null && (
             <li>
-              · Port forwarding active:{" "}
-              <span className="font-mono">{report.port_forwarded}</span>
+              · Port forwarding active: <span className="font-mono">{report.port_forwarded}</span>
             </li>
           )}
           {report.orphan_processes.map((p) => (
@@ -90,14 +89,11 @@ export function HealthcheckModal({ open, onOpenChange, serial, report }: Props) 
             <div>Orphans killed: {result.orphans_killed.join(", ") || "—"}</div>
             {result.orphans_skipped.length > 0 && (
               <div>
-                Skipped:{" "}
-                {result.orphans_skipped.map(([pid, why]) => `${pid} (${why})`).join(", ")}
+                Skipped: {result.orphans_skipped.map(([pid, why]) => `${pid} (${why})`).join(", ")}
               </div>
             )}
             {result.errors.length > 0 && (
-              <div className="text-destructive">
-                Errors: {result.errors.join("; ")}
-              </div>
+              <div className="text-destructive">Errors: {result.errors.join("; ")}</div>
             )}
           </div>
         )}

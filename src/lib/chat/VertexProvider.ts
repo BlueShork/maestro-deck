@@ -108,7 +108,11 @@ export class VertexProvider implements ChatProvider {
 
     if (isAnthropic) {
       for await (const evt of readSSE(resp.body) as AsyncIterable<AnthropicVertexEvent>) {
-        if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && evt.delta.text) {
+        if (
+          evt.type === "content_block_delta" &&
+          evt.delta?.type === "text_delta" &&
+          evt.delta.text
+        ) {
           yield evt.delta.text;
         }
       }

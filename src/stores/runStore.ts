@@ -64,8 +64,7 @@ export const useRunStore = create<RunState>((set) => ({
   stopRequested: false,
   logs: [],
   steps: [],
-  setRunning: (pid) =>
-    set({ running: true, pid, exitCode: null, stopRequested: false, logs: [] }),
+  setRunning: (pid) => set({ running: true, pid, exitCode: null, stopRequested: false, logs: [] }),
   requestStop: () => set({ stopRequested: true }),
   setStopped: (exitCode) => set({ running: false, pid: null, exitCode }),
   appendLog: (stream, text) =>

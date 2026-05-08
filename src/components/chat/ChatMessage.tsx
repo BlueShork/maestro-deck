@@ -1,9 +1,35 @@
 import { Sparkles } from "lucide-react";
+import { isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { cn } from "@/lib/utils";
 import type { ChatMessage as ChatMessageT } from "@/types/chat";
+
+import { CodeBlock } from "./CodeBlock";
+
+function flattenChildren(node: ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(flattenChildren).join("");
+  if (isValidElement(node)) {
+    const props = node.props as { children?: ReactNode };
+    return flattenChildren(props.children);
+  }
+  return "";
+}
+
+function extractCodeFromPre(children: ReactNode): { language: string | null; code: string } | null {
+  // ReactMarkdown wraps fenced code blocks as `<pre><code class="language-x">...</code></pre>`.
+  // We unwrap to get the language and raw text so we can render our own
+  // styled CodeBlock with action buttons.
+  const codeEl = Array.isArray(children) ? children[0] : children;
+  if (!isValidElement(codeEl)) return null;
+  const props = codeEl.props as { className?: string; children?: ReactNode };
+  const match = props.className?.match(/language-([\w-]+)/);
+  const language = match ? match[1] : null;
+  const code = flattenChildren(props.children).replace(/\n$/, "");
+  return { language, code };
+}
 
 export function ChatMessage({ message }: { message: ChatMessageT }) {
   const isUser = message.role === "user";
@@ -24,17 +50,13 @@ export function ChatMessage({ message }: { message: ChatMessageT }) {
         <Sparkles className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
-        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
-          Billy
-        </div>
+        <div className="mb-1 text-[11px] font-medium text-muted-foreground">Billy</div>
         {message.content ? (
           <div className="text-sm leading-relaxed text-foreground">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                p: ({ children }) => (
-                  <p className="mb-3 last:mb-0">{children}</p>
-                ),
+                p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
                 ul: ({ children }) => (
                   <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0 marker:text-muted-foreground">
                     {children}
@@ -46,16 +68,26 @@ export function ChatMessage({ message }: { message: ChatMessageT }) {
                   </ol>
                 ),
                 li: ({ children }) => <li className="pl-0.5">{children}</li>,
-                pre: ({ children }) => (
-                  <pre className="my-3 max-w-full overflow-x-auto rounded-lg border border-border bg-muted/60 p-3 font-mono text-[12px] leading-relaxed">
-                    {children}
-                  </pre>
-                ),
+                pre: ({ children }) => {
+                  const block = extractCodeFromPre(children);
+                  if (!block) {
+                    return (
+                      <pre className="my-3 max-w-full overflow-x-auto rounded-lg border border-border bg-muted/60 p-3 font-mono text-[12px] leading-relaxed">
+                        {children}
+                      </pre>
+                    );
+                  }
+                  return <CodeBlock language={block.language} code={block.code} />;
+                },
                 code: ({ className, children, ...props }) => {
                   const isBlock = className?.startsWith("language-");
                   if (isBlock) {
+                    // The parent <pre> override owns the rendering for
+                    // fenced blocks; passthrough the inner <code> as-is so
+                    // markdown processors that look up the className still
+                    // see it (we don't actually rely on this at runtime).
                     return (
-                      <code className={cn(className)} {...props}>
+                      <code className={className} {...props}>
                         {children}
                       </code>
                     );

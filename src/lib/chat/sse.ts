@@ -6,9 +6,7 @@
  * preceded by `event: <name>\n`). We surface the parsed JSON; callers
  * project text deltas out of it.
  */
-export async function* readSSE(
-  body: ReadableStream<Uint8Array>,
-): AsyncGenerator<unknown> {
+export async function* readSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";

@@ -13,14 +13,21 @@ export function ChatInput() {
   const cancel = useChatStore((s) => s.cancel);
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
-  // Auto-grow textarea up to MAX_HEIGHT.
+  const bumpScroll = useChatStore((s) => s.bumpScroll);
+
+  // Auto-grow textarea up to MAX_HEIGHT. Whenever the height actually
+  // changes, ping MessageList to re-anchor its scroll to the bottom —
+  // otherwise the newly-taller input hides the latest message.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const before = el.style.height;
     el.style.height = "0px";
     const next = Math.min(el.scrollHeight, MAX_HEIGHT);
-    el.style.height = `${next}px`;
-  }, [value]);
+    const nextStyle = `${next}px`;
+    el.style.height = nextStyle;
+    if (before !== nextStyle) bumpScroll();
+  }, [value, bumpScroll]);
 
   const submit = () => {
     const text = value;

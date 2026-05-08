@@ -2,7 +2,27 @@ import { create } from "zustand";
 
 import { getProvider } from "@/lib/chat/registry";
 import { BILLY_SYSTEM_PROMPT } from "@/lib/chat/systemPrompt";
+import { useFlowStore } from "@/stores/flowStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+import type { WorkspaceNode } from "@/types";
 import type { ChatMessage, ProviderId } from "@/types/chat";
+
+function listYamlPaths(node: WorkspaceNode | null, root: string | null): string[] {
+  if (!node) return [];
+  const out: string[] = [];
+  const walk = (n: WorkspaceNode) => {
+    if (n.kind === "file") {
+      if (/\.ya?ml$/.test(n.name)) {
+        const rel = root && n.path.startsWith(root) ? n.path.slice(root.length).replace(/^[/\\]/, "") : n.path;
+        out.push(rel);
+      }
+      return;
+    }
+    for (const child of n.children) walk(child);
+  };
+  walk(node);
+  return out.sort();
+}
 
 interface ChatState {
   isOpen: boolean;
@@ -14,12 +34,17 @@ interface ChatState {
 
   abort: AbortController | null;
 
+  /** Bumped whenever something needs MessageList to scroll to bottom
+   *  (e.g. the input grew and consumed visible space). */
+  scrollBump: number;
+
   toggle: () => void;
   setOpen: (open: boolean) => void;
   setProvider: (provider: ProviderId, model: string) => void;
   sendMessage: (text: string) => Promise<void>;
   cancel: () => void;
   clear: () => void;
+  bumpScroll: () => void;
 }
 
 const DEFAULTS = {
@@ -35,6 +60,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentModel: DEFAULTS.model,
   error: null,
   abort: null,
+  scrollBump: 0,
 
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
   setOpen: (open) => set({ isOpen: open }),
@@ -81,9 +107,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content: BILLY_SYSTEM_PROMPT,
         createdAt: 0,
       };
+
+      // Inject the current editor state + workspace tree on every send
+      // (re-read fresh so edits made between messages are visible to
+      // Billy). We don't bake the context into history because that
+      // would create stale snapshots.
+      const flow = useFlowStore.getState();
+      const ws = useWorkspaceStore.getState();
+      const yamlPaths = listYamlPaths(ws.tree, ws.folderPath);
+
+      const contextParts: string[] = [];
+      if (yamlPaths.length > 0) {
+        contextParts.push(
+          `# Workspace files\n\nThe user has the workspace at \`${ws.folderPath ?? "(no folder)"}\` open. The following \`.yaml\` flow files exist:\n\n${yamlPaths
+            .map((p) => `- ${p}`)
+            .join("\n")}`,
+        );
+      }
+      if (flow.content.trim()) {
+        contextParts.push(
+          `# Currently open file\n\nThe editor is showing \`${flow.filePath ?? "(unsaved)"}\` with this content:\n\n\`\`\`yaml\n${flow.content}\n\`\`\``,
+        );
+      }
+      contextParts.push(
+        `# How to propose modifications\n\n` +
+          `- You can only directly modify the file currently open in the editor (shown above).\n` +
+          `- If the user asks you to change a different file from the workspace list, ask them to open it first (the **Apply** button only operates on the current editor).\n` +
+          `- When proposing a change to the open file, respond with the **complete new YAML** inside a single \`\`\`yaml fenced block. The UI will surface an Apply button on that block.`,
+      );
+
+      const contextMsg: ChatMessage | null = contextParts.length
+        ? {
+            id: "context",
+            role: "system",
+            content: contextParts.join("\n\n"),
+            createdAt: 0,
+          }
+        : null;
+
+      const history = get().messages.filter((m) => m.id !== assistantId);
       const stream = provider.stream({
         model: get().currentModel,
-        messages: [systemMsg, ...get().messages.filter((m) => m.id !== assistantId)],
+        messages: contextMsg ? [systemMsg, contextMsg, ...history] : [systemMsg, ...history],
         signal: abort.signal,
       });
 
@@ -98,9 +163,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (abort.signal.aborted) {
         set((s) => ({
           messages: s.messages.map((m) =>
-            m.id === assistantId
-              ? { ...m, content: m.content + "\n\n_[stopped]_" }
-              : m,
+            m.id === assistantId ? { ...m, content: m.content + "\n\n_[stopped]_" } : m,
           ),
         }));
       } else {
@@ -120,4 +183,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clear: () => set({ messages: [], error: null }),
+
+  bumpScroll: () => set((s) => ({ scrollBump: s.scrollBump + 1 })),
 }));

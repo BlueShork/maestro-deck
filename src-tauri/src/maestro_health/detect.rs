@@ -1,12 +1,12 @@
 //! Read-only detection of Maestro residue on a device.
 
+use super::HealthReport;
+use super::ProcessInfo;
+use crate::device::adb::adb_bin;
+use crate::error::{AppError, AppResult};
 use std::net::{SocketAddr, TcpStream};
 use std::process::Command;
 use std::time::Duration;
-use crate::device::adb::adb_bin;
-use crate::error::{AppError, AppResult};
-use super::HealthReport;
-use super::ProcessInfo;
 
 /// Runs `adb -s <device_id> <args...>` and returns stdout. Distinguishes
 /// "adb not on PATH" from generic adb failures so the UI can show the
@@ -33,9 +33,8 @@ fn run_adb_for_device(device_id: &str, args: &[&str]) -> AppResult<String> {
 /// Strict whitelist: substring match against known markers.
 fn is_orphan_candidate(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    lower.contains("maestro")
-        || lower.contains("instrument")
-        || lower.contains(".am") // covers `com.android.commands.am`
+    lower.contains("maestro") || lower.contains("instrument") || lower.contains(".am")
+    // covers `com.android.commands.am`
 }
 
 /// Public mirror of the orphan whitelist for the kill module.
@@ -117,19 +116,13 @@ pub fn check_device_health(device_id: &str) -> AppResult<HealthReport> {
             }
         })?;
     let port_forwarded = if forward_out.status.success() {
-        parse_forward_list(
-            &String::from_utf8_lossy(&forward_out.stdout),
-            device_id,
-        )
+        parse_forward_list(&String::from_utf8_lossy(&forward_out.stdout), device_id)
     } else {
         None
     };
 
     // Check 3 — orphan processes
-    let ps_out = run_adb_for_device(
-        device_id,
-        &["shell", "ps", "-A", "-o", "PID,NAME"],
-    )?;
+    let ps_out = run_adb_for_device(device_id, &["shell", "ps", "-A", "-o", "PID,NAME"])?;
     let orphan_processes = parse_ps_orphans(&ps_out, driver_running);
 
     Ok(HealthReport {
@@ -256,8 +249,14 @@ PID NAME
         assert_eq!(
             orphans,
             vec![
-                ProcessInfo { pid: 5678, name: "com.android.commands.am".into() },
-                ProcessInfo { pid: 3456, name: "instrumentation.helper".into() },
+                ProcessInfo {
+                    pid: 5678,
+                    name: "com.android.commands.am".into()
+                },
+                ProcessInfo {
+                    pid: 3456,
+                    name: "instrumentation.helper".into()
+                },
             ]
         );
     }
@@ -279,7 +278,10 @@ PID NAME
 ";
         assert_eq!(
             parse_ps_orphans(out, None),
-            vec![ProcessInfo { pid: 1234, name: "dev.mobile.maestro".into() }]
+            vec![ProcessInfo {
+                pid: 1234,
+                name: "dev.mobile.maestro".into()
+            }]
         );
     }
 

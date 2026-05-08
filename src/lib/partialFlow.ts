@@ -6,10 +6,7 @@ export interface PartialFlow {
   firstStepOriginalLine: number;
 }
 
-export function buildPartialFlow(
-  source: string,
-  fromLine: number,
-): PartialFlow | null {
+export function buildPartialFlow(source: string, fromLine: number): PartialFlow | null {
   const ast = parseFlow(source);
   if (ast.steps.length === 0) return null;
 

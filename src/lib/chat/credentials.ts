@@ -1,10 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type {
-  AnthropicCredentials,
-  ProviderId,
-  VertexCredentials,
-} from "@/types/chat";
+import type { AnthropicCredentials, ProviderId, VertexCredentials } from "@/types/chat";
 
 /**
  * Credential store backed by the OS keychain (macOS Keychain Services,

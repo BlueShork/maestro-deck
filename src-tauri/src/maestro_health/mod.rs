@@ -93,8 +93,5 @@ pub fn preflight_with_recovery(app: &AppHandle, device_id: &str, action: &'stati
 
     kill::recover_driver(device_id);
 
-    let _ = app.emit(
-        "driver-recovered",
-        DriverRecoveredPayload { device_id },
-    );
+    let _ = app.emit("driver-recovered", DriverRecoveredPayload { device_id });
 }

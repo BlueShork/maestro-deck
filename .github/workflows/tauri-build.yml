@@ -2,11 +2,11 @@ name: Maestro Deck - Tauri Build
 on:
   pull_request:
     paths:
-      - 'src-tauri/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
+      - "src-tauri/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
   push:
-    tags: ['v*']
+    tags: ["v*"]
 
 jobs:
   build:
