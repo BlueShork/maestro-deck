@@ -23,6 +23,8 @@ import { buildPartialFlow } from "@/lib/partialFlow";
 import { useShortcuts } from "@/lib/keyboard";
 import { parseLine as parseRunLine } from "@/lib/runStepParser";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { useChatStore } from "@/stores/chatStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useMetricsStore } from "@/stores/metricsStore";
@@ -194,10 +196,15 @@ export default function App() {
   // resizable-panels warns and normalizes otherwise. Since any panel
   // can be hidden, we compute the fill-sizes dynamically per siblings
   // count so the totals always balance regardless of visibility.
+  const chatOpen = useChatStore((s) => s.isOpen);
   const WORKSPACE_SIZE = 15;
   const INSPECTOR_SIZE = 18;
+  const CHAT_SIZE = 28;
   const mainSize =
-    100 - (panels.workspace ? WORKSPACE_SIZE : 0) - (panels.inspector ? INSPECTOR_SIZE : 0);
+    100 -
+    (panels.workspace ? WORKSPACE_SIZE : 0) -
+    (panels.inspector ? INSPECTOR_SIZE : 0) -
+    (chatOpen ? CHAT_SIZE : 0);
 
   const bottomVisible = panels.console || (perfEnabled && panelOpen && panels.metrics);
   const mainTopSize = bottomVisible ? 65 : 100;
@@ -455,6 +462,21 @@ export default function App() {
               ) : null}
             </PanelGroup>
           </Panel>
+
+          {chatOpen ? (
+            <>
+              <PanelResizeHandle className={RESIZE_HANDLE_H} />
+              <Panel
+                id="chat"
+                order={4}
+                defaultSize={CHAT_SIZE}
+                minSize={20}
+                maxSize={50}
+              >
+                <ChatPanel onOpenSettings={() => setSettingsOpen(true)} />
+              </Panel>
+            </>
+          ) : null}
         </PanelGroup>
       </div>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

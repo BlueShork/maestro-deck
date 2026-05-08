@@ -1,5 +1,6 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 
+import { AiSettings } from "@/components/AiSettings";
 import {
   Dialog,
   DialogContent,
@@ -7,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/Dialog";
+import { Separator } from "@/components/ui/Separator";
 import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils";
 import { useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
@@ -41,12 +43,12 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] w-full max-w-2xl flex-col p-0">
+        <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>Theme and shortcut preferences are saved locally.</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4 text-sm">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 text-sm">
           <div className="flex flex-col gap-2">
             <span className="text-xs font-medium text-muted-foreground">Theme</span>
             <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
@@ -148,6 +150,9 @@ export function SettingsDialog({
               className="w-12 rounded border border-border bg-background px-2 py-1 text-center font-mono text-xs"
             />
           </label>
+
+          <Separator className="my-1" />
+          <AiSettings />
         </div>
       </DialogContent>
     </Dialog>

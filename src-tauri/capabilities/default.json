@@ -12,6 +12,7 @@
     "core:resources:default",
     "core:menu:default",
     "core:tray:default",
+    "core:path:default",
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
@@ -31,6 +32,9 @@
       "identifier": "fs:scope",
       "allow": [
         { "path": "$HOME/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPCONFIG/**" },
+        { "path": "$APPLOCALDATA/**" },
         { "path": "$DOCUMENT/**" },
         { "path": "$DOWNLOAD/**" },
         { "path": "$TEMP/**" }

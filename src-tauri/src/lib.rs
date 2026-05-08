@@ -1,5 +1,6 @@
 //! Maestro Deck — open-source visual IDE for Maestro mobile tests.
 
+pub mod credentials;
 pub mod device;
 mod env_shim;
 pub mod error;
@@ -12,13 +13,16 @@ pub mod runner;
 pub mod scrcpy;
 pub mod selector;
 pub mod state;
+pub mod vertex;
 pub mod video;
 pub mod workspace;
 pub mod yaml;
 
 use tracing_subscriber::{fmt, EnvFilter};
 
+use credentials::{delete_credential, get_credential, save_credential};
 use ipc::commands::*;
+use vertex::vertex_get_access_token;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -60,6 +64,10 @@ pub fn run() {
             stop_metrics,
             start_stream,
             stop_stream,
+            vertex_get_access_token,
+            save_credential,
+            get_credential,
+            delete_credential,
         ])
         .setup(|app| {
             ipc::register_events(app)?;

@@ -7,6 +7,7 @@ import {
   MousePointer2,
   Play,
   Settings,
+  Sparkles,
   Square,
 } from "lucide-react";
 
@@ -25,6 +26,7 @@ import {
 import { Separator } from "@/components/ui/Separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chatStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
@@ -51,6 +53,8 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProps) {
+  const chatOpen = useChatStore((s) => s.isOpen);
+  const toggleChat = useChatStore((s) => s.toggle);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const inspectLoading = useInspectorStore((s) => s.loading);
   const toggleInspect = useInspectorStore((s) => s.toggle);
@@ -183,6 +187,20 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
               <DropdownMenuItem onSelect={() => showAllPanels()}>Show all</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant={chatOpen ? "secondary" : "ghost"}
+                onClick={toggleChat}
+                aria-label="Toggle AI assistant"
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>AI assistant</TooltipContent>
+          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>
