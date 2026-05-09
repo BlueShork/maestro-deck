@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 export type ThemeMode = "light" | "dark" | "system";
+export type ConsoleMode = "simple" | "technical";
 
 interface SettingsState {
   inspectKey: string;
@@ -20,12 +21,18 @@ interface SettingsState {
    * until we've validated output parity against the CLI path.
    */
   fastHierarchyEnabled: boolean;
+  autoSaveEnabled: boolean;
+  autoCheckUpdatesEnabled: boolean;
+  consoleMode: ConsoleMode;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
   setStreamEnabled: (v: boolean) => void;
   setPerfMonitoringEnabled: (v: boolean) => void;
   setFastHierarchyEnabled: (v: boolean) => void;
+  setAutoSaveEnabled: (v: boolean) => void;
+  setAutoCheckUpdatesEnabled: (v: boolean) => void;
+  setConsoleMode: (m: ConsoleMode) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -37,12 +44,18 @@ export const useSettingsStore = create<SettingsState>()(
       streamEnabled: true,
       perfMonitoringEnabled: false,
       fastHierarchyEnabled: false,
+      autoSaveEnabled: true,
+      autoCheckUpdatesEnabled: true,
+      consoleMode: "simple",
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
       setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
+      setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
+      setAutoCheckUpdatesEnabled: (autoCheckUpdatesEnabled) => set({ autoCheckUpdatesEnabled }),
+      setConsoleMode: (consoleMode) => set({ consoleMode }),
     }),
     {
       name: "maestro-deck.settings",
@@ -53,6 +66,9 @@ export const useSettingsStore = create<SettingsState>()(
         streamEnabled: s.streamEnabled,
         perfMonitoringEnabled: s.perfMonitoringEnabled,
         fastHierarchyEnabled: s.fastHierarchyEnabled,
+        autoSaveEnabled: s.autoSaveEnabled,
+        autoCheckUpdatesEnabled: s.autoCheckUpdatesEnabled,
+        consoleMode: s.consoleMode,
       }),
     },
   ),

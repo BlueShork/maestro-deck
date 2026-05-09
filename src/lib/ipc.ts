@@ -3,8 +3,10 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
   Device,
+  HealthReport,
   HierarchyTree,
   InputEvent,
+  KillReport,
   MaestroAction,
   RunnerExitPayload,
   Selector,
@@ -17,11 +19,7 @@ export class IpcError extends Error {
     public readonly command: string,
     cause: unknown,
   ) {
-    super(
-      `IPC ${command} failed: ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-    );
+    super(`IPC ${command} failed: ${cause instanceof Error ? cause.message : String(cause)}`);
     this.name = "IpcError";
   }
 }
@@ -62,14 +60,10 @@ export const ipc = {
   connectDevice: (serial: string, streamEnabled: boolean) =>
     call<void>("connect_device", { serial, streamEnabled }),
   disconnectDevice: () => call<void>("disconnect_device"),
-  enterInspectMode: (fastMode: boolean) =>
-    call<HierarchyTree>("enter_inspect_mode", { fastMode }),
-  queryElement: (x: number, y: number) =>
-    call<UINode | null>("query_element", { x, y }),
-  suggestSelectors: (node: UINode) =>
-    call<Selector[]>("suggest_selectors", { node }),
-  generateCommand: (action: MaestroAction) =>
-    call<string>("generate_command", { action }),
+  enterInspectMode: (fastMode: boolean) => call<HierarchyTree>("enter_inspect_mode", { fastMode }),
+  queryElement: (x: number, y: number) => call<UINode | null>("query_element", { x, y }),
+  suggestSelectors: (node: UINode) => call<Selector[]>("suggest_selectors", { node }),
+  generateCommand: (action: MaestroAction) => call<string>("generate_command", { action }),
   sendInput: (event: InputEvent, screenW: number, screenH: number) =>
     call<void>("send_input", { event, screenW, screenH }),
   setDarkMode: (enabled: boolean) => call<void>("set_dark_mode", { enabled }),
@@ -81,6 +75,9 @@ export const ipc = {
   stopStream: () => call<void>("stop_stream"),
   startMetrics: () => call<void>("start_metrics"),
   stopMetrics: () => call<void>("stop_metrics"),
+  checkDeviceHealth: (serial: string) => call<HealthReport>("check_device_health", { serial }),
+  killMaestroProcesses: (serial: string, report: HealthReport) =>
+    call<KillReport>("kill_maestro_processes", { serial, report }),
 };
 
 export interface FrameEvent {
@@ -119,9 +116,7 @@ export const events = {
     listen<string>("runner:stdout", (e) => handler(e.payload)),
   onRunnerStderr: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stderr", (e) => handler(e.payload)),
-  onRunnerExit: (
-    handler: (payload: RunnerExitPayload) => void,
-  ): Promise<UnlistenFn> =>
+  onRunnerExit: (handler: (payload: RunnerExitPayload) => void): Promise<UnlistenFn> =>
     listen<RunnerExitPayload>("runner:exit", (e) => handler(e.payload)),
   onDeviceDisconnected: (handler: () => void): Promise<UnlistenFn> =>
     listen<null>("device:disconnected", () => handler()),

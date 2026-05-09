@@ -1,7 +1,7 @@
 //! Keep a background `maestro studio` process alive so the on-device
 //! driver stays installed and its gRPC server stays bound to
-//! `localhost:7001`. Studio does the heavy lifting (install driver APK
-//! + start instrumentation + set up adb forward); we piggyback on it
+//! `localhost:7001`. Studio does the heavy lifting (install driver APK,
+//! start instrumentation, set up adb forward); we piggyback on it
 //! to avoid reimplementing that flow ourselves.
 //!
 //! Once `start()` returns, callers can connect a tonic client to
@@ -85,7 +85,7 @@ impl StudioKeeper {
         // `--no-window` tells studio to skip opening a browser tab on
         // start; we only need the side-effect (driver installed +
         // gRPC port forwarded), not the web UI.
-        cmd.args(["--device", serial, "studio", "--no-window"])
+        cmd.args(["--udid", serial, "studio", "--no-window"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -99,6 +99,20 @@ impl StudioKeeper {
             }
         })?;
 
+        // Maestro 2.5.x replaced the host-side `adb forward` with an
+        // in-process adb-socket factory, so studio no longer exposes
+        // anything on localhost:7001. Our gRPC client still wants plain
+        // TCP, so we set up the forward ourselves. It's held by the
+        // adb-server, independent of any maestro process — `maestro
+        // test`'s adb-socket talks via a different path and won't
+        // collide with this forward.
+        let port_spec = format!("tcp:{DRIVER_PORT}");
+        let adb = crate::device::adb::adb_bin();
+        let _ = Command::new(&adb)
+            .args(["-s", serial, "forward", &port_spec, &port_spec])
+            .output()
+            .await;
+
         let keeper = Self {
             child: Mutex::new(Some(child)),
             serial: serial.to_string(),
@@ -108,14 +122,16 @@ impl StudioKeeper {
         Ok(keeper)
     }
 
-    /// Poll `localhost:7001` until it accepts connections (driver up
-    /// and adb forward in place) or we time out. Also bails early if
-    /// the studio process itself exits — no point polling a port that
-    /// will never open.
+    /// Wait until the on-device instrumentation is actually serving on
+    /// port 7001. With our manual `adb forward`, a plain TCP connect to
+    /// `localhost:7001` would succeed immediately (adb-server holds the
+    /// listener) regardless of whether the device side is ready — so we
+    /// poll the device directly via `ss -tlnp`. Bails early if studio
+    /// exits prematurely.
     async fn await_ready(&self) -> AppResult<()> {
         let deadline = Instant::now() + STUDIO_READY_TIMEOUT;
-        let addr = ("127.0.0.1", DRIVER_PORT);
         let start = Instant::now();
+        let adb = crate::device::adb::adb_bin();
 
         loop {
             if Instant::now() >= deadline {
@@ -125,15 +141,11 @@ impl StudioKeeper {
                 )));
             }
 
-            // Surface studio's own failure faster than waiting for the
-            // overall timeout — if the child has already exited, the
-            // port is never coming up.
             if let Some(child) = self.child.lock().await.as_mut() {
                 if let Ok(Some(status)) = child.try_wait() {
                     warn!(
                         ?status,
-                        "maestro studio exited before binding {}",
-                        DRIVER_PORT
+                        "maestro studio exited before binding {}", DRIVER_PORT
                     );
                     return Err(AppError::RunnerFailed(format!(
                         "maestro studio exited before port {DRIVER_PORT} was ready (status: {status})"
@@ -141,11 +153,33 @@ impl StudioKeeper {
                 }
             }
 
-            if TcpStream::connect(addr).await.is_ok() {
+            // Probe the on-device side: `ss -tlnp` lists listening TCP
+            // sockets. Port 7001 (0x1B59) appears in the local-addr
+            // column once the maestro instrumentation has bound it.
+            // We grep with both decimal and hex forms because `ss` on
+            // some Android builds renders local addr in hex (proc-net
+            // style: `0100007F:1B59`).
+            let listening = match Command::new(&adb)
+                .args(["-s", &self.serial, "shell", "ss", "-tln"])
+                .output()
+                .await
+            {
+                Ok(out) => {
+                    let s = String::from_utf8_lossy(&out.stdout);
+                    s.lines().any(|line| {
+                        line.contains(":7001 ")
+                            || line.contains(":7001\t")
+                            || line.contains(":1B59 ")
+                            || line.contains(":1B59\t")
+                    })
+                }
+                Err(_) => false,
+            };
+
+            if listening {
                 info!(
                     elapsed_ms = start.elapsed().as_millis(),
-                    "maestro studio ready — driver listening on {}",
-                    DRIVER_PORT
+                    "maestro studio ready — instrumentation listening on device {}", DRIVER_PORT
                 );
                 return Ok(());
             }
@@ -176,6 +210,23 @@ impl StudioKeeper {
         }
         remove_adb_forward(&self.serial).await;
         force_stop_driver(&self.serial).await;
+    }
+
+    /// Soft pause: kill only the host-side `maestro studio` subprocess.
+    /// The on-device driver (`dev.mobile.maestro` + `.test` instrumentation)
+    /// and the `adb forward tcp:7001` are intentionally left in place so a
+    /// concurrent `maestro test` can talk to the driver immediately
+    /// without paying a reinstall cost.
+    ///
+    /// Use this instead of `stop()` when you need the host-side studio
+    /// out of the way (e.g. its dadb forwarder was conflicting with the
+    /// test process) but still want the device-side driver hot.
+    pub async fn pause(&self) {
+        if let Some(mut child) = self.child.lock().await.take() {
+            debug!(serial = %self.serial, "pausing maestro studio (soft)");
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
     }
 
     pub fn serial(&self) -> &str {
@@ -258,4 +309,38 @@ async fn kill_orphan_studios() {
                 .await;
         }
     }
+}
+
+/// Re-warm the `maestro studio` keeper for the currently-connected
+/// device on a background tokio task. Safe to call from anywhere with an
+/// `AppHandle`; never blocks and never returns an error to the caller.
+///
+/// Use this after a `maestro test` run completes so the next inspect
+/// call hits the fast gRPC path instead of paying the ~10–15 s studio
+/// startup cost.
+///
+/// If no device is connected when the task runs, it logs and returns —
+/// the studio is meaningless without a target device.
+pub fn schedule_studio_restart(app: tauri::AppHandle) {
+    use tauri::Manager;
+
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<crate::state::AppState>();
+        let serial = match state.connected_device.read().as_ref() {
+            Some(d) => d.serial.clone(),
+            None => {
+                tracing::debug!("no device connected — skipping studio restart");
+                return;
+            }
+        };
+        match StudioKeeper::start(&serial).await {
+            Ok(keeper) => {
+                *state.studio.lock().await = Some(std::sync::Arc::new(keeper));
+                tracing::info!(serial = %serial, "studio re-warmed after test");
+            }
+            Err(e) => {
+                tracing::warn!(serial = %serial, error = ?e, "studio restart failed");
+            }
+        }
+    });
 }

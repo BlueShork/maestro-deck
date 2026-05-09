@@ -79,11 +79,7 @@ function TreeNodeImpl({ node, depth }: TreeNodeProps) {
             }}
             className="text-muted-foreground hover:text-foreground"
           >
-            {open ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )}
+            {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           </button>
         ) : (
           <span className="inline-block w-3" />
@@ -91,9 +87,7 @@ function TreeNodeImpl({ node, depth }: TreeNodeProps) {
         <span className="truncate font-mono">{nodeLabel(node)}</span>
       </div>
       {open && hasChildren
-        ? node.children.map((c) => (
-            <TreeNode key={c.id} node={c} depth={depth + 1} />
-          ))
+        ? node.children.map((c) => <TreeNode key={c.id} node={c} depth={depth + 1} />)
         : null}
     </div>
   );
@@ -118,11 +112,7 @@ function Properties({ node }: { node: UINode }) {
     ],
     [
       "flags",
-      [
-        node.clickable && "clickable",
-        node.enabled && "enabled",
-        node.focused && "focused",
-      ]
+      [node.clickable && "clickable", node.enabled && "enabled", node.focused && "focused"]
         .filter(Boolean)
         .join(", ") || "—",
     ],
@@ -139,13 +129,7 @@ function Properties({ node }: { node: UINode }) {
   );
 }
 
-function SelectorCandidates({
-  node,
-  selectors,
-}: {
-  node: UINode;
-  selectors: Selector[];
-}) {
+function SelectorCandidates({ node, selectors }: { node: UINode; selectors: Selector[] }) {
   const appendAction = useFlowStore((s) => s.appendAction);
 
   const insert = useCallback(
@@ -161,10 +145,7 @@ function SelectorCandidates({
         appendAction(text);
         toast.success("Inserted", text.trim());
       } catch (err) {
-        toast.error(
-          "Generation failed",
-          err instanceof Error ? err.message : String(err),
-        );
+        toast.error("Generation failed", err instanceof Error ? err.message : String(err));
       }
     },
     [appendAction],
@@ -184,9 +165,7 @@ function SelectorCandidates({
           key={i}
           className="flex items-center gap-1.5 rounded border border-border bg-muted/30 p-1.5"
         >
-          <div className="min-w-0 flex-1 truncate font-mono text-[11px]">
-            {selectorLabel(sel)}
-          </div>
+          <div className="min-w-0 flex-1 truncate font-mono text-[11px]">{selectorLabel(sel)}</div>
           <Button
             size="xs"
             variant="ghost"
@@ -240,10 +219,7 @@ export function InspectorPanel() {
   const toggle = useInspectorStore((s) => s.toggle);
   const refresh = useInspectorStore((s) => s.refresh);
 
-  const stats = useMemo(
-    () => (tree?.root ? countNodes(tree.root) : null),
-    [tree],
-  );
+  const stats = useMemo(() => (tree?.root ? countNodes(tree.root) : null), [tree]);
   const sparse = stats !== null && stats.targetable < 3;
 
   const [justCopied, setJustCopied] = useState(false);
@@ -262,15 +238,9 @@ export function InspectorPanel() {
     try {
       await navigator.clipboard.writeText(raw);
       setJustCopied(true);
-      toast.success(
-        "Hierarchy copied",
-        `${raw.length.toLocaleString()} chars on the clipboard.`,
-      );
+      toast.success("Hierarchy copied", `${raw.length.toLocaleString()} chars on the clipboard.`);
     } catch (err) {
-      toast.error(
-        "Copy failed",
-        err instanceof Error ? err.message : String(err),
-      );
+      toast.error("Copy failed", err instanceof Error ? err.message : String(err));
     }
   }, [tree]);
 
@@ -278,15 +248,10 @@ export function InspectorPanel() {
     return (
       <div className="flex h-full flex-col items-start gap-2 p-3 text-[11px] text-muted-foreground">
         <div>
-          Press <kbd className="rounded border border-border px-1">I</kbd> to
-          inspect the current frame.
+          Press <kbd className="rounded border border-border px-1">I</kbd> to inspect the current
+          frame.
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => void toggle()}
-          disabled={loading}
-        >
+        <Button size="sm" variant="outline" onClick={() => void toggle()} disabled={loading}>
           {loading ? "Dumping…" : "Enter inspect mode"}
         </Button>
       </div>
@@ -319,11 +284,7 @@ export function InspectorPanel() {
             className="h-6 w-6"
             title="Copy raw hierarchy dump to clipboard"
           >
-            {justCopied ? (
-              <Check className="h-3 w-3" />
-            ) : (
-              <Copy className="h-3 w-3" />
-            )}
+            {justCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           </Button>
           <Button
             size="icon"
@@ -334,9 +295,7 @@ export function InspectorPanel() {
             className="h-6 w-6"
             title="Re-dump UI hierarchy"
           >
-            <RefreshCw
-              className={cn("h-3 w-3", loading && "animate-spin")}
-            />
+            <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
           </Button>
           <Button size="xs" variant="ghost" onClick={() => void toggle()}>
             Exit
@@ -347,10 +306,9 @@ export function InspectorPanel() {
         <div className="flex items-start gap-2 border-b border-border bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div>
-            Sparse hierarchy — this app likely uses Compose / React Native
-            without exposed testTags. Only {stats!.targetable} node(s) are
-            targetable. Try the 🔄 button after the screen has settled, or
-            fall back to point-based selectors.
+            Sparse hierarchy — this app likely uses Compose / React Native without exposed testTags.
+            Only {stats!.targetable} node(s) are targetable. Try the 🔄 button after the screen has
+            settled, or fall back to point-based selectors.
           </div>
         </div>
       ) : null}
@@ -360,9 +318,7 @@ export function InspectorPanel() {
             {tree?.root ? (
               <TreeNode node={tree.root} depth={0} />
             ) : (
-              <div className="p-2 text-[11px] text-muted-foreground">
-                Empty hierarchy.
-              </div>
+              <div className="p-2 text-[11px] text-muted-foreground">Empty hierarchy.</div>
             )}
           </div>
         </ScrollArea>
@@ -375,12 +331,10 @@ export function InspectorPanel() {
           </>
         ) : (
           <div className="space-y-1 text-[11px] text-muted-foreground">
+            <div>Click a node here or on the device to see its properties.</div>
             <div>
-              Click a node here or on the device to see its properties.
-            </div>
-            <div>
-              <kbd className="rounded border border-border px-1">Right-click</kbd> on
-              the device to insert a Maestro action.
+              <kbd className="rounded border border-border px-1">Right-click</kbd> on the device to
+              insert a Maestro action.
             </div>
           </div>
         )}

@@ -30,11 +30,7 @@ export function splitAnnexB(stream: Uint8Array): Uint8Array[] {
   let i = 0;
   while (i + 3 <= stream.length) {
     if (stream[i] === 0 && stream[i + 1] === 0) {
-      if (
-        i + 4 <= stream.length &&
-        stream[i + 2] === 0 &&
-        stream[i + 3] === 1
-      ) {
+      if (i + 4 <= stream.length && stream[i + 2] === 0 && stream[i + 3] === 1) {
         marks.push({ payloadStart: i + 4, startCodeStart: i });
         i += 4;
         continue;

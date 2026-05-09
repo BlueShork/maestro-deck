@@ -1,0 +1,138 @@
+{
+  "_generated": "2026-05-08T21:27:12.533Z",
+  "_source": "https://models.dev/api.json",
+  "models": [
+    {
+      "id": "claude-haiku-4-5",
+      "label": "Claude Haiku 4.5 (latest)",
+      "provider": "anthropic",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-opus-4-0",
+      "label": "Claude Opus 4 (latest)",
+      "provider": "anthropic",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-opus-4-1",
+      "label": "Claude Opus 4.1 (latest)",
+      "provider": "anthropic",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-opus-4-5",
+      "label": "Claude Opus 4.5 (latest)",
+      "provider": "anthropic",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-opus-4-6",
+      "label": "Claude Opus 4.6",
+      "provider": "anthropic",
+      "contextWindow": 1000000
+    },
+    {
+      "id": "claude-opus-4-7",
+      "label": "Claude Opus 4.7",
+      "provider": "anthropic",
+      "contextWindow": 1000000
+    },
+    {
+      "id": "claude-sonnet-4-0",
+      "label": "Claude Sonnet 4 (latest)",
+      "provider": "anthropic",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "label": "Claude Sonnet 4.5 (latest)",
+      "provider": "anthropic",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "label": "Claude Sonnet 4.6",
+      "provider": "anthropic",
+      "contextWindow": 1000000
+    },
+    {
+      "id": "claude-haiku-4-5@20251001",
+      "label": "Claude Haiku 4.5 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-opus-4@20250514",
+      "label": "Claude Opus 4 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-opus-4-1@20250805",
+      "label": "Claude Opus 4.1 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-opus-4-5@20251101",
+      "label": "Claude Opus 4.5 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-opus-4-6@default",
+      "label": "Claude Opus 4.6 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 1000000
+    },
+    {
+      "id": "claude-opus-4-7@default",
+      "label": "Claude Opus 4.7 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 1000000
+    },
+    {
+      "id": "claude-sonnet-4@20250514",
+      "label": "Claude Sonnet 4 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-sonnet-4-5@20250929",
+      "label": "Claude Sonnet 4.5 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 200000
+    },
+    {
+      "id": "claude-sonnet-4-6@default",
+      "label": "Claude Sonnet 4.6 (Vertex)",
+      "provider": "vertex",
+      "contextWindow": 200000
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "label": "Gemini 2.5 Flash",
+      "provider": "vertex",
+      "contextWindow": 1048576
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "label": "Gemini 2.5 Flash Lite",
+      "provider": "vertex",
+      "contextWindow": 1048576
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "label": "Gemini 2.5 Pro",
+      "provider": "vertex",
+      "contextWindow": 1048576
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "label": "Gemini 3.1 Flash Lite",
+      "provider": "vertex",
+      "contextWindow": 1048576
+    }
+  ]
+}

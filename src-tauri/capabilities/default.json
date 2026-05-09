@@ -12,6 +12,10 @@
     "core:resources:default",
     "core:menu:default",
     "core:tray:default",
+    "core:path:default",
+    "updater:default",
+    "process:default",
+    "process:allow-restart",
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
@@ -24,9 +28,16 @@
     "fs:allow-remove",
     "fs:allow-exists",
     {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://www.maestrodeck.cloud/*" }]
+    },
+    {
       "identifier": "fs:scope",
       "allow": [
         { "path": "$HOME/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPCONFIG/**" },
+        { "path": "$APPLOCALDATA/**" },
         { "path": "$DOCUMENT/**" },
         { "path": "$DOWNLOAD/**" },
         { "path": "$TEMP/**" }

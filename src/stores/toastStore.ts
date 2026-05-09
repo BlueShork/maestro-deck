@@ -40,10 +40,7 @@ export const useToastStore = create<ToastState>((set, get) => ({
       }));
       setTimeout(() => {
         set((s) => ({
-          toasts: [
-            ...s.toasts.filter((x) => x.open),
-            { ...t, id, open: true },
-          ],
+          toasts: [...s.toasts.filter((x) => x.open), { ...t, id, open: true }],
         }));
       }, SWAP_DELAY_MS);
     } else {
@@ -55,8 +52,7 @@ export const useToastStore = create<ToastState>((set, get) => ({
     set((s) => ({
       toasts: s.toasts.map((x) => (x.id === id ? { ...x, open: false } : x)),
     })),
-  setClosed: (id) =>
-    set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) })),
+  setClosed: (id) => set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) })),
 }));
 
 export const toast = {
@@ -73,8 +69,6 @@ export const toast = {
   /** Same look as `action`, but no auto-dismiss. Returns the id so the
    *  caller can dismiss it when the underlying operation finishes. */
   loading: (title: string, description?: string) =>
-    useToastStore
-      .getState()
-      .push({ title, description, variant: "action", persistent: true }),
+    useToastStore.getState().push({ title, description, variant: "action", persistent: true }),
   dismiss: (id: string) => useToastStore.getState().dismiss(id),
 };

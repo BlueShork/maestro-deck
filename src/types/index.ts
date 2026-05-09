@@ -71,3 +71,28 @@ export interface RunnerExitPayload {
 export type WorkspaceNode =
   | { kind: "dir"; name: string; path: string; children: WorkspaceNode[] }
   | { kind: "file"; name: string; path: string };
+
+export interface ProcessInfo {
+  pid: number;
+  name: string;
+}
+
+export interface HealthReport {
+  device_id: string;
+  driver_running: number | null;
+  port_forwarded: string | null;
+  orphan_processes: ProcessInfo[];
+  adb_available: boolean;
+}
+
+export interface KillReport {
+  driver_killed: boolean;
+  port_unforwarded: boolean;
+  orphans_killed: number[];
+  orphans_skipped: [number, string][];
+  errors: string[];
+}
+
+export function isHealthReportClean(r: HealthReport): boolean {
+  return r.driver_running === null && r.port_forwarded === null && r.orphan_processes.length === 0;
+}

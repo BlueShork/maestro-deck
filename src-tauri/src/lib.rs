@@ -1,23 +1,28 @@
 //! Maestro Deck — open-source visual IDE for Maestro mobile tests.
 
+pub mod credentials;
 pub mod device;
 mod env_shim;
 pub mod error;
 pub mod hierarchy;
 pub mod input;
 pub mod ipc;
+pub mod maestro_health;
 pub mod metrics;
 pub mod runner;
 pub mod scrcpy;
 pub mod selector;
 pub mod state;
+pub mod vertex;
 pub mod video;
 pub mod workspace;
 pub mod yaml;
 
 use tracing_subscriber::{fmt, EnvFilter};
 
+use credentials::{delete_credential, get_credential, save_credential};
 use ipc::commands::*;
+use vertex::vertex_get_access_token;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -32,9 +37,18 @@ pub fn run() {
     // expose any subprocess command.
     env_shim::enrich_from_login_shell();
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init());
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    builder
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             ping,
@@ -42,6 +56,8 @@ pub fn run() {
             list_devices,
             connect_device,
             disconnect_device,
+            check_device_health,
+            kill_maestro_processes,
             enter_inspect_mode,
             query_element,
             suggest_selectors,
@@ -56,6 +72,10 @@ pub fn run() {
             stop_metrics,
             start_stream,
             stop_stream,
+            vertex_get_access_token,
+            save_credential,
+            get_credential,
+            delete_credential,
         ])
         .setup(|app| {
             ipc::register_events(app)?;

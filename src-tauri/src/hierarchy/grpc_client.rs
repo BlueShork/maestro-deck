@@ -20,9 +20,7 @@ use tonic::Request;
 use tracing::{debug, info};
 
 use crate::error::{AppError, AppResult};
-use crate::hierarchy::proto::{
-    maestro_driver_client::MaestroDriverClient, ViewHierarchyRequest,
-};
+use crate::hierarchy::proto::{maestro_driver_client::MaestroDriverClient, ViewHierarchyRequest};
 use crate::hierarchy::{parse_xml, studio::DRIVER_PORT, HierarchyTree};
 
 /// Per-RPC deadline. The driver normally responds in <300 ms; 10 s is

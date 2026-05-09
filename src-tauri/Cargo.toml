@@ -1,6 +1,6 @@
 [package]
 name = "maestro-deck"
-version = "0.1.0"
+version = "0.3.0"
 description = "Open-source visual IDE for Maestro mobile tests"
 authors = ["Ethan Morisset <blueshork.dev@gmail.com>"]
 license = "Apache-2.0"
@@ -24,6 +24,18 @@ protox = "0.7"
 tauri = { version = "2.1", features = [] }
 tauri-plugin-dialog = "2.0"
 tauri-plugin-fs = "2.0"
+tauri-plugin-opener = "2.0"
+tauri-plugin-process = "2.0"
+# Native OS keyring (macOS Keychain, Windows Credential Manager, Linux
+# Secret Service). Used to store BYOK API credentials.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
+# JWT signing for Vertex Oauth2
+jsonwebtoken = "9"
+
+# HTTP for token exchange
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+base64 = "0.22"
 
 # Async runtime
 tokio = { version = "1.41", features = ["full"] }
@@ -68,7 +80,10 @@ tonic = { version = "0.12", default-features = false, features = ["codegen", "pr
 prost = "0.13"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-# Native-only deps go here
+# Auto-update is desktop-only. The plugin downloads the new bundle from
+# the configured endpoint, verifies its ed25519 signature against the
+# pubkey baked into tauri.conf.json, and installs it.
+tauri-plugin-updater = "2.0"
 
 [dev-dependencies]
 tempfile = "3.13"

@@ -33,12 +33,7 @@ export function Toaster() {
     const timers = open
       .filter((t) => !t.persistent)
       .map((t) => {
-        const delay =
-          t.variant === "action"
-            ? 1400
-            : t.variant === "success"
-              ? 1800
-              : 4500;
+        const delay = t.variant === "action" ? 1400 : t.variant === "success" ? 1800 : 4500;
         return setTimeout(() => dismiss(t.id), delay);
       });
     return () => {
@@ -69,16 +64,12 @@ export function Toaster() {
           <div className="min-w-0 flex-1">
             <ToastPrimitive.Title
               className={cn(
-                t.variant === "success" || t.variant === "action"
-                  ? "font-normal"
-                  : "font-medium",
+                t.variant === "success" || t.variant === "action" ? "font-normal" : "font-medium",
               )}
             >
               {t.title}
             </ToastPrimitive.Title>
-            {t.description &&
-            t.variant !== "success" &&
-            t.variant !== "action" ? (
+            {t.description && t.variant !== "success" && t.variant !== "action" ? (
               <ToastPrimitive.Description className="mt-0.5 text-xs opacity-80">
                 {t.description}
               </ToastPrimitive.Description>

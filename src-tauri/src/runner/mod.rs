@@ -41,14 +41,64 @@ fn maestro_bin() -> String {
     std::env::var("MAESTRO_BIN").unwrap_or_else(|_| DEFAULT_BIN.to_string())
 }
 
-/// Spawn `maestro test <flow>` and stream stdout/stderr to the frontend via
-/// Tauri events. The PID is returned so the frontend can request a stop.
-pub async fn spawn_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
+/// Spawn `maestro --udid <serial> test <flow>` and stream stdout/stderr to
+/// the frontend via Tauri events. The PID is returned so the frontend can
+/// request a stop.
+///
+/// `--udid` (not `--device`) is the right flag for a specific physical
+/// device serial: in maestro 2.5.x, `--device` was repurposed to mean a
+/// device *model* (e.g. `pixel_6`) and silently rejects serials with
+/// "Device <serial> was requested, but it is not connected."
+pub async fn spawn_runner(
+    app: AppHandle,
+    serial: &str,
+    flow_path: &str,
+    on_exit: Option<Box<dyn FnOnce(AppHandle) + Send + 'static>>,
+) -> AppResult<u32> {
     let bin = maestro_bin();
-    info!(bin = %bin, flow = %flow_path, "spawning maestro");
+    info!(bin = %bin, serial, flow = %flow_path, "spawning maestro");
+
+    // Maestro 2.5.x's session manager calls `dadb.Dadb.list()` which
+    // walks every adb-server transport before honoring `--udid` — any
+    // offline entry (typically `emulator-5554` ghosts created by adb's
+    // periodic emulator-port auto-scan) causes enumeration to fail
+    // with `Command failed (...): device offline`, and the test exits
+    // with "Device <serial> not connected" even though the intended
+    // device is plugged in.
+    //
+    // Loop disconnect until no offline emulator transport is left or
+    // we've spent ~2s trying. adb's auto-scan cycle is also ~2s so
+    // racing against a fresh ghost is rare but possible — in practice
+    // the user can just click Run again.
+    let adb = crate::device::adb::adb_bin();
+    for _ in 0..10 {
+        let devs = tokio::process::Command::new(&adb)
+            .args(["devices"])
+            .output()
+            .await;
+        let has_offline_emulator = match devs {
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                stdout
+                    .lines()
+                    .any(|l| l.contains("emulator-") && l.contains("offline"))
+            }
+            Err(_) => false,
+        };
+        if !has_offline_emulator {
+            break;
+        }
+        for emulator in ["emulator-5554", "emulator-5556", "emulator-5558"] {
+            let _ = tokio::process::Command::new(&adb)
+                .args(["disconnect", emulator])
+                .output()
+                .await;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
 
     let mut child = Command::new(&bin)
-        .arg("test")
+        .args(["--udid", serial, "test"])
         .arg(flow_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -93,6 +143,7 @@ pub async fn spawn_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
     RUNNERS.lock().await.insert(pid, kill_tx);
 
     let app_exit = app.clone();
+    let on_exit_hook = on_exit;
     tokio::spawn(async move {
         let code = tokio::select! {
             status = child.wait() => status.ok().and_then(|s| s.code()),
@@ -104,6 +155,13 @@ pub async fn spawn_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
             }
         };
         RUNNERS.lock().await.remove(&pid);
+        // Fire the optional post-exit hook BEFORE emitting the exit event.
+        // The hook may schedule background work (e.g. studio restart) that
+        // we want kicked off as early as possible — the frontend doesn't
+        // need to wait for it, since the hook just spawns and returns.
+        if let Some(hook) = on_exit_hook {
+            hook(app_exit.clone());
+        }
         let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
     });
 
@@ -120,9 +178,7 @@ pub async fn kill_runner(pid: u32) -> AppResult<()> {
             let _ = tx.send(());
             Ok(())
         }
-        None => Err(AppError::RunnerFailed(format!(
-            "no runner with PID {pid}"
-        ))),
+        None => Err(AppError::RunnerFailed(format!("no runner with PID {pid}"))),
     }
 }
 

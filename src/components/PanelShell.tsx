@@ -24,7 +24,9 @@ export function PanelShell({
 }) {
   const hide = usePanelsStore((s) => s.hide);
   return (
-    <div className={cn("group/panel relative flex h-full min-h-0 w-full min-w-0 flex-col", className)}>
+    <div
+      className={cn("group/panel relative flex h-full min-h-0 w-full min-w-0 flex-col", className)}
+    >
       {children}
       <button
         type="button"

@@ -10,6 +10,7 @@ use crate::device::{adb, Device};
 use crate::error::{AppError, AppResult};
 use crate::hierarchy::{self, HierarchyTree, UINode};
 use crate::input::{self, InputEvent};
+use crate::maestro_health::{self, HealthReport, KillReport};
 use crate::metrics;
 use crate::runner;
 use crate::scrcpy;
@@ -71,10 +72,7 @@ pub async fn connect_device(
 /// Bring up scrcpy for the currently connected device. Used by the settings
 /// toggle to enable mirroring without forcing a full reconnect.
 #[tauri::command]
-pub async fn start_stream(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> AppResult<()> {
+pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
     let serial = state
         .connected_device
         .read()
@@ -186,6 +184,7 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
 #[tauri::command]
 pub async fn enter_inspect_mode(
     fast_mode: bool,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<HierarchyTree> {
     let serial = state
@@ -194,6 +193,21 @@ pub async fn enter_inspect_mode(
         .as_ref()
         .map(|d| d.serial.clone())
         .ok_or(AppError::NoDevice)?;
+
+    // Pre-flight: if the on-device driver isn't responding, force-stop
+    // it and remove the port forward so the next maestro call spawns a
+    // fresh driver instead of hanging for 120s on DEADLINE_EXCEEDED.
+    let app_for_preflight = app.clone();
+    let serial_for_preflight = serial.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::maestro_health::preflight_with_recovery(
+            &app_for_preflight,
+            &serial_for_preflight,
+            "inspect",
+        );
+    })
+    .await
+    .ok();
 
     // Fast path: reuse a long-lived `maestro studio` subprocess that
     // keeps the on-device driver installed and listening on port 7001,
@@ -366,8 +380,35 @@ pub async fn get_dark_mode(state: State<'_, AppState>) -> AppResult<bool> {
 }
 
 #[tauri::command]
-pub async fn run_flow(file_path: String, app: AppHandle) -> AppResult<u32> {
-    runner::spawn_runner(app, &file_path).await
+pub async fn run_flow(
+    file_path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<u32> {
+    let serial = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.serial.clone())
+        .ok_or(AppError::NoDevice)?;
+
+    // Pre-flight: kick a hung driver if needed (see preflight spec).
+    let app_for_preflight = app.clone();
+    let serial_for_preflight = serial.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::maestro_health::preflight_with_recovery(
+            &app_for_preflight,
+            &serial_for_preflight,
+            "run_flow",
+        );
+    })
+    .await
+    .ok();
+
+    // With maestro 2.5.x, `maestro test` uses an adb-socket
+    // (AdbSocketFactory) instead of a host TCP forward, so it cohabits
+    // peacefully with our running studio. No cleanup needed.
+    runner::spawn_runner(app, &serial, &file_path, None).await
 }
 
 #[tauri::command]
@@ -394,6 +435,16 @@ pub async fn start_metrics(app: AppHandle, state: State<'_, AppState>) -> AppRes
 #[tauri::command]
 pub async fn stop_metrics() -> AppResult<()> {
     metrics::stop().await
+}
+
+#[tauri::command]
+pub fn check_device_health(serial: String) -> AppResult<HealthReport> {
+    maestro_health::detect::check_device_health(&serial)
+}
+
+#[tauri::command]
+pub fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult<KillReport> {
+    maestro_health::kill::kill_maestro_processes(&serial, report)
 }
 
 impl serde::Serialize for HierarchyTree {

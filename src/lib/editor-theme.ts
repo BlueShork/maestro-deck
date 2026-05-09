@@ -80,8 +80,7 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         color: c.fg,
         backgroundColor: c.bg,
         fontSize: "13px",
-        fontFamily:
-          '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace',
+        fontFamily: '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace',
         fontVariantLigatures: "common-ligatures contextual",
       },
       ".cm-scroller": {
@@ -102,11 +101,10 @@ function buildTheme(c: Palette, dark: boolean): Extension {
       "&.cm-focused .cm-cursor": {
         animation: "cm-caret-pulse 1.1s ease-in-out infinite",
       },
-      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, ::selection":
-        {
-          background: c.selection,
-          borderRadius: "3px",
-        },
+      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, ::selection": {
+        background: c.selection,
+        borderRadius: "3px",
+      },
       ".cm-selectionMatch": {
         background: c.selectionMatch,
         borderRadius: "3px",
@@ -133,14 +131,32 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         backgroundColor: c.activeRunBg,
         boxShadow: `inset 2px 0 0 ${c.activeRunBorder}`,
       },
+      ".cm-gutterElement.cm-step-line-done": {
+        backgroundColor: "rgba(16,185,129,0.22)",
+        color: dark ? "rgb(110 231 183)" : "rgb(6 95 70)",
+        fontWeight: "600",
+      },
+      ".cm-gutterElement.cm-step-line-failed": {
+        backgroundColor: "rgba(239,68,68,0.22)",
+        color: dark ? "rgb(252 165 165)" : "rgb(127 29 29)",
+        fontWeight: "600",
+      },
+      ".cm-gutterElement.cm-step-line-running": {
+        backgroundColor: "rgba(59,130,246,0.22)",
+        color: dark ? "rgb(147 197 253)" : "rgb(30 64 175)",
+        fontWeight: "600",
+        animation: "cm-step-pulse 1.2s ease-in-out infinite",
+      },
+      "@keyframes cm-step-pulse": {
+        "0%, 100%": { backgroundColor: "rgba(59,130,246,0.18)" },
+        "50%": { backgroundColor: "rgba(59,130,246,0.36)" },
+      },
       ".cm-tooltip": {
         backgroundColor: c.surface,
         color: c.fg,
         border: `1px solid ${c.border}`,
         borderRadius: "8px",
-        boxShadow: dark
-          ? "0 8px 24px -8px rgba(0,0,0,0.4)"
-          : "0 8px 24px -8px rgba(0,0,0,0.15)",
+        boxShadow: dark ? "0 8px 24px -8px rgba(0,0,0,0.4)" : "0 8px 24px -8px rgba(0,0,0,0.15)",
         overflow: "hidden",
       },
       ".cm-tooltip.cm-tooltip-autocomplete > ul": {
@@ -183,10 +199,7 @@ function buildHighlight(c: Palette): Extension {
   );
 }
 
-export const softProDarkExtensions: Extension[] = [
-  buildTheme(DARK, true),
-  buildHighlight(DARK),
-];
+export const softProDarkExtensions: Extension[] = [buildTheme(DARK, true), buildHighlight(DARK)];
 
 export const softProLightExtensions: Extension[] = [
   buildTheme(LIGHT, false),

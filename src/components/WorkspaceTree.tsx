@@ -47,9 +47,7 @@ export function WorkspaceTree() {
         const t = await ipc.listWorkspace(path);
         setTree(t);
         const sep = path.includes("\\") && !path.includes("/") ? "\\" : "/";
-        const configPath = path.endsWith(sep)
-          ? `${path}config.yaml`
-          : `${path}${sep}config.yaml`;
+        const configPath = path.endsWith(sep) ? `${path}config.yaml` : `${path}${sep}config.yaml`;
         try {
           setHasConfig(await exists(configPath));
         } catch {
@@ -89,13 +87,10 @@ export function WorkspaceTree() {
     setPendingNewDir(dirPath);
   }, []);
 
-  const commitNewFile = useCallback(
-    async (dir: string, name: string) => {
-      setPendingNewDir(null);
-      if (name.trim()) await createFlowInDir(dir, name);
-    },
-    [],
-  );
+  const commitNewFile = useCallback(async (dir: string, name: string) => {
+    setPendingNewDir(null);
+    if (name.trim()) await createFlowInDir(dir, name);
+  }, []);
 
   const cancelNewFile = useCallback(() => setPendingNewDir(null), []);
 
@@ -214,9 +209,7 @@ function EmptyState({ onOpenFolder }: { onOpenFolder: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
       <FolderClosed className="h-8 w-8 text-muted-foreground" />
-      <div className="text-xs text-muted-foreground">
-        Open a folder to browse Maestro flows.
-      </div>
+      <div className="text-xs text-muted-foreground">Open a folder to browse Maestro flows.</div>
       <Button size="sm" variant="outline" onClick={onOpenFolder}>
         <FolderPlus className="h-3.5 w-3.5" />
         Open folder
@@ -381,10 +374,7 @@ function NewFileInput({
   };
 
   return (
-    <div
-      className="flex items-center gap-1.5"
-      style={{ paddingLeft: `${depth * 12 + 22}px` }}
-    >
+    <div className="flex items-center gap-1.5" style={{ paddingLeft: `${depth * 12 + 22}px` }}>
       <FileCode2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <input
         autoFocus
