@@ -1,7 +1,7 @@
 {
   "name": "maestro-deck",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Open-source visual IDE for Maestro mobile tests",
   "scripts": {
@@ -39,6 +39,8 @@
     "@tauri-apps/plugin-dialog": "^2.0.1",
     "@tauri-apps/plugin-fs": "^2.0.2",
     "@tauri-apps/plugin-opener": "^2.5.4",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "js-yaml": "^4.1.1",

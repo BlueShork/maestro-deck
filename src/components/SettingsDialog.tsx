@@ -40,6 +40,8 @@ export function SettingsDialog({
   const setFastHierarchyEnabled = useSettingsStore((s) => s.setFastHierarchyEnabled);
   const autoSaveEnabled = useSettingsStore((s) => s.autoSaveEnabled);
   const setAutoSaveEnabled = useSettingsStore((s) => s.setAutoSaveEnabled);
+  const autoCheckUpdatesEnabled = useSettingsStore((s) => s.autoCheckUpdatesEnabled);
+  const setAutoCheckUpdatesEnabled = useSettingsStore((s) => s.setAutoCheckUpdatesEnabled);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -134,6 +136,19 @@ export function SettingsDialog({
               checked={autoSaveEnabled}
               onCheckedChange={setAutoSaveEnabled}
               aria-label="Auto-save modified flows"
+            />
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col">
+              <span>Check for updates on startup</span>
+              <span className="text-[11px] text-muted-foreground">
+                Silently checks GitHub releases and prompts you when a new version is available.
+              </span>
+            </div>
+            <Switch
+              checked={autoCheckUpdatesEnabled}
+              onCheckedChange={setAutoCheckUpdatesEnabled}
+              aria-label="Check for updates on startup"
             />
           </div>
           <div className="flex items-center justify-between">

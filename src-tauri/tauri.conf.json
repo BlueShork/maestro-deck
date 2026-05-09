@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Maestro Deck",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "dev.blueshork.maestrodeck",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -50,5 +50,16 @@
     "shortDescription": "Open-source visual IDE for Maestro mobile tests",
     "longDescription": "Maestro Deck is a fast, offline, open-source visual editor for creating Maestro mobile UI test flows. No login, no telemetry, no cloud."
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/blueshork/maestro-deck/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDExQTYxQUNEMDlCMjlBREMKUldUY21ySUp6UnFtRVZwQkxUdkZsL1ZtUnFZZXZtNktGWXphcWJmdWFuWmhET0JmNVNiRi9KcU8K",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

@@ -14,6 +14,7 @@ import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Toolbar } from "@/components/Toolbar";
+import { UpdateDialog } from "@/components/UpdateDialog";
 import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { Toaster } from "@/components/ui/Toast";
 import { openFlowFile } from "@/lib/flow-io";
@@ -34,6 +35,7 @@ import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast, useToastStore } from "@/stores/toastStore";
+import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
@@ -58,6 +60,16 @@ export default function App() {
   useEffect(() => {
     const last = useWorkspaceStore.getState().lastOpenFile;
     if (last) void openFlowFile(last, { silent: true });
+  }, []);
+
+  // Silent update check on startup. Skipped if the user disabled it in
+  // Settings. Failure is non-fatal — we just don't surface the toast.
+  useEffect(() => {
+    if (!useSettingsStore.getState().autoCheckUpdatesEnabled) return;
+    const t = setTimeout(() => {
+      void useUpdateStore.getState().check({ silent: true });
+    }, 3000);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -468,6 +480,7 @@ export default function App() {
         </PanelGroup>
       </div>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <UpdateDialog />
       <Toaster />
     </div>
   );

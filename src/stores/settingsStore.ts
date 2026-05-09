@@ -22,6 +22,7 @@ interface SettingsState {
    */
   fastHierarchyEnabled: boolean;
   autoSaveEnabled: boolean;
+  autoCheckUpdatesEnabled: boolean;
   consoleMode: ConsoleMode;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
@@ -30,6 +31,7 @@ interface SettingsState {
   setPerfMonitoringEnabled: (v: boolean) => void;
   setFastHierarchyEnabled: (v: boolean) => void;
   setAutoSaveEnabled: (v: boolean) => void;
+  setAutoCheckUpdatesEnabled: (v: boolean) => void;
   setConsoleMode: (m: ConsoleMode) => void;
 }
 
@@ -43,6 +45,7 @@ export const useSettingsStore = create<SettingsState>()(
       perfMonitoringEnabled: false,
       fastHierarchyEnabled: false,
       autoSaveEnabled: true,
+      autoCheckUpdatesEnabled: true,
       consoleMode: "simple",
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
@@ -51,6 +54,7 @@ export const useSettingsStore = create<SettingsState>()(
       setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
       setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
+      setAutoCheckUpdatesEnabled: (autoCheckUpdatesEnabled) => set({ autoCheckUpdatesEnabled }),
       setConsoleMode: (consoleMode) => set({ consoleMode }),
     }),
     {
@@ -63,6 +67,7 @@ export const useSettingsStore = create<SettingsState>()(
         perfMonitoringEnabled: s.perfMonitoringEnabled,
         fastHierarchyEnabled: s.fastHierarchyEnabled,
         autoSaveEnabled: s.autoSaveEnabled,
+        autoCheckUpdatesEnabled: s.autoCheckUpdatesEnabled,
         consoleMode: s.consoleMode,
       }),
     },

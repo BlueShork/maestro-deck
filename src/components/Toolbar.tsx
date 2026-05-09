@@ -32,6 +32,7 @@ import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
+import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 /** Menu entries for the View dropdown. Order = on-screen left→right,
@@ -65,6 +66,8 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
   const panels = usePanelsStore((s) => s.visible);
   const togglePanel = usePanelsStore((s) => s.toggle);
   const showAllPanels = usePanelsStore((s) => s.showAll);
+  const updatePhase = useUpdateStore((s) => s.phase);
+  const checkUpdate = useUpdateStore((s) => s.check);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -72,7 +75,26 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
         <div className="flex items-center gap-2">
           <Logo className="h-7 w-auto text-foreground" />
           <Separator orientation="vertical" className="mx-1 h-5" />
-          <span className="text-xs text-muted-foreground">v{__APP_VERSION__}</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => void checkUpdate()}
+                disabled={updatePhase === "checking"}
+                className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-60"
+              >
+                {updatePhase === "checking" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    checking…
+                  </span>
+                ) : (
+                  `v${__APP_VERSION__}`
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Check for updates</TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="flex items-center gap-1">
