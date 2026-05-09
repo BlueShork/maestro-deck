@@ -33,7 +33,7 @@ const PATTERNS: Pattern[] = [
   { command: "clearState", re: null, bareRe: /^Clear state/ },
 ];
 
-const SUFFIX = /\.\.\.\s*(COMPLETED|FAILED)?\s*(.*)$/;
+const SUFFIX = /\.\.\.\s*(?:(COMPLETED|FAILED)\s*)?(.*)$/;
 const ANSI = /\[[0-9;]*[A-Za-z]/g;
 
 export function parseLine(raw: string): StepEvent | null {
