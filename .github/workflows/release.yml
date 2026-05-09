@@ -76,6 +76,87 @@ jobs:
           releaseBody: "See CHANGELOG_EN.md for details."
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          # We disable the action's updater JSON because it silently
+          # skips when the universal-mac sig rename trips its lookup
+          # (see post-step below + manifest job).
+          includeUpdaterJson: false
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
+
+      # tauri-action renames the macOS bundle to add `_universal` but
+      # does NOT rename the matching `.sig` — so the file never makes
+      # it to the release. Upload it ourselves under the matching name.
+      - name: Upload macOS updater signature
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SRC="src-tauri/target/universal-apple-darwin/release/bundle/macos/Maestro Deck.app.tar.gz.sig"
+          DST="Maestro Deck_universal.app.tar.gz.sig"
+          test -f "$SRC" || { echo "::error::missing $SRC"; exit 1; }
+          cp "$SRC" "$DST"
+          gh release upload "${{ github.ref_name }}" "$DST" \
+            --repo "${{ github.repository }}" --clobber
+
+      - name: Upload Windows updater signature
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SRC=$(ls "src-tauri/target/release/bundle/nsis"/*.exe.sig | head -1)
+          test -f "$SRC" || { echo "::error::missing nsis .sig"; exit 1; }
+          gh release upload "${{ github.ref_name }}" "$SRC" \
+            --repo "${{ github.repository }}" --clobber
+
+  # Builds latest.json from the .sig files uploaded by the matrix above.
+  # Runs once, after both platforms are done.
+  manifest:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate and upload latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          WORK=$(mktemp -d)
+
+          # Pull only the .sig files from the draft release.
+          gh release download "$TAG" --repo "$REPO" --dir "$WORK" \
+            --pattern "*.sig"
+
+          MAC_SIG=$(cat "$WORK/Maestro Deck_universal.app.tar.gz.sig")
+          WIN_SIG=$(cat "$WORK/Maestro Deck_${VERSION}_x64-setup.exe.sig")
+
+          BASE="https://github.com/$REPO/releases/download/$TAG"
+          # URL-encode the space in the asset names.
+          MAC_URL="$BASE/Maestro%20Deck_universal.app.tar.gz"
+          WIN_URL="$BASE/Maestro%20Deck_${VERSION}_x64-setup.exe"
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pubdate "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg mac_sig "$MAC_SIG" \
+            --arg mac_url "$MAC_URL" \
+            --arg win_sig "$WIN_SIG" \
+            --arg win_url "$WIN_URL" \
+            '{
+              version: $version,
+              notes: "See CHANGELOG_EN.md for details.",
+              pub_date: $pubdate,
+              platforms: {
+                "darwin-x86_64":  { signature: $mac_sig, url: $mac_url },
+                "darwin-aarch64": { signature: $mac_sig, url: $mac_url },
+                "windows-x86_64": { signature: $win_sig, url: $win_url }
+              }
+            }' > latest.json
+
+          gh release upload "$TAG" latest.json \
+            --repo "$REPO" --clobber
