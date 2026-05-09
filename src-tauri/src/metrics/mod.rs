@@ -109,7 +109,11 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
             let serial_clone = serial.clone();
             let target_result = tokio::task::spawn_blocking(move || resolve_target(&serial_clone))
                 .await
-                .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("resolve_target join failed: {e}"))));
+                .unwrap_or_else(|e| {
+                    Err(AppError::MetricsFailed(format!(
+                        "resolve_target join failed: {e}"
+                    )))
+                });
             match target_result {
                 Ok(Some(new_target)) => {
                     let changed = target
@@ -153,21 +157,23 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
         let serial_clone = serial.clone();
         let pid = t.pid;
         let prev = prev_stat;
-        let cpu_mem = match tokio::task::spawn_blocking(move || fetch_cpu_mem(&serial_clone, pid, prev))
-            .await
-            .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("cpu_mem join failed: {e}"))))
-        {
-            Ok(s) => s,
-            Err(e) => {
-                warn!(error = ?e, "cpu_mem fetch failed");
-                consecutive_errors += 1;
-                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
-                    emit_stopped(&app, "error", Some(e.to_string()));
-                    break;
+        let cpu_mem =
+            match tokio::task::spawn_blocking(move || fetch_cpu_mem(&serial_clone, pid, prev))
+                .await
+                .unwrap_or_else(|e| {
+                    Err(AppError::MetricsFailed(format!("cpu_mem join failed: {e}")))
+                }) {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!(error = ?e, "cpu_mem fetch failed");
+                    consecutive_errors += 1;
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                        emit_stopped(&app, "error", Some(e.to_string()));
+                        break;
+                    }
+                    continue;
                 }
-                continue;
-            }
-        };
+            };
         prev_stat = Some((cpu_mem.stat_snapshot, Instant::now()));
 
         // 3. Net polling is currently disabled — the dumpsys netstats fallback

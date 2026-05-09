@@ -9,13 +9,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
  * Defaults match what the app looked like before resizable panels
  * landed, so a fresh install keeps its familiar layout.
  */
-export type PanelId =
-  | "workspace"
-  | "inspector"
-  | "device"
-  | "editor"
-  | "console"
-  | "metrics";
+export type PanelId = "workspace" | "inspector" | "device" | "editor" | "console" | "metrics";
 
 interface PanelsState {
   visible: Record<PanelId, boolean>;

@@ -1,4 +1,5 @@
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { listen } from "@tauri-apps/api/event";
 import { tempDir } from "@tauri-apps/api/path";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -13,12 +14,18 @@ import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Toolbar } from "@/components/Toolbar";
+import { UpdateDialog } from "@/components/UpdateDialog";
 import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { Toaster } from "@/components/ui/Toast";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
+import { parseFlow } from "@/lib/flowAst";
+import { buildPartialFlow } from "@/lib/partialFlow";
 import { useShortcuts } from "@/lib/keyboard";
+import { parseLine as parseRunLine } from "@/lib/runStepParser";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { useChatStore } from "@/stores/chatStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useMetricsStore } from "@/stores/metricsStore";
@@ -27,7 +34,8 @@ import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
-import { toast } from "@/stores/toastStore";
+import { toast, useToastStore } from "@/stores/toastStore";
+import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
@@ -39,6 +47,9 @@ export default function App() {
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
+  const initSteps = useRunStore((s) => s.initSteps);
+  const applyStepEvent = useRunStore((s) => s.applyEvent);
+  const resetSteps = useRunStore((s) => s.resetSteps);
   const setRunning = useRunStore((s) => s.setRunning);
   const setStopped = useRunStore((s) => s.setStopped);
   const runningPid = useRunStore((s) => s.pid);
@@ -49,7 +60,16 @@ export default function App() {
   useEffect(() => {
     const last = useWorkspaceStore.getState().lastOpenFile;
     if (last) void openFlowFile(last, { silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Silent update check on startup. Skipped if the user disabled it in
+  // Settings. Failure is non-fatal — we just don't surface the toast.
+  useEffect(() => {
+    if (!useSettingsStore.getState().autoCheckUpdatesEnabled) return;
+    const t = setTimeout(() => {
+      void useUpdateStore.getState().check({ silent: true });
+    }, 3000);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -96,15 +116,17 @@ export default function App() {
     let cleanups: Array<() => void> = [];
     let cancelled = false;
     Promise.all([
-      events.onRunnerStdout((line) => appendLog("stdout", line)),
+      events.onRunnerStdout((line) => {
+        appendLog("stdout", line);
+        const ev = parseRunLine(line);
+        if (ev) applyStepEvent(ev);
+      }),
       events.onRunnerStderr((line) => appendLog("stderr", line)),
       events.onRunnerExit(({ code }) => {
         const wasStopped = useRunStore.getState().stopRequested;
         appendLog(
           "system",
-          wasStopped
-            ? "[runner stopped by user]"
-            : `[runner exited with code ${code}]`,
+          wasStopped ? "[runner stopped by user]" : `[runner exited with code ${code}]`,
         );
         setStopped(code);
         if (wasStopped) toast.success("Flow stopped");
@@ -124,9 +146,7 @@ export default function App() {
         }),
       ),
       events.onMetricsTargetChanged((p) => onTargetChanged(p.to)),
-      events.onMetricsStopped((p) =>
-        setStoppedReason(p.reason === "user" ? null : p.reason),
-      ),
+      events.onMetricsStopped((p) => setStoppedReason(p.reason === "user" ? null : p.reason)),
     ]).then((fns) => {
       if (cancelled) fns.forEach((fn) => fn());
       else cleanups = fns;
@@ -135,7 +155,47 @@ export default function App() {
       cancelled = true;
       cleanups.forEach((fn) => fn());
     };
-  }, [appendLog, setStopped, markDisconnected, appendSample, onTargetChanged, setStoppedReason]);
+  }, [
+    appendLog,
+    applyStepEvent,
+    setStopped,
+    markDisconnected,
+    appendSample,
+    onTargetChanged,
+    setStoppedReason,
+  ]);
+
+  useEffect(() => {
+    let toastId: string | null = null;
+    const unlistenRecovering = listen<{ device_id: string; action: string }>(
+      "driver-recovering",
+      () => {
+        // dismiss any prior recovery toast in case events arrive out of order
+        if (toastId) {
+          useToastStore.getState().dismiss(toastId);
+        }
+        toastId = useToastStore.getState().push({
+          title: "Recovering driver…",
+          description: "Maestro driver was unresponsive — restarting it.",
+          variant: "default",
+          persistent: true,
+        });
+      },
+    );
+    const unlistenRecovered = listen<{ device_id: string }>("driver-recovered", () => {
+      if (toastId) {
+        useToastStore.getState().dismiss(toastId);
+        toastId = null;
+      }
+    });
+    return () => {
+      void unlistenRecovering.then((u) => u());
+      void unlistenRecovered.then((u) => u());
+      if (toastId) {
+        useToastStore.getState().dismiss(toastId);
+      }
+    };
+  }, []);
 
   const panelOpen = useMetricsStore((s) => s.panelOpen);
   const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
@@ -145,15 +205,17 @@ export default function App() {
   // resizable-panels warns and normalizes otherwise. Since any panel
   // can be hidden, we compute the fill-sizes dynamically per siblings
   // count so the totals always balance regardless of visibility.
+  const chatOpen = useChatStore((s) => s.isOpen);
   const WORKSPACE_SIZE = 15;
   const INSPECTOR_SIZE = 18;
+  const CHAT_SIZE = 28;
   const mainSize =
     100 -
     (panels.workspace ? WORKSPACE_SIZE : 0) -
-    (panels.inspector ? INSPECTOR_SIZE : 0);
+    (panels.inspector ? INSPECTOR_SIZE : 0) -
+    (chatOpen ? CHAT_SIZE : 0);
 
-  const bottomVisible =
-    panels.console || (perfEnabled && panelOpen && panels.metrics);
+  const bottomVisible = panels.console || (perfEnabled && panelOpen && panels.metrics);
   const mainTopSize = bottomVisible ? 65 : 100;
   const mainBottomSize = 100 - mainTopSize;
   const deviceConnected = useDeviceStore((s) => Boolean(s.current));
@@ -185,13 +247,15 @@ export default function App() {
       } else {
         await writeTextFile(path, content);
       }
+      resetSteps();
+      initSteps(parseFlow(content).steps);
       const pid = await ipc.runFlow(path);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · ${path}]`);
     } catch (err) {
       toast.error("Run failed", err instanceof Error ? err.message : String(err));
     }
-  }, [setRunning, appendLog]);
+  }, [setRunning, appendLog, initSteps, resetSteps]);
 
   const onRunAll = useCallback(async () => {
     const folder = useWorkspaceStore.getState().folderPath;
@@ -203,13 +267,45 @@ export default function App() {
         await writeTextFile(filePath, content);
         useFlowStore.getState().saved(filePath);
       }
+      const { content: c2 } = useFlowStore.getState();
+      resetSteps();
+      initSteps(parseFlow(c2).steps);
       const pid = await ipc.runFlow(folder);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
     } catch (err) {
       toast.error("Run all failed", err instanceof Error ? err.message : String(err));
     }
-  }, [setRunning, appendLog]);
+  }, [setRunning, appendLog, initSteps, resetSteps]);
+
+  const onRunFrom = useCallback(
+    async (line: number) => {
+      const { content } = useFlowStore.getState();
+      const partial = buildPartialFlow(content, line);
+      if (!partial) return;
+      try {
+        const dir = await tempDir();
+        const tempPath = `${dir.replace(/\/$/, "")}/maestro-deck-flow.yaml`;
+        await writeTextFile(tempPath, partial.content);
+        const truncatedAst = parseFlow(partial.content);
+        const remappedSteps = truncatedAst.steps.map((s) => ({
+          ...s,
+          line: partial.lineMap.get(s.line) ?? s.line,
+        }));
+        resetSteps();
+        initSteps(remappedSteps);
+        const pid = await ipc.runFlow(tempPath);
+        setRunning(pid);
+        appendLog(
+          "system",
+          `[runner started pid ${pid} · from line ${partial.firstStepOriginalLine}]`,
+        );
+      } catch (err) {
+        toast.error("Run from here failed", err instanceof Error ? err.message : String(err));
+      }
+    },
+    [setRunning, appendLog, initSteps, resetSteps],
+  );
 
   const onStop = useCallback(async () => {
     if (runningPid === null) return;
@@ -227,10 +323,7 @@ export default function App() {
       {
         key: "s",
         mod: true,
-        handler: () =>
-          window.dispatchEvent(
-            new CustomEvent("flow:command", { detail: "save" }),
-          ),
+        handler: () => window.dispatchEvent(new CustomEvent("flow:command", { detail: "save" })),
         allowInInput: true,
       },
       { key: inspectKey, handler: () => void toggleInspect() },
@@ -248,10 +341,7 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <div className="min-h-0 flex-1">
-        <PanelGroup
-          direction="horizontal"
-          autoSaveId="maestro-deck.layout.outer"
-        >
+        <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.outer">
           {panels.workspace ? (
             <>
               <Panel
@@ -290,20 +380,9 @@ export default function App() {
           ) : null}
 
           <Panel id="main" order={3} defaultSize={mainSize} minSize={30}>
-            <PanelGroup
-              direction="vertical"
-              autoSaveId="maestro-deck.layout.main"
-            >
-              <Panel
-                id="main-top"
-                order={1}
-                defaultSize={mainTopSize}
-                minSize={20}
-              >
-                <PanelGroup
-                  direction="horizontal"
-                  autoSaveId="maestro-deck.layout.top"
-                >
+            <PanelGroup direction="vertical" autoSaveId="maestro-deck.layout.main">
+              <Panel id="main-top" order={1} defaultSize={mainTopSize} minSize={20}>
+                <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.top">
                   {streamEnabled && panels.device ? (
                     <>
                       <Panel
@@ -324,9 +403,7 @@ export default function App() {
                           <DeviceView />
                         </PanelShell>
                       </Panel>
-                      {panels.editor ? (
-                        <PanelResizeHandle className={RESIZE_HANDLE_H} />
-                      ) : null}
+                      {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
                     </>
                   ) : null}
 
@@ -337,13 +414,11 @@ export default function App() {
                       defaultSize={streamEnabled && panels.device ? 45 : 100}
                       minSize={20}
                       className={
-                        streamEnabled && panels.device
-                          ? "border-l border-border"
-                          : undefined
+                        streamEnabled && panels.device ? "border-l border-border" : undefined
                       }
                     >
                       <PanelShell id="editor">
-                        <FlowEditor />
+                        <FlowEditor onRunFrom={onRunFrom} />
                       </PanelShell>
                     </Panel>
                   ) : null}
@@ -353,32 +428,17 @@ export default function App() {
               {panels.console || (perfEnabled && panelOpen && panels.metrics) ? (
                 <>
                   <PanelResizeHandle className={RESIZE_HANDLE_V} />
-                  <Panel
-                    id="main-bottom"
-                    order={2}
-                    defaultSize={mainBottomSize}
-                    minSize={10}
-                  >
-                    <PanelGroup
-                      direction="horizontal"
-                      autoSaveId="maestro-deck.layout.bottom"
-                    >
+                  <Panel id="main-bottom" order={2} defaultSize={mainBottomSize} minSize={10}>
+                    <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
                       {panels.console ? (
                         <Panel
                           id="console"
                           order={1}
-                          defaultSize={
-                            perfEnabled && panelOpen && panels.metrics
-                              ? 70
-                              : 100
-                          }
+                          defaultSize={perfEnabled && panelOpen && panels.metrics ? 70 : 100}
                           minSize={20}
                         >
                           <PanelShell id="console">
-                            <RunConsole
-                              onRun={() => void onRun()}
-                              onStop={() => void onStop()}
-                            />
+                            <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
                           </PanelShell>
                         </Panel>
                       ) : null}
@@ -408,9 +468,19 @@ export default function App() {
               ) : null}
             </PanelGroup>
           </Panel>
+
+          {chatOpen ? (
+            <>
+              <PanelResizeHandle className={RESIZE_HANDLE_H} />
+              <Panel id="chat" order={4} defaultSize={CHAT_SIZE} minSize={20} maxSize={50}>
+                <ChatPanel onOpenSettings={() => setSettingsOpen(true)} />
+              </Panel>
+            </>
+          ) : null}
         </PanelGroup>
       </div>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <UpdateDialog />
       <Toaster />
     </div>
   );

@@ -51,16 +51,8 @@ export const DialogContent = forwardRef<
 ));
 DialogContent.displayName = "DialogContent";
 
-export function DialogHeader({
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn("mb-3 flex flex-col gap-1.5 text-left", className)}
-      {...props}
-    />
-  );
+export function DialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("mb-3 flex flex-col gap-1.5 text-left", className)} {...props} />;
 }
 
 export const DialogTitle = forwardRef<

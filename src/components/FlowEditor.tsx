@@ -6,12 +6,7 @@ import {
   type CompletionContext,
   type CompletionResult,
 } from "@codemirror/autocomplete";
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  indentWithTab,
-} from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import {
   bracketMatching,
   foldGutter,
@@ -24,6 +19,8 @@ import { yaml } from "@codemirror/legacy-modes/mode/yaml";
 import {
   Compartment,
   EditorState,
+  RangeSet,
+  RangeSetBuilder,
   StateEffect,
   StateField,
 } from "@codemirror/state";
@@ -31,6 +28,8 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
+  GutterMarker,
+  gutterLineClass,
   highlightActiveLine,
   highlightActiveLineGutter,
   keymap,
@@ -39,13 +38,23 @@ import {
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { FileDown, FileUp, Save } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu";
+import { parseFlow } from "@/lib/flowAst";
 
 import { Button } from "@/components/ui/Button";
 import { themeExtensions } from "@/lib/editor-theme";
 import { openFlowFile } from "@/lib/flow-io";
 import { resolveTheme } from "@/lib/theme";
+import { useAutosave } from "@/lib/useAutosave";
 import { useFlowStore } from "@/stores/flowStore";
+import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -84,6 +93,51 @@ function maestroCompletions(ctx: CompletionContext): CompletionResult | null {
 
 const setActiveLine = StateEffect.define<number | null>();
 
+type StepStatus = "running" | "done" | "failed";
+type StepStatusMap = Map<number, { status: StepStatus; endLine: number }>;
+
+const setStepStatuses = StateEffect.define<StepStatusMap>();
+
+const stepStatusField = StateField.define<StepStatusMap>({
+  create: () => new Map(),
+  update(map, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setStepStatuses)) return e.value;
+    }
+    return map;
+  },
+});
+
+class StepLineMarker extends GutterMarker {
+  override elementClass: string;
+  constructor(readonly status: StepStatus) {
+    super();
+    this.elementClass = `cm-step-line-${status}`;
+  }
+  override eq(other: GutterMarker): boolean {
+    return other instanceof StepLineMarker && other.status === this.status;
+  }
+}
+
+const stepLineClassExt = gutterLineClass.compute([stepStatusField], (state) => {
+  const map = state.field(stepStatusField);
+  if (map.size === 0) return RangeSet.empty;
+  const builder = new RangeSetBuilder<GutterMarker>();
+  const sorted = [...map.entries()].sort((a, b) => a[0] - b[0]);
+  const totalLines = state.doc.lines;
+  for (const [startLine, { status, endLine }] of sorted) {
+    const from = Math.max(1, startLine);
+    const to = Math.min(totalLines, Math.max(endLine, startLine));
+    if (from > totalLines) continue;
+    const marker = new StepLineMarker(status);
+    for (let ln = from; ln <= to; ln++) {
+      const pos = state.doc.line(ln).from;
+      builder.add(pos, pos, marker);
+    }
+  }
+  return builder.finish();
+});
+
 const activeLineField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(deco, tr) {
@@ -91,9 +145,7 @@ const activeLineField = StateField.define<DecorationSet>({
       if (e.is(setActiveLine)) {
         if (e.value === null || e.value < 1) return Decoration.none;
         const line = tr.state.doc.line(Math.min(e.value, tr.state.doc.lines));
-        return Decoration.set([
-          Decoration.line({ class: "cm-active-run-line" }).range(line.from),
-        ]);
+        return Decoration.set([Decoration.line({ class: "cm-active-run-line" }).range(line.from)]);
       }
     }
     return deco.map(tr.changes);
@@ -101,14 +153,16 @@ const activeLineField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-export function FlowEditor() {
+export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void } = {}) {
   const content = useFlowStore((s) => s.content);
   const filePath = useFlowStore((s) => s.filePath);
   const dirty = useFlowStore((s) => s.dirty);
   const activeLine = useFlowStore((s) => s.activeLine);
+  const steps = useRunStore((s) => s.steps);
   const setContent = useFlowStore((s) => s.setContent);
   const setCursor = useFlowStore((s) => s.setCursor);
   const saved = useFlowStore((s) => s.saved);
+  useAutosave();
 
   const themeMode = useSettingsStore((s) => s.theme);
 
@@ -117,11 +171,15 @@ export function FlowEditor() {
   const themeCompartment = useRef(new Compartment());
   const syncingFromStore = useRef(false);
 
+  const [menu, setMenu] = useState<{ x: number; y: number; line: number } | null>(null);
+
   useEffect(() => {
     if (!hostRef.current) return;
     const state = EditorState.create({
       doc: content,
       extensions: [
+        stepStatusField,
+        stepLineClassExt,
         lineNumbers(),
         foldGutter({ markerDOM: () => document.createElement("span") }),
         history(),
@@ -188,6 +246,18 @@ export function FlowEditor() {
     viewRef.current?.dispatch({ effects: setActiveLine.of(activeLine) });
   }, [activeLine]);
 
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const map: StepStatusMap = new Map();
+    for (const s of steps) {
+      if (s.status === "running" || s.status === "done" || s.status === "failed") {
+        map.set(s.line, { status: s.status, endLine: s.endLine });
+      }
+    }
+    view.dispatch({ effects: setStepStatuses.of(map) });
+  }, [steps]);
+
   // Swap CodeMirror theme when settings change (also re-applies when the
   // OS switches between light/dark under "system" mode because resolveTheme
   // re-reads the media query).
@@ -196,9 +266,7 @@ export function FlowEditor() {
     if (!view) return;
     const apply = () =>
       view.dispatch({
-        effects: themeCompartment.current.reconfigure(
-          themeExtensions(resolveTheme(themeMode)),
-        ),
+        effects: themeCompartment.current.reconfigure(themeExtensions(resolveTheme(themeMode))),
       });
     apply();
     if (themeMode !== "system") return;
@@ -207,6 +275,23 @@ export function FlowEditor() {
     mq.addEventListener("change", listener);
     return () => mq.removeEventListener("change", listener);
   }, [themeMode]);
+
+  const onEditorContextMenu = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      if (!onRunFrom) return;
+      const view = viewRef.current;
+      if (!view) return;
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+      if (pos === null) return;
+      const clickedLine = view.state.doc.lineAt(pos).number;
+      const ast = parseFlow(view.state.doc.toString());
+      const target = ast.steps.find((s) => s.line >= clickedLine);
+      if (!target) return;
+      e.preventDefault();
+      setMenu({ x: e.clientX, y: e.clientY, line: target.line });
+    },
+    [onRunFrom],
+  );
 
   const onOpen = useCallback(async () => {
     try {
@@ -289,7 +374,39 @@ export function FlowEditor() {
           </Button>
         </div>
       </div>
-      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden" />
+      <div
+        ref={hostRef}
+        className="min-h-0 flex-1 overflow-hidden"
+        onContextMenu={onEditorContextMenu}
+      />
+      {menu && onRunFrom ? (
+        <DropdownMenu open onOpenChange={(open) => !open && setMenu(null)}>
+          <DropdownMenuTrigger asChild>
+            <span
+              aria-hidden
+              style={{
+                position: "fixed",
+                left: menu.x,
+                top: menu.y,
+                width: 0,
+                height: 0,
+                pointerEvents: "none",
+              }}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" sideOffset={0}>
+            <DropdownMenuItem
+              onSelect={() => {
+                const line = menu.line;
+                setMenu(null);
+                onRunFrom(line);
+              }}
+            >
+              Run from line {menu.line}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }

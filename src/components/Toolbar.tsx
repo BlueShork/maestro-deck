@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Check,
   LayoutPanelLeft,
   ListChecks,
@@ -6,8 +7,11 @@ import {
   MousePointer2,
   Play,
   Settings,
+  Sparkles,
   Square,
 } from "lucide-react";
+
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
@@ -20,18 +24,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
 import { Separator } from "@/components/ui/Separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/stores/chatStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
+import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 /** Menu entries for the View dropdown. Order = on-screen left→right,
@@ -53,6 +54,8 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProps) {
+  const chatOpen = useChatStore((s) => s.isOpen);
+  const toggleChat = useChatStore((s) => s.toggle);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const inspectLoading = useInspectorStore((s) => s.loading);
   const toggleInspect = useInspectorStore((s) => s.toggle);
@@ -63,6 +66,8 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
   const panels = usePanelsStore((s) => s.visible);
   const togglePanel = usePanelsStore((s) => s.toggle);
   const showAllPanels = usePanelsStore((s) => s.showAll);
+  const updatePhase = useUpdateStore((s) => s.phase);
+  const checkUpdate = useUpdateStore((s) => s.check);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -70,7 +75,26 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
         <div className="flex items-center gap-2">
           <Logo className="h-7 w-auto text-foreground" />
           <Separator orientation="vertical" className="mx-1 h-5" />
-          <span className="text-xs text-muted-foreground">v0.1.0</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => void checkUpdate()}
+                disabled={updatePhase === "checking"}
+                className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-60"
+              >
+                {updatePhase === "checking" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    checking…
+                  </span>
+                ) : (
+                  `v${__APP_VERSION__}`
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Check for updates</TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="flex items-center gap-1">
@@ -112,12 +136,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
           {running ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={onStop}
-                  className="gap-1.5"
-                >
+                <Button size="sm" variant="destructive" onClick={onStop} className="gap-1.5">
                   <Square className="h-3.5 w-3.5" fill="currentColor" />
                   Stop
                 </Button>
@@ -128,12 +147,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    onClick={onRun}
-                    className={cn("gap-1.5")}
-                  >
+                  <Button size="sm" variant="default" onClick={onRun} className={cn("gap-1.5")}>
                     <Play className="h-3.5 w-3.5" fill="currentColor" />
                     Run
                   </Button>
@@ -154,9 +168,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {folderPath
-                    ? "Run every flow in the workspace"
-                    : "Open a folder to enable"}
+                  {folderPath ? "Run every flow in the workspace" : "Open a folder to enable"}
                 </TooltipContent>
               </Tooltip>
             </>
@@ -189,21 +201,42 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
                     className="justify-between gap-6"
                   >
                     <span>{label}</span>
-                    <Check
-                      className={cn(
-                        "h-3.5 w-3.5",
-                        visible ? "opacity-100" : "opacity-0",
-                      )}
-                    />
+                    <Check className={cn("h-3.5 w-3.5", visible ? "opacity-100" : "opacity-0")} />
                   </DropdownMenuItem>
                 );
               })}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => showAllPanels()}>
-                Show all
-              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => showAllPanels()}>Show all</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant={chatOpen ? "secondary" : "ghost"}
+                onClick={toggleChat}
+                aria-label="Toggle AI assistant"
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>AI assistant</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => void openUrl("https://www.maestrodeck.cloud/docs")}
+                aria-label="Open documentation"
+              >
+                <BookOpen className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Documentation</TooltipContent>
+          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>

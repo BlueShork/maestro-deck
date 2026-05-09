@@ -97,7 +97,7 @@ pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
     for attempt in 0..HIERARCHY_RETRIES {
         let attempt_start = std::time::Instant::now();
         let output = Command::new(&bin)
-            .args(["--device", serial, "hierarchy"])
+            .args(["--udid", serial, "hierarchy"])
             .output()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
@@ -133,10 +133,7 @@ pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
         );
         last_err = Some(stderr.clone());
         if attempt + 1 < HIERARCHY_RETRIES && is_driver_warmup_error(&stderr) {
-            debug!(
-                attempt,
-                "driver not ready, retrying in {:?}", RETRY_DELAY
-            );
+            debug!(attempt, "driver not ready, retrying in {:?}", RETRY_DELAY);
             std::thread::sleep(RETRY_DELAY);
             continue;
         }
@@ -246,23 +243,17 @@ pub fn parse_xml(xml: &str) -> AppResult<HierarchyTree> {
             .map_err(|e| AppError::HierarchyParse(e.to_string()))?
         {
             Event::Eof => break,
-            Event::Start(e) => {
-                if e.name().as_ref() == b"node" {
-                    let node = build_node(&e, &mut next_index, &reader)?;
-                    stack.push(node);
-                }
+            Event::Start(e) if e.name().as_ref() == b"node" => {
+                let node = build_node(&e, &mut next_index, &reader)?;
+                stack.push(node);
             }
-            Event::Empty(e) => {
-                if e.name().as_ref() == b"node" {
-                    let node = build_node(&e, &mut next_index, &reader)?;
+            Event::Empty(e) if e.name().as_ref() == b"node" => {
+                let node = build_node(&e, &mut next_index, &reader)?;
+                push_complete(node, &mut stack, &mut top_level);
+            }
+            Event::End(e) if e.name().as_ref() == b"node" => {
+                if let Some(node) = stack.pop() {
                     push_complete(node, &mut stack, &mut top_level);
-                }
-            }
-            Event::End(e) => {
-                if e.name().as_ref() == b"node" {
-                    if let Some(node) = stack.pop() {
-                        push_complete(node, &mut stack, &mut top_level);
-                    }
                 }
             }
             _ => {}
@@ -416,11 +407,9 @@ pub fn parse_bounds(s: &str) -> Option<Bounds> {
     for &b in bytes {
         match b {
             b'-' | b'0'..=b'9' => current.push(b as char),
-            b',' | b']' => {
-                if !current.is_empty() {
-                    nums.push(current.parse().ok()?);
-                    current.clear();
-                }
+            b',' | b']' if !current.is_empty() => {
+                nums.push(current.parse().ok()?);
+                current.clear();
             }
             _ => {}
         }

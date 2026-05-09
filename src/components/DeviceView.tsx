@@ -33,18 +33,11 @@ function nodeArea(n: UINode): number {
 
 function contains(n: UINode, x: number, y: number): boolean {
   const { bounds } = n;
-  return (
-    x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom
-  );
+  return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
 }
 
 function isTargetable(n: UINode): boolean {
-  return (
-    !!n.text?.trim() ||
-    !!n.resource_id?.trim() ||
-    !!n.content_desc?.trim() ||
-    n.clickable
-  );
+  return !!n.text?.trim() || !!n.resource_id?.trim() || !!n.content_desc?.trim() || n.clickable;
 }
 
 /**
@@ -236,13 +229,7 @@ export function DeviceView() {
       const offsetY = (rect.height - displayH) / 2;
       const localX = clientX - rect.left - offsetX;
       const localY = clientY - rect.top - offsetY;
-      if (
-        localX < 0 ||
-        localY < 0 ||
-        localX > displayW ||
-        localY > displayH ||
-        scale === 0
-      ) {
+      if (localX < 0 || localY < 0 || localX > displayW || localY > displayH || scale === 0) {
         return null;
       }
       return {
@@ -279,14 +266,7 @@ export function DeviceView() {
       const hit = findSmallestAt(tree.root, h.x, h.y);
       setHovered(hit);
     },
-    [
-      inspectEnabled,
-      tree,
-      toDeviceCoords,
-      toHierarchyCoords,
-      setHovered,
-      refreshIfStale,
-    ],
+    [inspectEnabled, tree, toDeviceCoords, toHierarchyCoords, setHovered, refreshIfStale],
   );
 
   const onClick = useCallback(
@@ -302,17 +282,10 @@ export function DeviceView() {
       // even when the device's native resolution differs (QHD+ → 1440 native
       // vs 1080 stream).
       try {
-        await ipc.sendInput(
-          { kind: "tap", x: coords.x, y: coords.y },
-          deviceWidth,
-          deviceHeight,
-        );
+        await ipc.sendInput({ kind: "tap", x: coords.x, y: coords.y }, deviceWidth, deviceHeight);
         toast.action("Tap sent");
       } catch (err) {
-        toast.error(
-          "Tap failed",
-          err instanceof Error ? err.message : String(err),
-        );
+        toast.error("Tap failed", err instanceof Error ? err.message : String(err));
         return;
       }
       if (inspectEnabled) {
@@ -321,10 +294,7 @@ export function DeviceView() {
           const node = await ipc.queryElement(h.x, h.y);
           await select(node);
         } catch (err) {
-          toast.error(
-            "Query failed",
-            err instanceof Error ? err.message : String(err),
-          );
+          toast.error("Query failed", err instanceof Error ? err.message : String(err));
         }
         // Tap may have navigated; schedule a debounced re-dump so the
         // hierarchy reflects whatever is now on screen. Rapid taps
@@ -366,10 +336,7 @@ export function DeviceView() {
           selector: selectors[0] ?? null,
         });
       } catch (err) {
-        toast.error(
-          "Inspect failed",
-          err instanceof Error ? err.message : String(err),
-        );
+        toast.error("Inspect failed", err instanceof Error ? err.message : String(err));
       }
     },
     [inspectEnabled, toDeviceCoords, toHierarchyCoords, select],
@@ -417,10 +384,7 @@ export function DeviceView() {
       await ipc.setDarkMode(next);
     } catch (err) {
       setDarkMode(!next);
-      toast.error(
-        "Dark mode toggle failed",
-        err instanceof Error ? err.message : String(err),
-      );
+      toast.error("Dark mode toggle failed", err instanceof Error ? err.message : String(err));
     } finally {
       setTogglingDark(false);
     }
@@ -459,10 +423,7 @@ export function DeviceView() {
       await writeFile(path, bytes);
       toast.success("Screenshot saved", path);
     } catch (err) {
-      toast.error(
-        "Screenshot failed",
-        err instanceof Error ? err.message : String(err),
-      );
+      toast.error("Screenshot failed", err instanceof Error ? err.message : String(err));
     } finally {
       setCapturing(false);
     }
@@ -503,10 +464,7 @@ export function DeviceView() {
     // user scrolls down — i.e. finger should move *up* on the device
     // to reveal content below. That matches Android's natural scroll.
     const deviceDelta = delta / scale;
-    const y2 = Math.max(
-      0,
-      Math.min(deviceHeight - 1, cursor.y - Math.round(deviceDelta)),
-    );
+    const y2 = Math.max(0, Math.min(deviceHeight - 1, cursor.y - Math.round(deviceDelta)));
 
     void ipc
       .sendInput(
@@ -539,8 +497,7 @@ export function DeviceView() {
 
       // Normalize so line/page scrolls (rare wheel mice) roughly match
       // pixel scrolls from a trackpad.
-      const mult =
-        e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
+      const mult = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
       wheelAccum.current += e.deltaY * mult;
       wheelCursor.current = coords;
 
@@ -562,9 +519,7 @@ export function DeviceView() {
       onContextMenu={(e) => void onContextMenu(e)}
       onWheel={onWheel}
     >
-      {hasFrame ? null : (
-        <EmptyState connected={!!current} streamEnabled={streamEnabled} />
-      )}
+      {hasFrame ? null : <EmptyState connected={!!current} streamEnabled={streamEnabled} />}
 
       <canvas
         ref={canvasRef}
@@ -583,16 +538,10 @@ export function DeviceView() {
         <div
           className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
           style={{
-            left:
-              (canvasRect.width - displayW) / 2 +
-              overlayBounds.left * overlayScaleX,
-            top:
-              (canvasRect.height - displayH) / 2 +
-              overlayBounds.top * overlayScaleY,
-            width:
-              (overlayBounds.right - overlayBounds.left) * overlayScaleX,
-            height:
-              (overlayBounds.bottom - overlayBounds.top) * overlayScaleY,
+            left: (canvasRect.width - displayW) / 2 + overlayBounds.left * overlayScaleX,
+            top: (canvasRect.height - displayH) / 2 + overlayBounds.top * overlayScaleY,
+            width: (overlayBounds.right - overlayBounds.left) * overlayScaleX,
+            height: (overlayBounds.bottom - overlayBounds.top) * overlayScaleY,
           }}
         />
       ) : null}
@@ -608,11 +557,7 @@ export function DeviceView() {
             aria-pressed={darkMode ?? false}
             className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {darkMode ? (
-              <Moon className="h-4 w-4" />
-            ) : (
-              <Sun className="h-4 w-4" />
-            )}
+            {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </button>
           <button
             type="button"
@@ -648,13 +593,7 @@ function formatTimestamp(d: Date): string {
   );
 }
 
-function EmptyState({
-  connected,
-  streamEnabled,
-}: {
-  connected: boolean;
-  streamEnabled: boolean;
-}) {
+function EmptyState({ connected, streamEnabled }: { connected: boolean; streamEnabled: boolean }) {
   const lightweight = connected && !streamEnabled;
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">

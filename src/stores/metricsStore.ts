@@ -38,8 +38,7 @@ export const useMetricsStore = create<MetricsState>((set) => ({
       if (next.length > MAX_SAMPLES) next.splice(0, next.length - MAX_SAMPLES);
       return { samples: next };
     }),
-  onTargetChanged: (pkg) =>
-    set({ currentPackage: pkg, samples: [], stoppedReason: null }),
+  onTargetChanged: (pkg) => set({ currentPackage: pkg, samples: [], stoppedReason: null }),
   setStoppedReason: (stoppedReason) => set({ stoppedReason }),
   reset: () =>
     set({

@@ -63,9 +63,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       });
       toast.success(
         "Device connected",
-        streamEnabled
-          ? (device?.model ?? serial)
-          : `${device?.model ?? serial} · stream off`,
+        streamEnabled ? (device?.model ?? serial) : `${device?.model ?? serial} · stream off`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
