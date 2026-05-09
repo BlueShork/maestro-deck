@@ -39,6 +39,7 @@ export default [
       globals: {
         ...globals.browser,
         EventListener: "readonly",
+        __APP_VERSION__: "readonly",
       },
     },
     plugins: {
