@@ -4,6 +4,8 @@
   "version": "0.3.0",
   "type": "module",
   "description": "Open-source visual IDE for Maestro mobile tests",
+  "license": "Apache-2.0",
+  "author": "Ethan Morisset",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
