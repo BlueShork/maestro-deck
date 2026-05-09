@@ -1,3 +1,13 @@
+# What's New in v0.3.1
+
+## Bug fixes
+- **Billy chat now works in production** — fixed a Content Security Policy that blocked direct calls to the Vertex AI and Anthropic APIs from the packaged app. Selecting Gemini Flash (or any model) no longer fails with "Load failed".
+
+## Internal
+- Release pipeline now correctly uploads updater signatures and `latest.json` for both macOS and Windows.
+
+---
+
 # What's New in v0.3.0
 
 ## Auto-update
