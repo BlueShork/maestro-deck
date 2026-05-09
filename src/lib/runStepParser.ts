@@ -33,10 +33,7 @@ const PATTERNS: Pattern[] = [
   { command: "clearState", re: null, bareRe: /^Clear state/ },
 ];
 
-// Single linear regex — bounded by the literal `...` prefix and the trailing
-// `$` anchor. Status (COMPLETED/FAILED) is extracted via plain string ops
-// below to avoid a regex with optional alternation + `\s*` (ReDoS pattern).
-const SUFFIX = /\.\.\.\s*(.*)$/;
+const SUFFIX = /\.\.\.\s*(COMPLETED|FAILED)?\s*(.*)$/;
 const ANSI = /\[[0-9;]*[A-Za-z]/g;
 
 export function parseLine(raw: string): StepEvent | null {
@@ -62,12 +59,12 @@ export function parseLine(raw: string): StepEvent | null {
 
     const sm = SUFFIX.exec(rest);
     if (!sm) continue;
-    const tail = sm[1];
-    if (tail.startsWith("COMPLETED")) {
+    const status = sm[1];
+    const trailer = sm[2]?.trim() ?? "";
+    if (status === "COMPLETED") {
       return { kind: "completed", command: p.command, arg };
     }
-    if (tail.startsWith("FAILED")) {
-      const trailer = tail.slice("FAILED".length).trim();
+    if (status === "FAILED") {
       return { kind: "failed", command: p.command, arg, error: trailer || undefined };
     }
     return { kind: "started", command: p.command, arg };
