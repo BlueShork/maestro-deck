@@ -46,15 +46,21 @@ interface RunState {
 let nextId = 1;
 
 function pickIndex(steps: StepRunState[], command: string, arg: string | null): number | null {
-  let firstAny: number | null = null;
+  let firstExactPending: number | null = null;
+  let firstExactAny: number | null = null;
+  let firstCommandPending: number | null = null;
+  let firstCommandAny: number | null = null;
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     if (s.command !== command) continue;
-    if ((s.arg ?? "") !== (arg ?? "")) continue;
-    if (firstAny === null) firstAny = i;
-    if (s.status === "pending" || s.status === "running") return i;
+    const argMatches = (s.arg ?? "") === (arg ?? "");
+    const isPending = s.status === "pending" || s.status === "running";
+    if (argMatches && isPending && firstExactPending === null) firstExactPending = i;
+    if (argMatches && firstExactAny === null) firstExactAny = i;
+    if (isPending && firstCommandPending === null) firstCommandPending = i;
+    if (firstCommandAny === null) firstCommandAny = i;
   }
-  return firstAny;
+  return firstExactPending ?? firstExactAny ?? firstCommandPending ?? firstCommandAny;
 }
 
 export const useRunStore = create<RunState>((set) => ({

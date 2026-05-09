@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 import { getProvider } from "@/lib/chat/registry";
 import { BILLY_SYSTEM_PROMPT } from "@/lib/chat/systemPrompt";
@@ -55,7 +56,9 @@ const DEFAULTS = {
   model: "claude-sonnet-4-6",
 };
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set, get) => ({
   isOpen: false,
   messages: [],
   isStreaming: false,
@@ -188,4 +191,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   clear: () => set({ messages: [], error: null }),
 
   bumpScroll: () => set((s) => ({ scrollBump: s.scrollBump + 1 })),
-}));
+    }),
+    {
+      name: "maestro-deck.chat",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (s) => ({
+        currentProvider: s.currentProvider,
+        currentModel: s.currentModel,
+      }),
+    },
+  ),
+);

@@ -72,7 +72,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
         <div className="flex items-center gap-2">
           <Logo className="h-7 w-auto text-foreground" />
           <Separator orientation="vertical" className="mx-1 h-5" />
-          <span className="text-xs text-muted-foreground">v0.1.0</span>
+          <span className="text-xs text-muted-foreground">v{__APP_VERSION__}</span>
         </div>
 
         <div className="flex items-center gap-1">

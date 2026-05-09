@@ -53,17 +53,17 @@ Maestro Deck mirrors your Android phone on your desktop, lets you tap and type o
 
 Maestro is the YAML mobile-testing framework. Maestro Deck is the desktop app that makes writing those flows feel like clicking through your app instead of guessing selectors.
 
-|  | Maestro Deck | Maestro Studio | Appium Inspector |
-|---|---|---|---|
-| Install | Single signed app (DMG/AppImage/MSI) | `maestro studio` (browser) | Java + Appium server setup |
-| Footprint | Native Tauri shell (~80 MB RAM idle, system webview) | Electron-based, ~400+ MB RAM | JVM + Chromium inspector |
-| Cost | Free, open source (Apache 2.0) | Free, closed source | Free, open source |
-| Live mirroring | ✅ scrcpy-grade, 60 fps | ⚠️ Periodic screenshots | ⚠️ Screenshot-based |
-| Smart selectors | ✅ id → text → desc → point | ✅ | ⚠️ Manual |
-| Built-in YAML editor | ✅ CodeMirror + Maestro syntax | ✅ Basic | ❌ |
-| One-click run with logs | ✅ | ❌ (separate CLI) | ❌ |
-| Telemetry / account | None | mobile.dev account flows | None |
-| Cloud execution | Out of scope (stays local) | Paid mobile.dev cloud | N/A |
+|                         | Maestro Deck                                         | Maestro Studio               | Appium Inspector           |
+| ----------------------- | ---------------------------------------------------- | ---------------------------- | -------------------------- |
+| Install                 | Single signed app (DMG/AppImage/MSI)                 | `maestro studio` (browser)   | Java + Appium server setup |
+| Footprint               | Native Tauri shell (~80 MB RAM idle, system webview) | Electron-based, ~400+ MB RAM | JVM + Chromium inspector   |
+| Cost                    | Free, open source (Apache 2.0)                       | Free, closed source          | Free, open source          |
+| Live mirroring          | ✅ scrcpy-grade, 60 fps                              | ⚠️ Periodic screenshots      | ⚠️ Screenshot-based        |
+| Smart selectors         | ✅ id → text → desc → point                          | ✅                           | ⚠️ Manual                  |
+| Built-in YAML editor    | ✅ CodeMirror + Maestro syntax                       | ✅ Basic                     | ❌                         |
+| One-click run with logs | ✅                                                   | ❌ (separate CLI)            | ❌                         |
+| Telemetry / account     | None                                                 | mobile.dev account flows     | None                       |
+| Cloud execution         | Out of scope (stays local)                           | Paid mobile.dev cloud        | N/A                        |
 
 If you already use Maestro Studio: Deck is a native, local-first alternative with a tighter mirror-inspect-edit-run loop and no cloud coupling.
 
@@ -85,10 +85,10 @@ If you already use Maestro Studio: Deck is a native, local-first alternative wit
 
 **1. Install ADB**
 
-| OS | Command |
-|----|---------|
-| macOS | `brew install android-platform-tools` |
-| Linux | `sudo apt install adb` |
+| OS      | Command                                                                                       |
+| ------- | --------------------------------------------------------------------------------------------- |
+| macOS   | `brew install android-platform-tools`                                                         |
+| Linux   | `sudo apt install adb`                                                                        |
 | Windows | [Platform Tools](https://developer.android.com/tools/releases/platform-tools) + add to `PATH` |
 
 **2. Install Maestro** — see the [official guide](https://maestro.mobile.dev/getting-started/installing-maestro).
@@ -134,12 +134,12 @@ More details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Roadmap
 
-| Version | Scope |
-|---------|-------|
-| **v0.1** *(current)* | Android USB, single device, inspector + editor + runner |
-| **v0.2** | iOS simulator, multi-device, record mode |
-| **v0.3** | iOS physical devices, plugin system |
-| **v1.0** | Production-ready |
+| Version              | Scope                                                   |
+| -------------------- | ------------------------------------------------------- |
+| **v0.1** _(current)_ | Android USB, single device, inspector + editor + runner |
+| **v0.2**             | iOS simulator, multi-device, record mode                |
+| **v0.3**             | iOS physical devices, plugin system                     |
+| **v1.0**             | Production-ready                                        |
 
 Cloud execution is a non-goal. Maestro Deck stays local.
 

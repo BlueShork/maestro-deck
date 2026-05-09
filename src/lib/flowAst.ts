@@ -122,8 +122,11 @@ function extractArg(command: string, value: unknown): string | null {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const obj = value as Record<string, unknown>;
     if (command === "launchApp" && typeof obj.appId === "string") return obj.appId;
-    if (typeof obj.id === "string") return obj.id;
     if (typeof obj.text === "string") return obj.text;
+    if (typeof obj.id === "string") return obj.id;
+    if (obj.element && typeof obj.element === "object" && !Array.isArray(obj.element)) {
+      return extractArg(command, obj.element);
+    }
   }
   return null;
 }
