@@ -1,6 +1,6 @@
 [package]
 name = "maestro-deck"
-version = "0.3.1"
+version = "0.3.2"
 description = "Open-source visual IDE for Maestro mobile tests"
 authors = ["Ethan Morisset <blueshork.dev@gmail.com>"]
 license = "Apache-2.0"
