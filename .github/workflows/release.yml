@@ -48,7 +48,7 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build, sign, and publish
         uses: tauri-apps/tauri-action@v0
