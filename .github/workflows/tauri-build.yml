@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: pnpm }
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
 
       # On PR: just verify it compiles (skip bundling + code-sign).
       # On tag push: full bundle for release artifacts.
