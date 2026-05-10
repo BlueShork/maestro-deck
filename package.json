@@ -1,7 +1,7 @@
 {
   "name": "maestro-deck",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "description": "Open-source visual IDE for Maestro mobile tests",
   "license": "Apache-2.0",

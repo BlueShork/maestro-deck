@@ -1,3 +1,11 @@
+# What's New in v0.3.2
+
+## Bug fixes
+- **Inspector mode now works when launching from the Dock or Applications folder** — on macOS, GUI-launched apps inherit a minimal `PATH` that doesn't include Homebrew, Android Studio, or `~/.maestro/bin`. Maestro Deck now probes those locations directly and falls back to your login shell, so `maestro` and `adb` are found even when launched outside a terminal.
+- **New "Tool paths" section in Settings** — explicitly point Maestro Deck at your `adb` and `maestro` binaries when auto-detection fails (typical on locked-down corporate machines). Browse for the file or paste a path; changes apply on the next call without restarting the app.
+
+---
+
 # What's New in v0.3.1
 
 ## Bug fixes
