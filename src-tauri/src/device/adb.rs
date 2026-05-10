@@ -1,121 +1,17 @@
 //! ADB binary wrapper.
 
-use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
 
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use super::{Device, DeviceListEntry, DeviceState};
 use crate::error::{AppError, AppResult};
 
-const DEFAULT_ADB_BIN: &str = "adb";
-
-/// Resolved adb path, computed once. macOS GUI apps inherit a minimal
-/// PATH (e.g. `/usr/bin:/bin:/usr/sbin:/sbin`) — Homebrew, Android Studio
-/// and similar locations are not in it. We probe common install paths and
-/// fall back to the user's login shell PATH so users don't have to set
-/// `ADB_BIN` manually for the common case.
-static RESOLVED_ADB: OnceLock<String> = OnceLock::new();
-
-/// Public accessor — other modules (scrcpy, hierarchy/studio) should call
-/// this instead of reading `ADB_BIN` themselves, so resolution is
-/// consistent across the app.
+/// Resolved adb path. Delegates to the shared resolver in
+/// `crate::tool_paths` which handles the user override, env var, common
+/// paths, and login-shell fallbacks consistently with `maestro_bin()`.
 pub fn adb_bin() -> String {
-    RESOLVED_ADB.get_or_init(resolve_adb).clone()
-}
-
-fn resolve_adb() -> String {
-    // 1. Explicit override always wins.
-    if let Ok(p) = std::env::var("ADB_BIN") {
-        if !p.trim().is_empty() {
-            info!(path = %p, "adb resolved from ADB_BIN env");
-            return p;
-        }
-    }
-
-    // 2. Probe common install locations.
-    if let Some(p) = probe_common_paths() {
-        info!(path = %p.display(), "adb resolved from common path");
-        return p.to_string_lossy().into_owned();
-    }
-
-    // 3. Ask the user's login shell where adb is — covers custom PATH
-    //    setups (Android Studio installed elsewhere, asdf, mise, …).
-    //    GUI-launched apps on macOS don't inherit the shell PATH, so this
-    //    is the only way to reach a user-configured adb without a manual
-    //    setting.
-    if let Some(p) = probe_login_shell() {
-        info!(path = %p, "adb resolved via login shell PATH");
-        return p;
-    }
-
-    // 4. Last-ditch — let the OS fail with NotFound. The error path
-    //    surfaces `AppError::AdbNotFound` with a setup hint.
-    debug!("adb resolution failed, falling back to bare \"adb\"");
-    DEFAULT_ADB_BIN.to_string()
-}
-
-fn is_executable(path: &Path) -> bool {
-    path.is_file()
-}
-
-fn probe_common_paths() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    if cfg!(target_os = "macos") {
-        candidates.push(PathBuf::from("/opt/homebrew/bin/adb"));
-        candidates.push(PathBuf::from("/usr/local/bin/adb"));
-        if let Some(home) = dirs_home() {
-            candidates.push(home.join("Library/Android/sdk/platform-tools/adb"));
-        }
-    } else if cfg!(target_os = "linux") {
-        candidates.push(PathBuf::from("/usr/local/bin/adb"));
-        candidates.push(PathBuf::from("/usr/bin/adb"));
-        if let Some(home) = dirs_home() {
-            candidates.push(home.join("Android/Sdk/platform-tools/adb"));
-        }
-    } else if cfg!(target_os = "windows") {
-        if let Ok(local) = std::env::var("LOCALAPPDATA") {
-            candidates.push(PathBuf::from(local).join("Android/Sdk/platform-tools/adb.exe"));
-        }
-        if let Some(home) = dirs_home() {
-            candidates.push(home.join("AppData/Local/Android/Sdk/platform-tools/adb.exe"));
-        }
-    }
-
-    candidates.into_iter().find(|p| is_executable(p))
-}
-
-fn dirs_home() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-}
-
-fn probe_login_shell() -> Option<String> {
-    // Skip on Windows — `command -v` semantics don't apply, and
-    // probe_common_paths already covers the standard install locations.
-    if cfg!(target_os = "windows") {
-        return None;
-    }
-
-    let shell = std::env::var("SHELL").ok()?;
-    // `-i -l -c` runs an interactive login shell so user rc files (.zshrc,
-    // .bash_profile, …) populate PATH before we ask. `command -v` is the
-    // POSIX way to print a resolved binary path.
-    let output = Command::new(&shell)
-        .args(["-ilc", "command -v adb"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path.is_empty() || !Path::new(&path).is_file() {
-        return None;
-    }
-    Some(path)
+    crate::tool_paths::adb_bin()
 }
 
 fn run_adb(args: &[&str]) -> AppResult<String> {
