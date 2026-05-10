@@ -13,6 +13,7 @@ pub mod runner;
 pub mod scrcpy;
 pub mod selector;
 pub mod state;
+pub mod tool_paths;
 pub mod vertex;
 pub mod video;
 pub mod workspace;
@@ -22,6 +23,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use credentials::{delete_credential, get_credential, save_credential};
 use ipc::commands::*;
+use tool_paths::{get_tool_paths, set_tool_paths};
 use vertex::vertex_get_access_token;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -76,6 +78,8 @@ pub fn run() {
             save_credential,
             get_credential,
             delete_credential,
+            get_tool_paths,
+            set_tool_paths,
         ])
         .setup(|app| {
             ipc::register_events(app)?;

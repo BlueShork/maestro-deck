@@ -13,7 +13,6 @@ use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
 
-const DEFAULT_BIN: &str = "maestro";
 const EVT_STDOUT: &str = "runner:stdout";
 const EVT_STDERR: &str = "runner:stderr";
 const EVT_EXIT: &str = "runner:exit";
@@ -37,8 +36,10 @@ pub struct RunnerExit {
 static RUNNERS: Lazy<AsyncMutex<HashMap<u32, oneshot::Sender<()>>>> =
     Lazy::new(|| AsyncMutex::new(HashMap::new()));
 
+/// Resolves to the user's `maestro` install — see `crate::tool_paths` for
+/// the full priority chain (user override → env → common paths → shell).
 fn maestro_bin() -> String {
-    std::env::var("MAESTRO_BIN").unwrap_or_else(|_| DEFAULT_BIN.to_string())
+    crate::tool_paths::maestro_bin()
 }
 
 /// Spawn `maestro --udid <serial> test <flow>` and stream stdout/stderr to
