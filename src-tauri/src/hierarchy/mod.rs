@@ -68,7 +68,6 @@ pub struct HierarchyTree {
     pub xml_raw: String,
 }
 
-const DEFAULT_BIN: &str = "maestro";
 /// Number of attempts when the on-device driver isn't ready yet (e.g. after a
 /// `maestro test` was killed and the driver process is restarting).
 const HIERARCHY_RETRIES: usize = 3;
@@ -78,8 +77,10 @@ const HIERARCHY_RETRIES: usize = 3;
 /// territory on flaky/warmup paths.
 const RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
 
+/// Resolves to the user's `maestro` install — see `crate::tool_paths` for
+/// the full priority chain (user override → env → common paths → shell).
 fn maestro_bin() -> String {
-    std::env::var("MAESTRO_BIN").unwrap_or_else(|_| DEFAULT_BIN.to_string())
+    crate::tool_paths::maestro_bin()
 }
 
 /// True for errors that indicate the on-device gRPC driver isn't yet up. These

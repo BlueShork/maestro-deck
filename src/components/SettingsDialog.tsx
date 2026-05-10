@@ -1,6 +1,7 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 
 import { AiSettings } from "@/components/AiSettings";
+import { ToolPathsSettings } from "@/components/ToolPathsSettings";
 import {
   Dialog,
   DialogContent,
@@ -165,6 +166,9 @@ export function SettingsDialog({
               className="w-12 rounded border border-border bg-background px-2 py-1 text-center font-mono text-xs"
             />
           </label>
+
+          <Separator className="my-1" />
+          <ToolPathsSettings />
 
           <Separator className="my-1" />
           <AiSettings />

@@ -78,7 +78,16 @@ export const ipc = {
   checkDeviceHealth: (serial: string) => call<HealthReport>("check_device_health", { serial }),
   killMaestroProcesses: (serial: string, report: HealthReport) =>
     call<KillReport>("kill_maestro_processes", { serial, report }),
+  getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
+  setToolPaths: (adb: string | null, maestro: string | null) =>
+    call<ToolPathsView>("set_tool_paths", { adb, maestro }),
 };
+
+export interface ToolPathsView {
+  overrides: { adb: string | null; maestro: string | null };
+  resolved_adb: string;
+  resolved_maestro: string;
+}
 
 export interface FrameEvent {
   ptsUs: number;
