@@ -1,0 +1,30 @@
+output:
+  - summary
+  - success
+  - failure
+color: true
+no_tty: false
+
+pre-commit:
+  parallel: true
+  commands:
+    prettier:
+      glob: "src/**/*.{ts,tsx,css,json}"
+      run: pnpm exec prettier --check {staged_files}
+
+    eslint:
+      glob: "src/**/*.{ts,tsx}"
+      run: pnpm exec eslint --max-warnings 0 {staged_files}
+
+    rustfmt:
+      glob: "src-tauri/**/*.rs"
+      run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: pnpm typecheck
+
+    clippy:
+      run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
