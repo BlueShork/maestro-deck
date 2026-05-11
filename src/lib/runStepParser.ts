@@ -13,6 +13,11 @@ interface Pattern {
   bareRe?: RegExp;
 }
 
+// Patterns are ordered most-specific-first. Each `re` captures the arg
+// (typically a quoted text/id); `bareRe` matches commands that have no
+// useful arg in the runner output. The Maestro CLI sometimes inserts
+// `(Optional)` after the verb when the YAML had `optional: true` —
+// we strip it in `stripOptionalMarker` before matching.
 const PATTERNS: Pattern[] = [
   { command: "launchApp", re: /^Launch app "(.+?)"/ },
   { command: "stopApp", re: /^Stop app "(.+?)"/ },
@@ -23,6 +28,12 @@ const PATTERNS: Pattern[] = [
   { command: "assertNotVisible", re: /^Assert that "(.+?)" is not visible/ },
   { command: "inputText", re: /^Input text "(.+?)"/ },
   { command: "openLink", re: /^Open link "(.+?)"/ },
+  // Maestro 1.x: `Scroll until "X" is visible`. Maestro 2.x: `Scrolling
+  // DOWN until "X" is visible with speed 40, ...`. Both must match.
+  {
+    command: "scrollUntilVisible",
+    re: /^Scrolling (?:UP|DOWN|LEFT|RIGHT) until "(.+?)" is visible/,
+  },
   { command: "scrollUntilVisible", re: /^Scroll until "(.+?)" is visible/ },
   { command: "pressKey", re: /^Press key "(.+?)"/ },
   { command: "waitForAnimationToEnd", re: null, bareRe: /^Wait for animation to end/ },
@@ -33,11 +44,24 @@ const PATTERNS: Pattern[] = [
   { command: "clearState", re: null, bareRe: /^Clear state/ },
 ];
 
-const SUFFIX = /\.\.\.\s*(COMPLETED|FAILED)?\s*(.*)$/;
+// Maestro reports terminal status as COMPLETED, FAILED, or WARNED (the
+// latter for steps marked `optional: true` that didn't find their target
+// — they don't fail the run, but we want to mark the line green-ish).
+// Treating WARNED as completed keeps the gutter informative without
+// surfacing a false negative.
+const SUFFIX = /\.\.\.\s*(COMPLETED|FAILED|WARNED)?\s*(.*)$/;
 const ANSI = /\[[0-9;]*[A-Za-z]/g;
+// Maestro injects `(Optional)` between verb and target when the YAML
+// had `optional: true`. Strip it so the verb regexes still match.
+const OPTIONAL_PREFIX =
+  /^(Tap on|Long press on|Double tap on|Assert that|Wait until)\s+\(Optional\)\s+/i;
+
+function stripOptionalMarker(line: string): string {
+  return line.replace(OPTIONAL_PREFIX, "$1 ");
+}
 
 export function parseLine(raw: string): StepEvent | null {
-  const line = raw.replace(ANSI, "").trim();
+  const line = stripOptionalMarker(raw.replace(ANSI, "").trim());
   if (!line) return null;
 
   for (const p of PATTERNS) {
@@ -61,7 +85,7 @@ export function parseLine(raw: string): StepEvent | null {
     if (!sm) continue;
     const status = sm[1];
     const trailer = sm[2]?.trim() ?? "";
-    if (status === "COMPLETED") {
+    if (status === "COMPLETED" || status === "WARNED") {
       return { kind: "completed", command: p.command, arg };
     }
     if (status === "FAILED") {

@@ -20,9 +20,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            args: --target universal-apple-darwin
-          - platform: windows-latest
+          # macOS disabled: GitHub Actions billing blocked. Re-enable once
+          # billing is sorted (and also re-enable the `manifest` job below).
+          # - platform: macos-latest
+          #   args: --target universal-apple-darwin
+          - platform: [self-hosted, Windows, X64]
             args: ""
 
     runs-on: ${{ matrix.platform }}
@@ -87,7 +89,7 @@ jobs:
       # does NOT rename the matching `.sig` — so the file never makes
       # it to the release. Upload it ourselves under the matching name.
       - name: Upload macOS updater signature
-        if: matrix.platform == 'macos-latest'
+        if: runner.os == 'macOS'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -101,7 +103,7 @@ jobs:
             --repo "${{ github.repository }}" --clobber
 
       - name: Upload Windows updater signature
-        if: matrix.platform == 'windows-latest'
+        if: runner.os == 'Windows'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -112,51 +114,40 @@ jobs:
           gh release upload "${{ github.ref_name }}" "$SRC" \
             --repo "${{ github.repository }}" --clobber
 
-  # Builds latest.json from the .sig files uploaded by the matrix above.
-  # Runs once, after both platforms are done.
-  manifest:
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Generate and upload latest.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          VERSION="${TAG#v}"
-          WORK=$(mktemp -d)
-
-          # Pull only the .sig files from the draft release.
-          gh release download "$TAG" --repo "$REPO" --dir "$WORK" \
-            --pattern "*.sig"
-
-          MAC_SIG=$(cat "$WORK/Maestro Deck_universal.app.tar.gz.sig")
-          WIN_SIG=$(cat "$WORK/Maestro Deck_${VERSION}_x64-setup.exe.sig")
-
-          BASE="https://github.com/$REPO/releases/download/$TAG"
-          # URL-encode the space in the asset names.
-          MAC_URL="$BASE/Maestro%20Deck_universal.app.tar.gz"
-          WIN_URL="$BASE/Maestro%20Deck_${VERSION}_x64-setup.exe"
-
-          jq -n \
-            --arg version "$VERSION" \
-            --arg pubdate "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg mac_sig "$MAC_SIG" \
-            --arg mac_url "$MAC_URL" \
-            --arg win_sig "$WIN_SIG" \
-            --arg win_url "$WIN_URL" \
-            '{
-              version: $version,
-              notes: "See CHANGELOG_EN.md for details.",
-              pub_date: $pubdate,
-              platforms: {
-                "darwin-x86_64":  { signature: $mac_sig, url: $mac_url },
-                "darwin-aarch64": { signature: $mac_sig, url: $mac_url },
-                "windows-x86_64": { signature: $win_sig, url: $win_url }
-              }
-            }' > latest.json
-
-          gh release upload "$TAG" latest.json \
-            --repo "$REPO" --clobber
+  # Manifest job disabled while macOS is off — it needs both sigs to
+  # produce latest.json. Re-enable together with the macOS matrix entry.
+  # manifest:
+  #   needs: release
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Generate and upload latest.json
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         TAG: ${{ github.ref_name }}
+  #         REPO: ${{ github.repository }}
+  #       run: |
+  #         set -euo pipefail
+  #         VERSION="${TAG#v}"
+  #         WORK=$(mktemp -d)
+  #         gh release download "$TAG" --repo "$REPO" --dir "$WORK" --pattern "*.sig"
+  #         MAC_SIG=$(cat "$WORK/Maestro Deck_universal.app.tar.gz.sig")
+  #         WIN_SIG=$(cat "$WORK/Maestro Deck_${VERSION}_x64-setup.exe.sig")
+  #         BASE="https://github.com/$REPO/releases/download/$TAG"
+  #         MAC_URL="$BASE/Maestro%20Deck_universal.app.tar.gz"
+  #         WIN_URL="$BASE/Maestro%20Deck_${VERSION}_x64-setup.exe"
+  #         jq -n \
+  #           --arg version "$VERSION" \
+  #           --arg pubdate "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  #           --arg mac_sig "$MAC_SIG" --arg mac_url "$MAC_URL" \
+  #           --arg win_sig "$WIN_SIG" --arg win_url "$WIN_URL" \
+  #           '{
+  #             version: $version,
+  #             notes: "See CHANGELOG_EN.md for details.",
+  #             pub_date: $pubdate,
+  #             platforms: {
+  #               "darwin-x86_64":  { signature: $mac_sig, url: $mac_url },
+  #               "darwin-aarch64": { signature: $mac_sig, url: $mac_url },
+  #               "windows-x86_64": { signature: $win_sig, url: $win_url }
+  #             }
+  #           }' > latest.json
+  #         gh release upload "$TAG" latest.json --repo "$REPO" --clobber

@@ -78,4 +78,56 @@ describe("runStore.steps", () => {
     useRunStore.getState().resetSteps();
     expect(useRunStore.getState().steps).toEqual([]);
   });
+
+  describe("runFlow heuristic (Maestro inlines subflow steps without a header)", () => {
+    const stepsWithRunFlow = (): Step[] => [
+      { index: 0, line: 1, endLine: 1, command: "launchApp", arg: "com.example" },
+      { index: 1, line: 2, endLine: 5, command: "runFlow", arg: null },
+      { index: 2, line: 6, endLine: 6, command: "tapOn", arg: "After" },
+    ];
+
+    it("marks runFlow as running when an unknown-to-parent step starts", () => {
+      useRunStore.getState().initSteps(stepsWithRunFlow());
+      useRunStore
+        .getState()
+        .applyEvent({ kind: "completed", command: "launchApp", arg: "com.example" });
+      // Now cursor sits on the runFlow. An inner subflow step ("Tap on
+      // Env Switcher") arrives — the parent has no such step, so it must
+      // mark the runFlow as running.
+      useRunStore.getState().applyEvent({ kind: "started", command: "tapOn", arg: "Env Switcher" });
+      const steps = useRunStore.getState().steps;
+      expect(steps[0].status).toBe("done");
+      expect(steps[1].status).toBe("running");
+    });
+
+    it("closes runFlow as done when the next parent step starts", () => {
+      useRunStore.getState().initSteps(stepsWithRunFlow());
+      useRunStore
+        .getState()
+        .applyEvent({ kind: "completed", command: "launchApp", arg: "com.example" });
+      useRunStore.getState().applyEvent({ kind: "started", command: "tapOn", arg: "Env Switcher" });
+      // Parent step matches — runFlow at index 1 must now be done.
+      useRunStore.getState().applyEvent({ kind: "started", command: "tapOn", arg: "After" });
+      const steps = useRunStore.getState().steps;
+      expect(steps[1].status).toBe("done");
+      expect(steps[2].status).toBe("running");
+    });
+
+    it("two consecutive runFlows both close when next parent step matches", () => {
+      const arr: Step[] = [
+        { index: 0, line: 1, endLine: 1, command: "runFlow", arg: null },
+        { index: 1, line: 2, endLine: 2, command: "runFlow", arg: null },
+        { index: 2, line: 3, endLine: 3, command: "tapOn", arg: "End" },
+      ];
+      useRunStore.getState().initSteps(arr);
+      // Inner subflow event → first runFlow becomes running
+      useRunStore.getState().applyEvent({ kind: "started", command: "tapOn", arg: "Inner1" });
+      // Parent step matches → all preceding runFlows must be closed
+      useRunStore.getState().applyEvent({ kind: "started", command: "tapOn", arg: "End" });
+      const steps = useRunStore.getState().steps;
+      expect(steps[0].status).toBe("done");
+      expect(steps[1].status).toBe("done");
+      expect(steps[2].status).toBe("running");
+    });
+  });
 });
