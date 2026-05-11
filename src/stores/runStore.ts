@@ -45,24 +45,6 @@ interface RunState {
 
 let nextId = 1;
 
-function pickIndex(steps: StepRunState[], command: string, arg: string | null): number | null {
-  let firstExactPending: number | null = null;
-  let firstExactAny: number | null = null;
-  let firstCommandPending: number | null = null;
-  let firstCommandAny: number | null = null;
-  for (let i = 0; i < steps.length; i++) {
-    const s = steps[i];
-    if (s.command !== command) continue;
-    const argMatches = (s.arg ?? "") === (arg ?? "");
-    const isPending = s.status === "pending" || s.status === "running";
-    if (argMatches && isPending && firstExactPending === null) firstExactPending = i;
-    if (argMatches && firstExactAny === null) firstExactAny = i;
-    if (isPending && firstCommandPending === null) firstCommandPending = i;
-    if (firstCommandAny === null) firstCommandAny = i;
-  }
-  return firstExactPending ?? firstExactAny ?? firstCommandPending ?? firstCommandAny;
-}
-
 export const useRunStore = create<RunState>((set) => ({
   running: false,
   pid: null,
@@ -97,11 +79,61 @@ export const useRunStore = create<RunState>((set) => ({
     }),
   applyEvent: (e) =>
     set((state) => {
-      const idx = pickIndex(state.steps, e.command, e.arg);
-      if (idx === null) return {};
+      // Maestro inlines the steps of a `runFlow` subflow without emitting
+      // any "Run flow ..." header line — so the parent's runFlow step
+      // never gets a direct event. Resolution chain:
+      //   1. Try EXACT (command + arg) match against still-pending steps.
+      //   2. If no exact match AND cursor sits on a runFlow → it's an
+      //      inner subflow step. Mark runFlow as running, don't consume.
+      //   3. Otherwise fall back to "first pending step with same command"
+      //      (handles arg differences like `text:` vs displayed value).
+      // Whenever a parent step matches, any pending runFlows BEFORE it
+      // are implicitly closed — their subflows must have finished for
+      // execution to be back in the parent.
       const next = state.steps.slice();
-      const s = { ...next[idx] };
       const now = performance.now();
+      const cursor = next.findIndex((s) => s.status === "pending" || s.status === "running");
+
+      // Step 1 — exact match.
+      let idx = next.findIndex(
+        (s) =>
+          s.command === e.command &&
+          (s.arg ?? "") === (e.arg ?? "") &&
+          (s.status === "pending" || s.status === "running"),
+      );
+
+      // Step 2 — inner subflow heuristic.
+      if (idx === -1 && cursor !== -1 && next[cursor].command === "runFlow") {
+        const s = { ...next[cursor] };
+        if (s.status === "pending") {
+          s.status = "running";
+          s.startedAt = now;
+          next[cursor] = s;
+        }
+        return { steps: next };
+      }
+
+      // Step 3 — fuzzy command-only fallback.
+      if (idx === -1) {
+        idx = next.findIndex(
+          (s) => s.command === e.command && (s.status === "pending" || s.status === "running"),
+        );
+      }
+
+      if (idx === -1) {
+        // Genuinely unmatchable — drop silently.
+        return {};
+      }
+
+      // Close any pending runFlow strictly before the matched step.
+      const closeFrom = cursor === -1 ? 0 : cursor;
+      for (let i = closeFrom; i < idx; i++) {
+        if (next[i].command === "runFlow" && next[i].status !== "done") {
+          next[i] = { ...next[i], status: "done" as StepStatus, durationMs: 0 };
+        }
+      }
+
+      const s = { ...next[idx] };
       if (e.kind === "started") {
         s.status = "running";
         s.startedAt = now;
