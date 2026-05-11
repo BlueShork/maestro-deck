@@ -60,4 +60,51 @@ describe("parseLine", () => {
       arg: "x",
     });
   });
+
+  it("parses scrollUntilVisible Maestro 2.x verbose form (Scrolling DOWN until ...)", () => {
+    expect(
+      parseLine(
+        `Scrolling DOWN until "Pour ma Box et ma TV" is visible with speed 40, visibility percentage 100%, timeout 15000 ms, with centering disabled... COMPLETED`,
+      ),
+    ).toEqual({
+      kind: "completed",
+      command: "scrollUntilVisible",
+      arg: "Pour ma Box et ma TV",
+    });
+  });
+
+  it("parses scrollUntilVisible UP / LEFT / RIGHT directions", () => {
+    expect(parseLine(`Scrolling UP until "Top" is visible... COMPLETED`)).toMatchObject({
+      command: "scrollUntilVisible",
+      arg: "Top",
+    });
+    expect(parseLine(`Scrolling LEFT until "Prev" is visible... COMPLETED`)).toMatchObject({
+      command: "scrollUntilVisible",
+      arg: "Prev",
+    });
+  });
+
+  it("parses scrollUntilVisible Maestro 1.x form (Scroll until ...)", () => {
+    expect(parseLine(`Scroll until "Login" is visible... COMPLETED`)).toEqual({
+      kind: "completed",
+      command: "scrollUntilVisible",
+      arg: "Login",
+    });
+  });
+
+  it("parses tapOn with (Optional) prefix as a regular tapOn", () => {
+    expect(parseLine(`Tap on (Optional) "Accepter"... COMPLETED`)).toEqual({
+      kind: "completed",
+      command: "tapOn",
+      arg: "Accepter",
+    });
+  });
+
+  it("treats WARNED as completed (optional step that didn't find target)", () => {
+    expect(parseLine(`Tap on (Optional) "Autoriser"... WARNED`)).toEqual({
+      kind: "completed",
+      command: "tapOn",
+      arg: "Autoriser",
+    });
+  });
 });
