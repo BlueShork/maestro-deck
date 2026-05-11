@@ -109,8 +109,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          SRC=$(ls "src-tauri/target/release/bundle/nsis"/*.exe.sig | head -1)
-          test -f "$SRC" || { echo "::error::missing nsis .sig"; exit 1; }
+          SRC=$(find src-tauri/target/release/bundle/nsis -maxdepth 1 -type f -name "*.exe.sig" | head -1)
+          if [ -z "$SRC" ]; then
+            echo "::error::missing nsis .sig — check that createUpdaterArtifacts is set and TAURI_SIGNING_PRIVATE_KEY is provided"
+            ls -la src-tauri/target/release/bundle/nsis/ || true
+            exit 1
+          fi
           gh release upload "${{ github.ref_name }}" "$SRC" \
             --repo "${{ github.repository }}" --clobber
 

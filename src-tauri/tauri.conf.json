@@ -33,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": "v1Compatible",
     "macOS": {
       "signingIdentity": "Developer ID Application: Ethan Morisset (VJL93TUP2X)",
       "providerShortName": "VJL93TUP2X",
