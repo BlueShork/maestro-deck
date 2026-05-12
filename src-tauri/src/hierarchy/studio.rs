@@ -22,6 +22,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
+use crate::process_ext::CommandExtNoWindow;
 
 /// The gRPC port the on-device Maestro driver binds to. The Maestro
 /// CLI hardcodes this in `DefaultDriverHostPort` and sets up an adb
@@ -82,6 +83,7 @@ impl StudioKeeper {
         );
 
         let mut cmd = Command::new(&bin);
+        cmd.no_window();
         // `--no-window` tells studio to skip opening a browser tab on
         // start; we only need the side-effect (driver installed +
         // gRPC port forwarded), not the web UI.
@@ -109,6 +111,7 @@ impl StudioKeeper {
         let port_spec = format!("tcp:{DRIVER_PORT}");
         let adb = crate::device::adb::adb_bin();
         let _ = Command::new(&adb)
+            .no_window()
             .args(["-s", serial, "forward", &port_spec, &port_spec])
             .output()
             .await;
@@ -160,6 +163,7 @@ impl StudioKeeper {
             // some Android builds renders local addr in hex (proc-net
             // style: `0100007F:1B59`).
             let listening = match Command::new(&adb)
+                .no_window()
                 .args(["-s", &self.serial, "shell", "ss", "-tln"])
                 .output()
                 .await
@@ -262,6 +266,7 @@ async fn force_stop_driver(serial: &str) {
     let test_pkg = format!("{DRIVER_PACKAGE}.test");
     for pkg in [DRIVER_PACKAGE, test_pkg.as_str()] {
         let _ = Command::new(&bin)
+            .no_window()
             .args(["-s", serial, "shell", "am", "force-stop", pkg])
             .output()
             .await;
@@ -277,6 +282,7 @@ async fn remove_adb_forward(serial: &str) {
     let bin = crate::device::adb::adb_bin();
     let port_spec = format!("tcp:{DRIVER_PORT}");
     let _ = Command::new(&bin)
+        .no_window()
         .args(["-s", serial, "forward", "--remove", &port_spec])
         .output()
         .await;

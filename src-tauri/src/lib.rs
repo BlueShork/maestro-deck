@@ -9,6 +9,7 @@ pub mod input;
 pub mod ipc;
 pub mod maestro_health;
 pub mod metrics;
+pub mod process_ext;
 pub mod runner;
 pub mod scrcpy;
 pub mod selector;

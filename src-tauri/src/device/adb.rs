@@ -6,6 +6,7 @@ use tracing::{debug, warn};
 
 use super::{Device, DeviceListEntry, DeviceState};
 use crate::error::{AppError, AppResult};
+use crate::process_ext::CommandExtNoWindow;
 
 /// Resolved adb path. Delegates to the shared resolver in
 /// `crate::tool_paths` which handles the user override, env var, common
@@ -18,13 +19,17 @@ fn run_adb(args: &[&str]) -> AppResult<String> {
     let bin = adb_bin();
     debug!(?args, bin = %bin, "running adb");
 
-    let output = Command::new(&bin).args(args).output().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            AppError::AdbNotFound
-        } else {
-            AppError::Io(e)
-        }
-    })?;
+    let output = Command::new(&bin)
+        .no_window()
+        .args(args)
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::AdbNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
