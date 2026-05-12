@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use crate::error::{AppError, AppResult};
+use crate::process_ext::CommandExtNoWindow;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Bounds {
@@ -98,6 +99,7 @@ pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
     for attempt in 0..HIERARCHY_RETRIES {
         let attempt_start = std::time::Instant::now();
         let output = Command::new(&bin)
+            .no_window()
             .args(["--udid", serial, "hierarchy"])
             .output()
             .map_err(|e| {

@@ -104,7 +104,10 @@ export function ToolPathsSettings() {
                 id={`tool-${tool.key}`}
                 type="text"
                 value={draft[tool.key]}
-                onChange={(e) => setDraft((d) => ({ ...d, [tool.key]: e.currentTarget.value }))}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setDraft((d) => ({ ...d, [tool.key]: value }));
+                }}
                 placeholder={tool.placeholder}
                 spellCheck={false}
                 className="flex-1 rounded border border-border bg-background px-2 py-1 font-mono text-xs"

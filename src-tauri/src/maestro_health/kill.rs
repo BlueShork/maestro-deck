@@ -5,6 +5,7 @@ use std::process::Command;
 use crate::device::adb::adb_bin;
 use crate::error::{AppError, AppResult};
 use crate::maestro_health::detect;
+use crate::process_ext::CommandExtNoWindow;
 
 use super::{HealthReport, KillReport, MAESTRO_DRIVER_PACKAGE, MAESTRO_DRIVER_PORT};
 
@@ -17,6 +18,7 @@ fn force_stop_driver(device_id: &str, report: &HealthReport) -> AppResult<bool> 
     }
     let bin = adb_bin();
     let output = Command::new(&bin)
+        .no_window()
         .args([
             "-s",
             device_id,
@@ -58,6 +60,7 @@ fn do_unforward(device_id: &str, port: u16) -> AppResult<()> {
     let bin = adb_bin();
     let arg = format!("tcp:{}", port);
     let output = Command::new(&bin)
+        .no_window()
         .args(["-s", device_id, "forward", "--remove", &arg])
         .output()
         .map_err(|e| {
@@ -106,6 +109,7 @@ fn reverify_pid(ps_out: &str, pid: u32, expected_name: &str) -> bool {
 fn fetch_pid_name(device_id: &str, pid: u32) -> AppResult<String> {
     let bin = adb_bin();
     let output = Command::new(&bin)
+        .no_window()
         .args([
             "-s",
             device_id,
@@ -130,6 +134,7 @@ fn fetch_pid_name(device_id: &str, pid: u32) -> AppResult<String> {
 fn do_kill_pid(device_id: &str, pid: u32) -> AppResult<()> {
     let bin = adb_bin();
     let output = Command::new(&bin)
+        .no_window()
         .args(["-s", device_id, "shell", "kill", &pid.to_string()])
         .output()
         .map_err(|e| {
@@ -206,6 +211,7 @@ pub fn recover_driver(device_id: &str) {
     // 1. force-stop the driver app. Hardcoded package name; never read
     //    from external input.
     match Command::new(&bin)
+        .no_window()
         .args([
             "-s",
             device_id,
@@ -235,6 +241,7 @@ pub fn recover_driver(device_id: &str) {
     //    from external input.
     let arg = format!("tcp:{}", MAESTRO_DRIVER_PORT);
     match Command::new(&bin)
+        .no_window()
         .args(["-s", device_id, "forward", "--remove", &arg])
         .output()
     {

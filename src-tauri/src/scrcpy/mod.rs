@@ -13,6 +13,7 @@ use tracing::info;
 
 use crate::device::adb;
 use crate::error::{AppError, AppResult};
+use crate::process_ext::CommandExtNoWindow;
 
 pub mod stream;
 
@@ -150,6 +151,7 @@ pub fn spawn_server(serial: &str, scid: &str) -> AppResult<Child> {
     let cmd = build_server_argv(&opts, scid).join(" ");
     info!(serial, scid, "spawning scrcpy server");
     let mut child = Command::new(crate::device::adb::adb_bin())
+        .no_window()
         .args(["-s", serial, "shell", &cmd])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

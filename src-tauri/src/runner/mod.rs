@@ -12,6 +12,7 @@ use tokio::sync::{oneshot, Mutex as AsyncMutex};
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
+use crate::process_ext::CommandExtNoWindow;
 
 const EVT_STDOUT: &str = "runner:stdout";
 const EVT_STDERR: &str = "runner:stderr";
@@ -74,6 +75,7 @@ pub async fn spawn_runner(
     let adb = crate::device::adb::adb_bin();
     for _ in 0..10 {
         let devs = tokio::process::Command::new(&adb)
+            .no_window()
             .args(["devices"])
             .output()
             .await;
@@ -91,6 +93,7 @@ pub async fn spawn_runner(
         }
         for emulator in ["emulator-5554", "emulator-5556", "emulator-5558"] {
             let _ = tokio::process::Command::new(&adb)
+                .no_window()
                 .args(["disconnect", emulator])
                 .output()
                 .await;
@@ -99,6 +102,7 @@ pub async fn spawn_runner(
     }
 
     let mut child = Command::new(&bin)
+        .no_window()
         .args(["--udid", serial, "test"])
         .arg(flow_path)
         .stdout(Stdio::piped())
