@@ -4,6 +4,7 @@ use super::HealthReport;
 use super::ProcessInfo;
 use crate::device::adb::adb_bin;
 use crate::error::{AppError, AppResult};
+use crate::process_ext::CommandExtNoWindow;
 use std::net::{SocketAddr, TcpStream};
 use std::process::Command;
 use std::time::Duration;
@@ -15,13 +16,17 @@ fn run_adb_for_device(device_id: &str, args: &[&str]) -> AppResult<String> {
     let bin = adb_bin();
     let mut full_args: Vec<&str> = vec!["-s", device_id];
     full_args.extend_from_slice(args);
-    let output = Command::new(&bin).args(&full_args).output().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            AppError::AdbNotFound
-        } else {
-            AppError::Io(e)
-        }
-    })?;
+    let output = Command::new(&bin)
+        .no_window()
+        .args(&full_args)
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::AdbNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(AppError::AdbFailed(stderr));
@@ -106,6 +111,7 @@ pub fn check_device_health(device_id: &str) -> AppResult<HealthReport> {
     // and filter by device.
     let bin = adb_bin();
     let forward_out = std::process::Command::new(&bin)
+        .no_window()
         .args(["forward", "--list"])
         .output()
         .map_err(|e| {
