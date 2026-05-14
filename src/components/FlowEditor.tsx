@@ -47,6 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
 import { parseFlow } from "@/lib/flowAst";
+import maestroCommands from "@/lib/maestro-commands.json";
 
 import { Button } from "@/components/ui/Button";
 import { themeExtensions } from "@/lib/editor-theme";
@@ -59,36 +60,26 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
-const MAESTRO_KEYWORDS = [
-  "launchApp",
-  "tapOn",
-  "inputText",
-  "assertVisible",
-  "assertNotVisible",
-  "scroll",
-  "scrollUntilVisible",
-  "back",
-  "hideKeyboard",
-  "pressKey",
-  "waitForAnimationToEnd",
-  "swipe",
-  "openLink",
-  "stopApp",
-  "clearState",
-  "takeScreenshot",
-];
-
 function maestroCompletions(ctx: CompletionContext): CompletionResult | null {
   const word = ctx.matchBefore(/[\w-]*/);
   if (!word || (word.from === word.to && !ctx.explicit)) return null;
   return {
     from: word.from,
-    options: MAESTRO_KEYWORDS.map((label) => ({
+    options: maestroCommands.map(({ label, info }) => ({
       label,
       type: "keyword",
       detail: "maestro",
-    })),
+      description: info,
+    })) as unknown as CompletionResult["options"],
   };
+}
+
+function renderCompletionDescription(completion: { description?: string }): Node | null {
+  if (!completion.description) return null;
+  const el = document.createElement("div");
+  el.className = "cm-completionDescription";
+  el.textContent = completion.description;
+  return el;
 }
 
 const setActiveLine = StateEffect.define<number | null>();
@@ -193,6 +184,13 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
           override: [maestroCompletions],
           icons: false,
           activateOnTyping: true,
+          addToOptions: [
+            {
+              render: (completion) =>
+                renderCompletionDescription(completion as { description?: string }),
+              position: 90,
+            },
+          ],
         }),
         keymap.of([
           ...closeBracketsKeymap,
