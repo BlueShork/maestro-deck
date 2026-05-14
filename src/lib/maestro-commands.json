@@ -1,0 +1,130 @@
+[
+  {
+    "label": "addMedia",
+    "info": "Add images or videos to the device gallery for media picker testing."
+  },
+  {
+    "label": "assertNoDefectsWithAI",
+    "info": "AI-powered visual testing to detect UI defects and anomalies."
+  },
+  {
+    "label": "assertNotVisible",
+    "info": "Assert that a UI element is not present or visible on the screen."
+  },
+  {
+    "label": "assertScreenshot",
+    "info": "Perform visual regression testing of your application against existing screenshots."
+  },
+  { "label": "assertTrue", "info": "Assert that a JavaScript expression evaluates to true." },
+  {
+    "label": "assertVisible",
+    "info": "Assert that a UI element is visible on screen with automatic retry."
+  },
+  {
+    "label": "assertWithAI",
+    "info": "Use AI to verify complex UI states with natural language assertions."
+  },
+  { "label": "back", "info": "Press the system back button to navigate to the previous screen." },
+  { "label": "clearKeychain", "info": "Clear iOS keychain data for the app under test." },
+  {
+    "label": "clearState",
+    "info": "Clear app data, cache, and preferences to reset to fresh install state."
+  },
+  {
+    "label": "copyTextFrom",
+    "info": "Copy text content from a UI element to clipboard or variable."
+  },
+  {
+    "label": "doubleTapOn",
+    "info": "Perform a double-tap gesture on a UI element or screen coordinates."
+  },
+  {
+    "label": "eraseText",
+    "info": "Delete text from input fields by character count or clear entirely."
+  },
+  {
+    "label": "evalScript",
+    "info": "Evaluate inline JavaScript expressions within the flow context."
+  },
+  {
+    "label": "extendedWaitUntil",
+    "info": "Wait for an element with a custom timeout longer than the default."
+  },
+  {
+    "label": "extractTextWithAI",
+    "info": "Extract structured data from the screen using AI vision capabilities."
+  },
+  { "label": "hideKeyboard", "info": "Dismiss the on-screen keyboard if currently visible." },
+  {
+    "label": "inputText",
+    "info": "Type text into focused input fields with optional keyboard handling."
+  },
+  { "label": "killApp", "info": "Force stop an app and optionally clear all its data and cache." },
+  {
+    "label": "launchApp",
+    "info": "Launch an app with optional permission configuration and clear state."
+  },
+  {
+    "label": "longPressOn",
+    "info": "Long press on elements for context menus or drag-and-drop operations."
+  },
+  { "label": "openLink", "info": "Open a URL or deep link in the app or system browser." },
+  {
+    "label": "pasteText",
+    "info": "Paste text from clipboard into the currently focused input field."
+  },
+  { "label": "pressKey", "info": "Press hardware keys like home, back, enter, or volume buttons." },
+  { "label": "repeat", "info": "Repeat a block of commands a specified number of times." },
+  { "label": "retry", "info": "Retry a block of commands on failure with configurable attempts." },
+  { "label": "runFlow", "info": "Execute a subflow file with optional environment variables." },
+  { "label": "runScript", "info": "Run an external JavaScript file and capture its output." },
+  { "label": "scroll", "info": "Move down the screen vertically to reveal content below." },
+  {
+    "label": "scrollUntilVisible",
+    "info": "Automatically scroll until a target element becomes visible on screen."
+  },
+  { "label": "setAirplaneMode", "info": "Enable airplane mode to test offline behavior." },
+  {
+    "label": "setClipboard",
+    "info": "Set the device clipboard content to a specified text value."
+  },
+  {
+    "label": "setLocation",
+    "info": "Set device GPS location to specific coordinates for location testing."
+  },
+  {
+    "label": "setOrientation",
+    "info": "Change device orientation between portrait and landscape modes."
+  },
+  { "label": "setPermissions", "info": "Grant or deny app permissions during flow execution." },
+  {
+    "label": "startRecording",
+    "info": "Start recording the screen for video documentation of test runs."
+  },
+  { "label": "stopApp", "info": "Stop a running app without clearing its data or state." },
+  {
+    "label": "stopRecording",
+    "info": "Stop the current screen recording and save the video file."
+  },
+  {
+    "label": "swipe",
+    "info": "Swipe gestures in any direction with customizable speed and distance."
+  },
+  {
+    "label": "takeScreenshot",
+    "info": "Capture a screenshot and save it to the test output directory."
+  },
+  {
+    "label": "tapOn",
+    "info": "Tap on UI elements by text, ID, or coordinates with optional repeat and delay."
+  },
+  {
+    "label": "toggleAirplaneMode",
+    "info": "Toggle airplane mode on or off during test execution."
+  },
+  { "label": "travel", "info": "Simulate time travel by adjusting the device system clock." },
+  {
+    "label": "waitForAnimationToEnd",
+    "info": "Wait for UI animations to complete before proceeding."
+  }
+]
