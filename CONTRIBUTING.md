@@ -172,3 +172,4 @@ A maintainer will review and either merge, request changes, or open a discussion
 ## Reporting bugs and requesting features
 
 Use the [issue templates](https://github.com/blueshork/maestro-deck/issues/new/choose). For security-sensitive reports, follow the process in [SECURITY.md](SECURITY.md) instead of opening a public issue.
+
