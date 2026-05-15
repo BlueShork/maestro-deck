@@ -6,6 +6,18 @@ By participating in this project you agree to abide by our [Code of Conduct](COD
 
 ---
 
+## Contributor License Agreement (CLA)
+
+Before any contribution can be merged, you must sign the Maestro Deck CLA.
+
+The signing process is automated by [CLA Assistant](https://github.com/contributor-assistant/github-action): when you open your first pull request, a bot will comment with a link asking you to read and accept the CLA. Just reply to the bot's comment with the exact phrase it tells you to (typically `I have read the CLA Document and I hereby sign the CLA`) and you're done — your signature is recorded and applies to all your future PRs to this repo.
+
+The full CLA text is available in [CLA.md](CLA.md). In short, by contributing you grant Ethan Morisset the rights needed to use, modify, redistribute, and commercially license your contribution under any license, including future proprietary licenses. This is necessary so the project can be relicensed (e.g. when the BUSL-1.1 transitions to its Change License) without having to track down every past contributor.
+
+PRs that have not signed the CLA cannot be merged.
+
+---
+
 ## Table of contents
 
 - [Getting set up](#getting-set-up)
