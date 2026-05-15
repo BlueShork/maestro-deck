@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { Loader2, Plug, PlugZap, RefreshCw, Smartphone, Stethoscope } from "lucide-react";
 import { useEffect, useState } from "react";
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { ChevronRight, Eye, EyeOff, MousePointerClick, ScrollText } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type ComponentType } from "react";
 

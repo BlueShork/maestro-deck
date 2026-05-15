@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { ask } from "@tauri-apps/plugin-dialog";
 import { exists, remove, writeTextFile } from "@tauri-apps/plugin-fs";
 

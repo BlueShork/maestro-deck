@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { Download, Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";

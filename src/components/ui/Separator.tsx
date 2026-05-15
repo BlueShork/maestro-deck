@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
 import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
 

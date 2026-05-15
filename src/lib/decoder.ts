@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 /**
  * WebCodecs-based H.264 decoder pipeline used by `DeviceView`.
  *
