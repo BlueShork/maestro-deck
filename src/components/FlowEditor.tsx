@@ -10,6 +10,7 @@ import {
   type CompletionResult,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { search, searchKeymap } from "@codemirror/search";
 import {
   bracketMatching,
   foldGutter,
@@ -183,6 +184,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
         closeBrackets(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
+        search({ top: true }),
         autocompletion({
           override: [maestroCompletions],
           icons: false,
@@ -200,6 +202,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
           ...defaultKeymap,
           ...historyKeymap,
           ...completionKeymap,
+          ...searchKeymap,
           ...foldKeymap,
           indentWithTab,
         ]),
