@@ -1,4 +1,4 @@
-<h1 align="center">Maestro Deck — open-source visual IDE for Maestro mobile tests</h1>
+<h1 align="center">Maestro Deck — source-available visual IDE for Maestro mobile tests</h1>
 
 <p align="center">
   <picture>
@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-BUSL--1.1-blue.svg"></a>
   <a href="package.json"><img alt="Version" src="https://img.shields.io/github/package-json/v/blueshork/maestro-deck?color=orange"></a>
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
 </p>
@@ -43,7 +43,7 @@ Maestro Deck mirrors your Android phone on your desktop, lets you tap and type o
 
 - **Local only.** No account, no telemetry.
 - **Fast.** Native Tauri shell, sub-second startup.
-- **Open source.** Apache 2.0.
+- **Source-available.** BUSL-1.1, transitions to Apache-2.0 on 2030-05-15.
 
 > Early development. v0.1 targets a single Android device over USB.
 
@@ -57,7 +57,7 @@ Maestro is the YAML mobile-testing framework. Maestro Deck is the desktop app th
 | ----------------------- | ---------------------------------------------------- | ---------------------------- | -------------------------- |
 | Install                 | Single signed app (DMG/AppImage/MSI)                 | `maestro studio` (browser)   | Java + Appium server setup |
 | Footprint               | Native Tauri shell (~80 MB RAM idle, system webview) | Electron-based, ~400+ MB RAM | JVM + Chromium inspector   |
-| Cost                    | Free, open source (Apache 2.0)                       | Free, closed source          | Free, open source          |
+| Cost                    | Free, source-available (BUSL-1.1)                    | Free, closed source          | Free, open source          |
 | Live mirroring          | ✅ scrcpy-grade, 60 fps                              | ⚠️ Periodic screenshots      | ⚠️ Screenshot-based        |
 | Smart selectors         | ✅ id → text → desc → point                          | ✅                           | ⚠️ Manual                  |
 | Built-in YAML editor    | ✅ CodeMirror + Maestro syntax                       | ✅ Basic                     | ❌                         |
@@ -160,4 +160,15 @@ For security issues, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-[Apache 2.0](LICENSE) — Copyright 2026 Ethan Morisset and contributors.
+Maestro Deck is licensed under the [Business Source License 1.1](LICENSE) — Copyright 2026 Ethan Morisset.
+
+**What this means:**
+
+- The source code is publicly available and you may read, copy, modify, and redistribute it.
+- You may use Maestro Deck freely for **non-commercial internal purposes** (testing, evaluation, internal development) under the Additional Use Grant in the [LICENSE](LICENSE).
+- **Commercial use requires a commercial license.** Contact the author to discuss terms.
+- On **2030-05-15** (the Change Date), the license automatically transitions to [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0), making Maestro Deck fully open source.
+
+BUSL-1.1 is a *source-available* (not OSI-approved open source) license, similar to those used by Sentry, MariaDB, CockroachDB, and HashiCorp products.
+
+Contributions are accepted under a [Contributor License Agreement](CLA.md) — see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
