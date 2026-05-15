@@ -165,10 +165,16 @@ Maestro Deck is licensed under the [Business Source License 1.1](LICENSE) — Co
 **What this means:**
 
 - The source code is publicly available and you may read, copy, modify, and redistribute it.
-- You may use Maestro Deck freely for **non-commercial internal purposes** (testing, evaluation, internal development) under the Additional Use Grant in the [LICENSE](LICENSE).
-- **Commercial use requires a commercial license.** Contact the author to discuss terms.
+- You may use Maestro Deck in **production for the internal business operations of your organization and its employees** under the Additional Use Grant in the [LICENSE](LICENSE).
+- **You may not** offer Maestro Deck as a hosted or embedded service to third parties, or redistribute it (in original or modified form) as a commercial product or as part of a commercial offering. These uses require a commercial license — contact the author to discuss terms.
 - On **2030-05-15** (the Change Date), the license automatically transitions to [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0), making Maestro Deck fully open source.
 
 BUSL-1.1 is a *source-available* (not OSI-approved open source) license, similar to those used by Sentry, MariaDB, CockroachDB, and HashiCorp products.
 
 Contributions are accepted under a [Contributor License Agreement](CLA.md) — see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+---
+
+## Trademark notice
+
+Maestro Deck is an independent, community-built project. It is **not affiliated with, endorsed by, or sponsored by mobile.dev Inc.**, the maintainers of the [Maestro](https://maestro.mobile.dev) mobile testing framework. "Maestro" and related marks are used here nominatively to describe interoperability with the Maestro framework, and any such marks remain the property of their respective owners.
