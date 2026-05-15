@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { useEffect } from "react";
 
 export type ShortcutHandler = (e: KeyboardEvent) => void;

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { describe, it, expect, beforeEach } from "vitest";
 import { useMetricsStore, type Sample } from "./metricsStore";
 

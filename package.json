@@ -4,7 +4,7 @@
   "version": "0.3.3",
   "type": "module",
   "description": "Open-source visual IDE for Maestro mobile tests",
-  "license": "Apache-2.0",
+  "license": "BUSL-1.1",
   "author": "Ethan Morisset",
   "scripts": {
     "dev": "vite",

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 /**
  * Generic SSE (Server-Sent Events) reader.
  * Yields JSON-decoded event payloads from a fetch ReadableStream body.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

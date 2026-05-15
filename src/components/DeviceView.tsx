@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
 import { Camera, Moon, Smartphone, Sun } from "lucide-react";
 import {
