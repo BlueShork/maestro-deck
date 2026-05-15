@@ -25,7 +25,7 @@ jobs:
         with:
           path-to-signatures: 'signatures/version1/cla.json'
           path-to-document: 'https://github.com/blueshork/maestro-deck/blob/main/CLA.md'
-          branch: 'main'
+          branch: 'cla-signatures'
           allowlist: 'dependabot[bot],blueshork'
           remote-organization-name: ''
           remote-repository-name: ''
