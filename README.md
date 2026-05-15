@@ -172,3 +172,4 @@ Maestro Deck is licensed under the [Business Source License 1.1](LICENSE) — Co
 BUSL-1.1 is a *source-available* (not OSI-approved open source) license, similar to those used by Sentry, MariaDB, CockroachDB, and HashiCorp products.
 
 Contributions are accepted under a [Contributor License Agreement](CLA.md) — see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
