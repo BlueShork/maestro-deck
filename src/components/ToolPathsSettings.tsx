@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Folder } from "lucide-react";
 import { useEffect, useState } from "react";

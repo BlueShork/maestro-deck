@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { Fragment, type ReactNode } from "react";
 
 const ESC = String.fromCharCode(27);

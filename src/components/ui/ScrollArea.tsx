@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
 

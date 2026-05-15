@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { invoke } from "@tauri-apps/api/core";
 
 import type { ChatMessage } from "@/types/chat";

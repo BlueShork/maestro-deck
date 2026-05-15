@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { ArrowUp, Square } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 

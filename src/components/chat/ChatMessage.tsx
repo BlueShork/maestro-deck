@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { Sparkles } from "lucide-react";
 import { isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";

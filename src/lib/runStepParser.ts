@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 export type StepEventKind = "started" | "completed" | "failed";
 
 export interface StepEvent {

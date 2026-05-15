@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createAutosaveEngine, type AutosaveEngineDeps } from "./autosaveEngine";
 
