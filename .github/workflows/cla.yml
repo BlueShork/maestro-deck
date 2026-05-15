@@ -31,4 +31,17 @@ jobs:
           remote-repository-name: ''
           custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
           custom-allsigned-prcomment: 'All contributors have signed the CLA. Thank you!'
+          custom-notsigned-prcomment: |
+            Thanks for your contribution to **Maestro Deck** 🎉
+
+            Before we can merge, you must sign the [CLA](https://github.com/blueshork/maestro-deck/blob/main/CLA.md).
+
+            **To sign**, post a comment on this PR with **exactly** this text (copy-paste):
+
+            > I have read the CLA Document and I hereby sign the CLA
+
+            Once signed, your signature is recorded permanently and applies to all your future contributions to this repo.
+
+            ---
+            _Posted automatically by [CLA Assistant Lite](https://github.com/contributor-assistant/github-action)._
           lock-pullrequest-aftermerge: true
