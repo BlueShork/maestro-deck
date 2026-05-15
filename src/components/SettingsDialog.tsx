@@ -175,6 +175,28 @@ export function SettingsDialog({
 
           <Separator className="my-1" />
           <AiSettings />
+
+          <Separator className="my-1" />
+          <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+            <span>Maestro Deck v{__APP_VERSION__} — © 2026 Ethan Morisset</span>
+            <span>
+              Licensed under the{" "}
+              <a
+                href="https://github.com/BlueShork/maestro-deck/blob/main/LICENSE"
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Business Source License 1.1
+              </a>
+              .
+            </span>
+            <span className="text-[10px] leading-relaxed">
+              Independent community project. Not affiliated with, endorsed by, or sponsored by
+              mobile.dev Inc. &quot;Maestro&quot; is used nominatively to describe interoperability
+              with the Maestro framework and remains the property of its respective owner.
+            </span>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
