@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Input forwarding via the scrcpy control protocol.
 //!
 //! See https://github.com/Genymobile/scrcpy/blob/master/doc/develop.md —

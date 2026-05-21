@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! ADB call orchestration + delta computation. No timing here — the task
 //! loop calls these functions on its own cadence.
 

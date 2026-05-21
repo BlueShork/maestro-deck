@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! On macOS a `.app` launched from Finder inherits a minimal PATH that does
 //! not include Homebrew, the user's `~/.zshrc` additions, or Android SDK
 //! tools. We ask the user's login shell for its PATH + JAVA_HOME and merge

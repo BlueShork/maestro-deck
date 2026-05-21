@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Vertex AI OAuth2 access-token exchange.
 //!
 //! Vertex requires a signed JWT (RS256) generated from a service account's

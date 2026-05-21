@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! scrcpy 2.7 video + control stream over the adb-forward TCP tunnel.
 //!
 //! Wire format (`tunnel_forward=true`, `audio=false`, `control=true`):

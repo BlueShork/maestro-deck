@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Read-only detection of Maestro residue on a device.
 
 use super::HealthReport;

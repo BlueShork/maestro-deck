@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Keep a background `maestro studio` process alive so the on-device
 //! driver stays installed and its gRPC server stays bound to
 //! `localhost:7001`. Studio does the heavy lifting (install driver APK,

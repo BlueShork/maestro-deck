@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! UI hierarchy dump + parse.
 //!
 //! Primary path: shell out to `maestro --device <serial> hierarchy` which uses

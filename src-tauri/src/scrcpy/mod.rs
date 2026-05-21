@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! scrcpy server orchestration.
 //!
 //! We push scrcpy-server.jar to the device, open an `adb forward` tunnel,

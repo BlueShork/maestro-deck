@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! H.264 decoding pipeline.
 //!
 //! Real hardware decoding lives behind the `hwdecode` feature flag. The default

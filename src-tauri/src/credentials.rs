@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! BYOK credential storage backed by the OS keychain.
 //!
 //! - macOS: Keychain Services (the user can audit/revoke entries via the

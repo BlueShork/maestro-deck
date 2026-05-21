@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure parsers for /proc entries and `dumpsys` output. No I/O.
 
 #[derive(Debug, Clone, Copy, PartialEq)]
