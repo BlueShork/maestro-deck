@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Workspace folder browsing — returns a YAML-only file tree for a directory.
 
 use std::fs;

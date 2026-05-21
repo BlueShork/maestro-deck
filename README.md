@@ -13,15 +13,17 @@
 </p>
 
 <p align="center">
-  <a href="https://maestrodeck.cloud">Website</a> ·
-  <a href="https://maestrodeck.cloud/docs">Docs</a> ·
-  <a href="https://github.com/blueshork/maestro-deck/releases">Download</a> ·
-  <a href="https://github.com/blueshork/maestro-deck/discussions">Discussions</a>
+  <a href="https://www.maestrodeck.cloud">Website</a> ·
+  <a href="https://www.maestrodeck.cloud/docs">Docs</a> ·
+  <a href="https://www.maestrodeck.cloud/faq">FAQ</a> ·
+  <a href="https://github.com/BlueShork/maestro-deck/releases">Download</a> ·
+  <a href="https://github.com/BlueShork/maestro-deck/discussions">Discussions</a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/BlueShork/maestro-deck/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BlueShork/maestro-deck/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-BUSL--1.1-blue.svg"></a>
-  <a href="package.json"><img alt="Version" src="https://img.shields.io/github/package-json/v/blueshork/maestro-deck?color=orange"></a>
+  <a href="package.json"><img alt="Version" src="https://img.shields.io/github/package-json/v/BlueShork/maestro-deck?color=orange"></a>
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
 </p>
 
@@ -30,7 +32,6 @@
   <a href="https://sonarcloud.io/summary/new_code?id=BlueShork_maestro-deck"><img alt="Quality gate" src="https://sonarcloud.io/api/project_badges/quality_gate?project=BlueShork_maestro-deck&token=ad460cd2309b7ca91f43029430daf2d31295d3d1"></a>
 </p>
 
-<!-- TODO: replace with a real demo GIF before going public (single screencast: connect device → inspect element → write flow → run). -->
 <p align="center">
   <img src="docs/images/screenshot-app.png" alt="Maestro Deck screenshot" width="900">
 </p>
@@ -55,7 +56,7 @@ Maestro is the YAML mobile-testing framework. Maestro Deck is the desktop app th
 
 |                         | Maestro Deck                                         | Maestro Studio               | Appium Inspector           |
 | ----------------------- | ---------------------------------------------------- | ---------------------------- | -------------------------- |
-| Install                 | Single signed app (DMG/AppImage/MSI)                 | `maestro studio` (browser)   | Java + Appium server setup |
+| Install                 | Single signed app (DMG/MSI)                          | `maestro studio` (browser)   | Java + Appium server setup |
 | Footprint               | Native Tauri shell (~80 MB RAM idle, system webview) | Electron-based, ~400+ MB RAM | JVM + Chromium inspector   |
 | Cost                    | Free, source-available (BUSL-1.1)                    | Free, closed source          | Free, open source          |
 | Live mirroring          | ✅ scrcpy-grade, 60 fps                              | ⚠️ Periodic screenshots      | ⚠️ Screenshot-based        |
@@ -77,7 +78,15 @@ If you already use Maestro Studio: Deck is a native, local-first alternative wit
 - Smart selectors (`resource-id` → `text` → `content-desc` → point fallback)
 - YAML editor with Maestro syntax highlighting (CodeMirror)
 - One-click flow run with live, color-coded logs
-- macOS, Linux, Windows
+- macOS and Windows (Linux planned)
+
+---
+
+## Requirements
+
+- **OS:** macOS 12+ or Windows 10+ (Linux support planned)
+- **Android device:** Android 8.0 (API 26) or later with USB debugging enabled
+- **Tooling:** ADB and the Maestro CLI on your `PATH` (see Quickstart)
 
 ---
 
@@ -93,7 +102,7 @@ If you already use Maestro Studio: Deck is a native, local-first alternative wit
 
 **2. Install Maestro** — see the [official guide](https://maestro.mobile.dev/getting-started/installing-maestro).
 
-**3. Get Maestro Deck** — download from [Releases](https://github.com/blueshork/maestro-deck/releases) or [build from source](#build-from-source).
+**3. Get Maestro Deck** — download from [Releases](https://github.com/BlueShork/maestro-deck/releases) or [build from source](#build-from-source).
 
 **4. Plug in a device** with USB debugging enabled, accept the prompt, and pick it in the app.
 
@@ -104,7 +113,7 @@ If you already use Maestro Studio: Deck is a native, local-first alternative wit
 Requires Node 20+, [pnpm](https://pnpm.io) 10+, Rust (via [rustup](https://rustup.rs)), and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```bash
-git clone https://github.com/blueshork/maestro-deck.git
+git clone https://github.com/BlueShork/maestro-deck.git
 cd maestro-deck
 pnpm install
 pnpm tauri:dev
@@ -149,8 +158,8 @@ Cloud execution is a non-goal. Maestro Deck stays local.
 
 Contributions of any size are welcome.
 
-- [Good first issues](https://github.com/blueshork/maestro-deck/labels/good%20first%20issue)
-- [Discussions](https://github.com/blueshork/maestro-deck/discussions)
+- [Good first issues](https://github.com/BlueShork/maestro-deck/labels/good%20first%20issue)
+- [Discussions](https://github.com/BlueShork/maestro-deck/discussions)
 - [CONTRIBUTING.md](CONTRIBUTING.md) for setup and PR process
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 
@@ -177,4 +186,32 @@ Contributions are accepted under a [Contributor License Agreement](CLA.md) — s
 
 ## Trademark notice
 
+**Maestro Deck™** is a trademark of Ethan Morisset, filed with the French INPI on 2026-05-19 (application n°5259782, Nice classes 9 and 42) — status: *French trademark filed, under examination*. See the [legal notice](https://www.maestrodeck.cloud/legal/mentions-legales) on the official website for up-to-date filing status.
+
 Maestro Deck is an independent, community-built project. It is **not affiliated with, endorsed by, or sponsored by mobile.dev Inc.**, the maintainers of the [Maestro](https://maestro.mobile.dev) mobile testing framework. "Maestro" and related marks are used here nominatively to describe interoperability with the Maestro framework, and any such marks remain the property of their respective owners.
+
+---
+
+## Legal notice
+
+Maestro Deck is published by **Ethan Morisset**, entrepreneur individuel registered in France. Full statutory legal information — publisher identity, SIREN, hosting, contact details, and data handling — is available on the official website:
+
+- **Mentions légales:** [maestrodeck.cloud/legal/mentions-legales](https://www.maestrodeck.cloud/legal/mentions-legales)
+- **Terms of use (CGU):** [maestrodeck.cloud/legal/cgu](https://www.maestrodeck.cloud/legal/cgu)
+- **Terms of sale (CGV):** [maestrodeck.cloud/legal/cgv](https://www.maestrodeck.cloud/legal/cgv)
+- **Privacy policy:** [maestrodeck.cloud/legal/confidentialite](https://www.maestrodeck.cloud/legal/confidentialite)
+- **Cookies:** [maestrodeck.cloud/legal/cookies](https://www.maestrodeck.cloud/legal/cookies)
+- **License terms:** [LICENSE](LICENSE) (BUSL-1.1)
+- **Security disclosures:** [SECURITY.md](SECURITY.md)
+
+Maestro Deck (the desktop application) runs entirely locally and does not collect telemetry or personal data — any data processed by the app stays on your machine.
+
+By downloading, building, or using Maestro Deck, you agree to the terms set out in the [LICENSE](LICENSE) and the legal information published at [maestrodeck.cloud](https://www.maestrodeck.cloud/).
+
+---
+
+## Acknowledgements
+
+Thanks to everyone who has contributed code, issues, ideas, and feedback to Maestro Deck — this project is shaped by its contributors.
+
+A special thank you to [KRANSBOOK](https://github.com/KRANSBOOK) for the encouragement and support throughout the development of this project.

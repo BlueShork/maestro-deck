@@ -4,7 +4,7 @@ version = "0.3.4"
 description = "Open-source visual IDE for Maestro mobile tests"
 authors = ["Ethan Morisset <blueshork.dev@gmail.com>"]
 license = "Apache-2.0"
-repository = "https://github.com/blueshork/maestro-deck"
+repository = "https://github.com/BlueShork/maestro-deck"
 edition = "2021"
 rust-version = "1.77"
 

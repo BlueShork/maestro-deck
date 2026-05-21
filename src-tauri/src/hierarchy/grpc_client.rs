@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Direct gRPC client for the on-device Maestro driver.
 //!
 //! Once a background `maestro studio` process (see `studio` submodule)

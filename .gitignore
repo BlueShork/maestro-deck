@@ -58,3 +58,7 @@ coverage/
 *.deb
 *.msi
 *.exe
+
+# Local-only working docs (not for public repo)
+docs/superpowers/
+AUDIT.md

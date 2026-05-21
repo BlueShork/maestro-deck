@@ -55,7 +55,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/blueshork/maestro-deck/releases/latest/download/latest.json"
+        "https://github.com/BlueShork/maestro-deck/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDExQTYxQUNEMDlCMjlBREMKUldUY21ySUp6UnFtRVZwQkxUdkZsL1ZtUnFZZXZtNktGWXphcWJmdWFuWmhET0JmNVNiRi9KcU8K",
       "windows": {

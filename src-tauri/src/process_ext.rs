@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Windows-only ergonomics for subprocess spawning.
 //!
 //! On Windows, every `Command::new(...)` that runs a console app flashes

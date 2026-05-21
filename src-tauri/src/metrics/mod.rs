@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Performance metrics collector for the Android app currently in foreground.
 //!
 //! Spawns a single Tokio polling task controlled by a oneshot cancellation

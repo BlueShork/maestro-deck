@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};

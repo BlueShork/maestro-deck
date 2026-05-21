@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Bounded kill operations driven by a HealthReport.
 
 use std::process::Command;

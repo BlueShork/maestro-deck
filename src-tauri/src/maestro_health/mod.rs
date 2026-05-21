@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Detect and remove leftover Maestro driver, port forwarding, and
 //! instrumentation residue on a connected Android device.
 //!

@@ -44,7 +44,7 @@ You will need:
 Clone and install:
 
 ```bash
-git clone https://github.com/blueshork/maestro-deck.git
+git clone https://github.com/BlueShork/maestro-deck.git
 cd maestro-deck
 pnpm install
 pnpm tauri:dev
@@ -171,4 +171,4 @@ A maintainer will review and either merge, request changes, or open a discussion
 
 ## Reporting bugs and requesting features
 
-Use the [issue templates](https://github.com/blueshork/maestro-deck/issues/new/choose). For security-sensitive reports, follow the process in [SECURITY.md](SECURITY.md) instead of opening a public issue.
+Use the [issue templates](https://github.com/BlueShork/maestro-deck/issues/new/choose). For security-sensitive reports, follow the process in [SECURITY.md](SECURITY.md) instead of opening a public issue.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Generated gRPC bindings for the Maestro Android on-device driver.
 //!
 //! The actual Rust types (`MaestroDriverClient`, `ViewHierarchyRequest`,
