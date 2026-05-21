@@ -15,7 +15,7 @@ permissions:
 jobs:
   cla-assistant:
     if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: CLA Assistant
         uses: contributor-assistant/github-action@v2.6.1
@@ -24,9 +24,9 @@ jobs:
           PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         with:
           path-to-signatures: 'signatures/version1/cla.json'
-          path-to-document: 'https://github.com/blueshork/maestro-deck/blob/main/CLA.md'
+          path-to-document: 'https://github.com/BlueShork/maestro-deck/blob/main/CLA.md'
           branch: 'cla-signatures'
-          allowlist: 'dependabot[bot],blueshork'
+          allowlist: 'dependabot[bot],BlueShork'
           remote-organization-name: ''
           remote-repository-name: ''
           custom-pr-sign-comment: 'I have read the CLA Document and I hereby sign the CLA'
@@ -34,7 +34,7 @@ jobs:
           custom-notsigned-prcomment: |
             Thanks for your contribution to **Maestro Deck** 🎉
 
-            Before we can merge, you must sign the [CLA](https://github.com/blueshork/maestro-deck/blob/main/CLA.md).
+            Before we can merge, you must sign the [CLA](https://github.com/BlueShork/maestro-deck/blob/main/CLA.md).
 
             **To sign**, post a comment on this PR with **exactly** this text (copy-paste):
 
