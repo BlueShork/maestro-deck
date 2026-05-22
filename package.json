@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "prepare": "lefthook install",
+    "prepare": "make setup-hooks 2>/dev/null || lefthook install",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --features devtools",

@@ -50,6 +50,15 @@ pnpm install
 pnpm tauri:dev
 ```
 
+`pnpm install` runs `make setup-hooks` automatically, which:
+
+- Installs the Lefthook git hooks (`pre-commit`, `pre-push`).
+- Auto-installs [gitleaks](https://github.com/gitleaks/gitleaks) on macOS via Homebrew (used by the `pre-commit` hook to detect committed secrets locally).
+
+On **Linux**, install gitleaks manually from the [official releases](https://github.com/gitleaks/gitleaks/releases) if you want local pre-commit scanning. On **Windows** (without `make`), the hooks still install via a fallback — gitleaks must then be installed manually (e.g. `scoop install gitleaks` or `winget install gitleaks`).
+
+Either way, the hook skips gracefully if gitleaks is missing, and GitHub server-side push protection blocks secrets at push time as a safety net.
+
 The dev command launches the Tauri shell with hot-reload for both the React frontend (`src/`) and the Rust backend (`src-tauri/`).
 
 ---
