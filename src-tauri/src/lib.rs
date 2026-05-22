@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Maestro Deck — open-source visual IDE for Maestro mobile tests.
+//! Maestro Deck — source-available visual IDE for Maestro mobile tests.
 
 pub mod credentials;
 pub mod device;
