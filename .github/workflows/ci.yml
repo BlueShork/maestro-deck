@@ -77,6 +77,6 @@ jobs:
         with:
           name: frontend-coverage
           path: coverage
-      - uses: SonarSource/sonarqube-scan-action@v6
+      - uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
