@@ -20,6 +20,9 @@ pre-commit:
       glob: "src-tauri/**/*.rs"
       run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 
+    gitleaks:
+      run: command -v gitleaks >/dev/null && gitleaks protect --staged --redact --no-banner || echo "⚠️  gitleaks not installed — skipping local secret scan (install with 'brew install gitleaks')"
+
 pre-push:
   parallel: true
   commands:

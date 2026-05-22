@@ -1,0 +1,35 @@
+# Gitleaks configuration for Maestro Deck.
+# Extends the default ruleset and whitelists known safe patterns
+# identified during the pre-release security audit.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for known-safe placeholders and public tokens"
+
+paths = [
+  '''pnpm-lock\.yaml''',
+  '''Cargo\.lock''',
+  '''.*\.test\.(ts|tsx|rs)$''',
+  '''.*\.spec\.(ts|tsx)$''',
+  '''dist/.*''',
+  '''coverage/.*''',
+  '''src-tauri/target/.*''',
+]
+
+regexes = [
+  # UI placeholders shown to users — not real keys
+  '''placeholder=["']sk-ant-…["']''',
+  '''placeholder=['"]\{"type":"service_account"''',
+  # Test fixture intentionally invalid private key
+  '''-----BEGIN PRIVATE KEY-----\\nnot-real\\n-----END PRIVATE KEY-----''',
+  # Documentation placeholders
+  '''APPLE_PASSWORD=["']app-specific-password["']''',
+  '''APPLE_ID=["']ton@email\.com["']''',
+  '''APPLE_TEAM_ID=["']TON_TEAM_ID["']''',
+  # SonarCloud public project badge token (read-only, by design public)
+  '''token=ad460cd2309b7ca91f43029430daf2d31295d3d1''',
+  # Tauri updater public key (must be embedded in the binary)
+  '''dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk''',
+]
