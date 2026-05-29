@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { ask } from "@tauri-apps/plugin-dialog";
-import { exists, remove, writeTextFile } from "@tauri-apps/plugin-fs";
+import { exists, mkdir, remove, writeTextFile } from "@tauri-apps/plugin-fs";
 
 import { ipc } from "@/lib/ipc";
 import { useFlowStore } from "@/stores/flowStore";
@@ -74,6 +74,30 @@ export async function createFlowInDir(dir: string, rawName: string): Promise<voi
     const { loaded } = useFlowStore.getState();
     loaded(DEFAULT_FLOW, full);
     useWorkspaceStore.getState().setLastOpenFile(full);
+  } catch (err) {
+    toast.error("Create failed", err instanceof Error ? err.message : String(err));
+  }
+}
+
+export async function createFolderInDir(dir: string, rawName: string): Promise<void> {
+  const name = normalizeFolderName(rawName);
+  if (!name) {
+    toast.error("Invalid name", "Use letters, digits, dashes — no slashes.");
+    return;
+  }
+  const full = joinPath(dir, name);
+  try {
+    if (await exists(full)) {
+      toast.error("Already exists", name);
+      return;
+    }
+    await mkdir(full);
+    // Expand the parent and the new folder so it stays visible after refresh.
+    const ws = useWorkspaceStore.getState();
+    ws.setExpanded(dir, true);
+    ws.setExpanded(full, true);
+    await refreshRoot();
+    toast.success("Created", name);
   } catch (err) {
     toast.error("Create failed", err instanceof Error ? err.message : String(err));
   }
