@@ -42,7 +42,7 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       inspectKey: "i",
-      showFps: import.meta.env.DEV,
+      showFps: false,
       theme: "system",
       streamEnabled: true,
       perfMonitoringEnabled: false,
