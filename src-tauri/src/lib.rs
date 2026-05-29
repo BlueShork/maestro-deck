@@ -9,6 +9,7 @@ mod env_shim;
 pub mod error;
 pub mod hierarchy;
 pub mod input;
+pub mod ios_session;
 pub mod ipc;
 pub mod maestro_health;
 pub mod metrics;
