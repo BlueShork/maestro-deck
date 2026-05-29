@@ -264,6 +264,7 @@ function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean)
     return () => {
       cancelled = true;
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
       pendingRef.current = null;
       // Backend tears the SCK session down on disconnect/start_stream.
     };
