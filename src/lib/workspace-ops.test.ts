@@ -36,6 +36,10 @@ describe("normalizeFolderName", () => {
     expect(normalizeFolderName("a:b")).toBeNull();
     expect(normalizeFolderName("a*b")).toBeNull();
   });
+  it("rejects '.' and '..' reserved names", () => {
+    expect(normalizeFolderName(".")).toBeNull();
+    expect(normalizeFolderName("..")).toBeNull();
+  });
 });
 
 describe("createFolderInDir", () => {

@@ -38,6 +38,7 @@ export function normalizeFolderName(raw: string): string | null {
   if (!trimmed) return null;
   // Same separator/shell-special block as flows; folders keep their literal name.
   if (/[\\/:*?"<>|]/.test(trimmed)) return null;
+  if (trimmed === "." || trimmed === "..") return null;
   return trimmed;
 }
 

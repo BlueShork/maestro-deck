@@ -15,7 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { openFlowFile } from "@/lib/flow-io";
@@ -442,14 +442,26 @@ function NewItemInput({
   onCancel: () => void;
 }) {
   const [value, setValue] = useState("");
+  const done = useRef(false);
+
+  const commit = (name: string) => {
+    if (done.current) return;
+    done.current = true;
+    onCommit(name);
+  };
+  const cancel = () => {
+    if (done.current) return;
+    done.current = true;
+    onCancel();
+  };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      onCommit(value);
+      commit(value);
     } else if (e.key === "Escape") {
       e.preventDefault();
-      onCancel();
+      cancel();
     }
   };
 
@@ -465,7 +477,7 @@ function NewItemInput({
         value={value}
         onChange={(e) => setValue(e.currentTarget.value)}
         onKeyDown={onKeyDown}
-        onBlur={() => (value.trim() ? onCommit(value) : onCancel())}
+        onBlur={() => (value.trim() ? commit(value) : cancel())}
         placeholder={placeholder}
         className="my-0.5 w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary/70"
       />
