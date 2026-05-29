@@ -325,11 +325,15 @@ pub struct IosFramePayload {
 
 /// Capture a PNG screenshot of the booted simulator via `simctl`. The XCTest
 /// `/screenshot` HTTP route is unreliable on simulators (the connection is
-/// reset), so we use the simulator-native capture, which is fast and always
-/// available. Output is a native-resolution (pixel) PNG on stdout.
+/// reset). `simctl io … screenshot -` (stdout) is also unsupported on this
+/// macOS (it tries to create a file literally named `-`), so we write to a
+/// per-UDID temp file, read it back, and overwrite it each poll. Output is a
+/// native-resolution (pixel) PNG.
 async fn capture_simulator_screenshot(udid: &str) -> AppResult<Vec<u8>> {
+    let path = std::env::temp_dir().join(format!("maestro-deck-ios-{udid}.png"));
+    let path_str = path.to_string_lossy().to_string();
     let out = Command::new("xcrun")
-        .args(["simctl", "io", udid, "screenshot", "--type=png", "-"])
+        .args(["simctl", "io", udid, "screenshot", "--type=png", &path_str])
         .output()
         .await
         .map_err(|e| AppError::IosCommandFailed(format!("simctl screenshot: {e}")))?;
@@ -339,7 +343,9 @@ async fn capture_simulator_screenshot(udid: &str) -> AppResult<Vec<u8>> {
             String::from_utf8_lossy(&out.stderr).trim()
         )));
     }
-    Ok(out.stdout)
+    tokio::fs::read(&path)
+        .await
+        .map_err(|e| AppError::IosCommandFailed(format!("read screenshot file: {e}")))
 }
 
 /// Spawn a task that captures the simulator screen and emits `ios_frame` until
