@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
+import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
 import { Camera, House, Moon, Smartphone, Sun } from "lucide-react";
 import {
@@ -218,6 +219,57 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   }, [canvasRef, pushFrame]);
 }
 
+function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean) {
+  const pushFrame = useStreamStore((s) => s.pushFrame);
+  const pendingRef = useRef<{ w: number; h: number; rgba: Uint8ClampedArray<ArrayBuffer> } | null>(
+    null,
+  );
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+
+    const drawNext = () => {
+      rafRef.current = null;
+      const canvas = canvasRef.current;
+      const frame = pendingRef.current;
+      pendingRef.current = null;
+      if (!frame || !canvas) return;
+      if (canvas.width !== frame.w) canvas.width = frame.w;
+      if (canvas.height !== frame.h) canvas.height = frame.h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.putImageData(new ImageData(frame.rgba, frame.w, frame.h), 0, 0);
+      pushFrame({ width: frame.w, height: frame.h });
+    };
+
+    const channel = new Channel<ArrayBuffer>();
+    channel.onmessage = (buf) => {
+      if (cancelled || buf.byteLength < 8) return;
+      const view = new DataView(buf);
+      const w = view.getUint32(0, true);
+      const h = view.getUint32(4, true);
+      const rawRgba = new Uint8ClampedArray(buf, 8);
+      if (rawRgba.length !== w * h * 4) return; // guard against a malformed frame
+      // Copy into a plain ArrayBuffer-backed clamped array so ImageData accepts it.
+      const rgba = new Uint8ClampedArray(rawRgba);
+      pendingRef.current = { w, h, rgba };
+      if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
+    };
+
+    // Fire-and-forget: false just means we stay on the screenshot path.
+    void ipc.upgradeIosPreviewToSck(channel).catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      pendingRef.current = null;
+      // Backend tears the SCK session down on disconnect/start_stream.
+    };
+  }, [canvasRef, enabled, pushFrame]);
+}
+
 export function DeviceView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -250,6 +302,7 @@ export function DeviceView() {
   // connected platform actually paints — the Android H.264 hook is unchanged.
   useFrameStream(canvasRef);
   useScreenshotStream(canvasRef);
+  useSckStream(canvasRef, current?.platform === "ios" && streamEnabled);
 
   const deviceWidth = streamW || current?.screen_width || 1080;
   const deviceHeight = streamH || current?.screen_height || 2340;

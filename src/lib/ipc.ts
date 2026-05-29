@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
@@ -84,6 +84,8 @@ export const ipc = {
   checkDeviceHealth: (serial: string) => call<HealthReport>("check_device_health", { serial }),
   killMaestroProcesses: (serial: string, report: HealthReport) =>
     call<KillReport>("kill_maestro_processes", { serial, report }),
+  upgradeIosPreviewToSck: (channel: Channel<ArrayBuffer>) =>
+    call<boolean>("upgrade_ios_preview_to_sck", { channel }),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
   setToolPaths: (
     adb: string | null,
