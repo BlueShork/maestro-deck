@@ -23,7 +23,18 @@ async fn main() {
     use maestro_deck_lib::ios_capture::{
         request_screen_capture, screen_capture_permitted, CaptureSession,
     };
+    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+    use objc2_foundation::MainThreadMarker;
     use std::time::Instant;
+
+    // Bootstrap AppKit so the process opens its WindowServer (CGS) connection.
+    // Without this, the first ScreenCaptureKit call (getShareableContent) aborts
+    // with `CGS_REQUIRE_INIT` (CGInitialization.c). `#[tokio::main]` runs this
+    // future on the main thread until the first `.await`, so we are on the main
+    // thread here. `Accessory` policy avoids a Dock icon / focus steal.
+    let mtm = MainThreadMarker::new().expect("smoke test must start on the main thread");
+    let app = NSApplication::sharedApplication(mtm);
+    app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
     if !screen_capture_permitted() {
         eprintln!("Screen Recording not granted — prompting…");

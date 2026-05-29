@@ -108,6 +108,14 @@ tempfile = "3.13"
 pretty_assertions = "1.4"
 mockall = "0.14"
 
+# macOS-only: the `sck_smoke` example bootstraps a shared NSApplication so the
+# process opens its WindowServer (CGS) connection before calling ScreenCaptureKit.
+# A bare CLI binary never does this, so SCShareableContent aborts with
+# `CGS_REQUIRE_INIT`. The real app runs inside Tauri's NSApplication, so this is
+# a test-harness-only need, hence a dev-dependency.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSResponder"] }
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
