@@ -186,7 +186,8 @@ pub async fn spawn_web_runner(app: AppHandle, flow_path: &str) -> AppResult<u32>
 
     let mut child = Command::new(&bin)
         .no_window()
-        .args(["test"])
+        // `-p web` is a global flag and must precede the `test` subcommand.
+        .args(["-p", "web", "test"])
         .arg(flow_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

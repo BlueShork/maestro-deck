@@ -131,13 +131,14 @@ const READY_ATTEMPTS: u32 = 120;
 const READY_BACKOFF_MS: u64 = 500;
 
 fn studio_args() -> Vec<String> {
-    // `-p web` selects the web platform. `--no-window` suppresses Studio's own
-    // UI tab (we render our own canvas). VERIFY (Task 1): confirm --no-window
-    // keeps the API up + launches a headed automated Chromium; drop it if not.
+    // `-p web` is a GLOBAL flag and MUST precede the `studio` subcommand
+    // (`maestro -p web studio …`); placing it after `studio` is rejected
+    // ("Unknown options: '-p', 'web'") on maestro 2.5.1. `--no-window`
+    // suppresses Studio's own UI tab — we render our own canvas.
     vec![
-        "studio".to_string(),
         "-p".to_string(),
         "web".to_string(),
+        "studio".to_string(),
         "--no-window".to_string(),
     ]
 }
@@ -281,7 +282,9 @@ mod tests {
     #[test]
     fn studio_args_select_web_platform() {
         let a = studio_args();
-        assert!(a.contains(&"web".to_string()));
-        assert_eq!(a[0], "studio");
+        // `-p web` must come before the `studio` subcommand.
+        assert_eq!(a[0], "-p");
+        assert_eq!(a[1], "web");
+        assert_eq!(a[2], "studio");
     }
 }
