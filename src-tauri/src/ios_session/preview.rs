@@ -25,16 +25,27 @@ use crate::ios_session::IosDriverKeeper;
 const SIMULATOR_BUNDLE_ID: &str = "com.apple.iphonesimulator";
 const SCK_FPS: u32 = 60;
 
-/// Live SCK preview: keeps the capture session alive (dropping/stopping it ends
-/// the stream) and the abort handle for the frame-draining task.
+/// Live SCK preview handle. Holds the SCK `CaptureSession` and the abort
+/// sender for the frame-draining task.
+///
+/// Call [`PreviewHandle::teardown`]`.await` for a clean shutdown: it aborts the
+/// drain task **and** stops the SCK stream via `session.stop().await`. Dropping
+/// the handle without calling `teardown` fires the abort signal (via `Drop`) and
+/// releases the session's Rust references, but cannot await `session.stop()` —
+/// the SCK stream may linger until the OS reclaims it.
 pub struct PreviewHandle {
     session: CaptureSession,
     abort: Option<oneshot::Sender<()>>,
 }
 
 impl PreviewHandle {
-    /// Abort the draining task and stop the SCK stream.
+    /// Clean shutdown: aborts the frame-drain task and stops the SCK stream.
+    ///
+    /// This is the preferred way to tear down a preview. If the handle is
+    /// simply dropped, `Drop` sends the abort signal but cannot await
+    /// `session.stop()`.
     pub async fn teardown(mut self) {
+        // Take the sender so that Drop later finds None and is a no-op.
         if let Some(abort) = self.abort.take() {
             let _ = abort.send(());
         }
@@ -42,11 +53,26 @@ impl PreviewHandle {
     }
 }
 
+impl Drop for PreviewHandle {
+    /// Safety net: if the handle is dropped without calling `teardown`, still
+    /// abort the drain task so it doesn't leak (it holds the frame `Receiver`
+    /// forever). A full, clean SCK stop requires the async `teardown`; Drop
+    /// can't `.await` `session.stop()`, so dropping only releases the stream's
+    /// Rust references.
+    fn drop(&mut self) {
+        if let Some(abort) = self.abort.take() {
+            let _ = abort.send(());
+        }
+    }
+}
+
 /// Start a ScreenCaptureKit capture of the iOS Simulator window and stream
 /// cropped RGBA frames to the frontend over `channel`.
 ///
-/// Returns a [`PreviewHandle`] that keeps the session alive. Drop it or call
-/// [`PreviewHandle::teardown`] to stop the stream.
+/// Returns a [`PreviewHandle`]. Call [`PreviewHandle::teardown`]`.await` for a
+/// clean stop (aborts the drain task and stops the SCK stream). Dropping the
+/// handle without `teardown` fires the abort signal but cannot await
+/// `session.stop()`, so the SCK stream may linger.
 pub async fn spawn_ios_preview(
     keeper: Arc<IosDriverKeeper>,
     device_name: String,
