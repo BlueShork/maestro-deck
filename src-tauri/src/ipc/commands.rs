@@ -37,7 +37,20 @@ pub fn app_version() -> &'static str {
 
 #[tauri::command]
 pub fn list_devices() -> AppResult<Vec<Device>> {
-    adb::list_devices()
+    // Each platform's discovery degrades independently — a failure in one
+    // must not blank out the other's devices.
+    let mut devices = match adb::list_devices() {
+        Ok(d) => d,
+        Err(e) => {
+            warn!(error = ?e, "android device discovery failed");
+            Vec::new()
+        }
+    };
+    match crate::device::ios::list_devices() {
+        Ok(ios) => devices.extend(ios),
+        Err(e) => warn!(error = ?e, "ios device discovery failed"),
+    }
+    Ok(devices)
 }
 
 #[tauri::command]
