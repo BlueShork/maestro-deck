@@ -33,6 +33,14 @@ function normalizeYamlName(raw: string): string | null {
   return `${trimmed}.yaml`;
 }
 
+export function normalizeFolderName(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  // Same separator/shell-special block as flows; folders keep their literal name.
+  if (/[\\/:*?"<>|]/.test(trimmed)) return null;
+  return trimmed;
+}
+
 async function refreshRoot(): Promise<void> {
   const ws = useWorkspaceStore.getState();
   if (!ws.folderPath) return;
