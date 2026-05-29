@@ -155,7 +155,7 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
+    const unlistens: Array<() => void> = [];
     let cancelled = false;
 
     const drawNext = () => {
@@ -180,33 +180,35 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
       bmp.close();
     };
 
-    void events
-      .onIosFrame(async (payload) => {
-        try {
-          // Copy the exact view region into a fresh buffer: robust if `data`
-          // is ever a subarray, and yields a concrete-buffer typed array that
-          // satisfies BlobPart without an `as` cast.
-          const blob = new Blob([new Uint8Array(payload.data)], { type: "image/png" });
-          const bmp = await createImageBitmap(blob);
-          if (cancelled) {
-            bmp.close();
-            return;
-          }
-          if (pendingRef.current) pendingRef.current.close();
-          pendingRef.current = bmp;
-          if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
-        } catch {
-          // Ignore a single bad frame; the next poll replaces it.
+    // iOS and web both deliver PNG screenshots; only the connected platform's
+    // poller emits, so subscribing to both events is safe.
+    const onShot = async (payload: { data: Uint8Array }) => {
+      try {
+        // Copy the exact view region into a fresh buffer: robust if `data`
+        // is ever a subarray, and yields a concrete-buffer typed array that
+        // satisfies BlobPart without an `as` cast.
+        const blob = new Blob([new Uint8Array(payload.data)], { type: "image/png" });
+        const bmp = await createImageBitmap(blob);
+        if (cancelled) {
+          bmp.close();
+          return;
         }
-      })
-      .then((fn) => {
-        if (cancelled) fn();
-        else unlisten = fn;
-      });
+        if (pendingRef.current) pendingRef.current.close();
+        pendingRef.current = bmp;
+        if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
+      } catch {
+        // Ignore a single bad frame; the next poll replaces it.
+      }
+    };
+
+    const subscribe = (fn: Promise<() => void>) =>
+      void fn.then((un) => (cancelled ? un() : unlistens.push(un)));
+    subscribe(events.onIosFrame(onShot));
+    subscribe(events.onWebFrame(onShot));
 
     return () => {
       cancelled = true;
-      if (unlisten) unlisten();
+      unlistens.forEach((un) => un());
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       if (pendingRef.current) {
         pendingRef.current.close();
@@ -241,10 +243,11 @@ export function DeviceView() {
     selector: Selector | null;
   } | null>(null);
 
-  const isIos = current?.platform === "ios";
+  // Dark-mode toggle is an Android-only `adb` feature; hidden for iOS and web.
+  const noDarkMode = current?.platform !== "android";
   // Both hooks mount unconditionally (Rules of Hooks). They listen to
-  // different events (`frame` vs `ios_frame`), so only the connected
-  // platform actually paints — the Android H.264 hook is unchanged.
+  // different events (`frame` / `ios_frame` / `web_frame`), so only the
+  // connected platform actually paints — the Android H.264 hook is unchanged.
   useFrameStream(canvasRef);
   useScreenshotStream(canvasRef);
 
@@ -430,7 +433,7 @@ export function DeviceView() {
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [togglingDark, setTogglingDark] = useState(false);
   useEffect(() => {
-    if (!connectedSerial || isIos) {
+    if (!connectedSerial || noDarkMode) {
       setDarkMode(null);
       return;
     }
@@ -448,7 +451,7 @@ export function DeviceView() {
     return () => {
       cancelled = true;
     };
-  }, [connectedSerial, isIos]);
+  }, [connectedSerial, noDarkMode]);
   const toggleDarkMode = useCallback(async () => {
     if (togglingDark) return;
     const next = !(darkMode ?? false);
@@ -623,7 +626,7 @@ export function DeviceView() {
 
       {hasFrame ? (
         <div className="absolute right-3 top-3 z-10 flex gap-2">
-          {!isIos ? (
+          {!noDarkMode ? (
             <button
               type="button"
               onClick={() => void toggleDarkMode()}

@@ -61,8 +61,8 @@ export const ipc = {
   ping: () => call<string>("ping"),
   appVersion: () => call<string>("app_version"),
   listDevices: () => call<Device[]>("list_devices"),
-  connectDevice: (serial: string, streamEnabled: boolean, platform: Platform) =>
-    call<void>("connect_device", { serial, streamEnabled, platform }),
+  connectDevice: (serial: string, streamEnabled: boolean, platform: Platform, url?: string) =>
+    call<void>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
   disconnectDevice: () => call<void>("disconnect_device"),
   enterInspectMode: (fastMode: boolean) => call<HierarchyTree>("enter_inspect_mode", { fastMode }),
   queryElement: (x: number, y: number) => call<UINode | null>("query_element", { x, y }),
@@ -154,6 +154,18 @@ export const events = {
   ): Promise<UnlistenFn> =>
     listen<{ data: number[] | Uint8Array | ArrayBuffer; width: number; height: number }>(
       "ios_frame",
+      (e) =>
+        handler({
+          data: toUint8Array(e.payload.data),
+          width: e.payload.width,
+          height: e.payload.height,
+        }),
+    ),
+  onWebFrame: (
+    handler: (p: { data: Uint8Array; width: number; height: number }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ data: number[] | Uint8Array | ArrayBuffer; width: number; height: number }>(
+      "web_frame",
       (e) =>
         handler({
           data: toUint8Array(e.payload.data),

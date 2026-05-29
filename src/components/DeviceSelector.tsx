@@ -1,7 +1,16 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Apple, Loader2, Plug, PlugZap, RefreshCw, Smartphone, Stethoscope } from "lucide-react";
+import {
+  Apple,
+  Globe,
+  Loader2,
+  Plug,
+  PlugZap,
+  RefreshCw,
+  Smartphone,
+  Stethoscope,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -99,7 +108,8 @@ export function DeviceSelector() {
           const isPending = pendingSerial === d.serial;
           const isConnecting = isPending && pendingAction === "connect";
           const isDisconnecting = isPending && pendingAction === "disconnect";
-          const DeviceIcon = d.platform === "ios" ? Apple : Smartphone;
+          const DeviceIcon =
+            d.platform === "ios" ? Apple : d.platform === "web" ? Globe : Smartphone;
           return (
             <li key={d.serial}>
               <button
@@ -166,11 +176,13 @@ export function DeviceSelector() {
                       ? "Connecting…"
                       : isDisconnecting
                         ? "Disconnecting…"
-                        : `${d.serial} · ${d.platform === "ios" ? "iOS" : "Android"} ${d.os_version}`}
+                        : d.platform === "web"
+                          ? "Chromium"
+                          : `${d.serial} · ${d.platform === "ios" ? "iOS" : "Android"} ${d.os_version}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {active && !isPending && d.platform !== "ios" && (
+                  {active && !isPending && d.platform === "android" && (
                     <span
                       role="button"
                       aria-label="Healthcheck device"
