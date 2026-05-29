@@ -78,9 +78,11 @@ pub fn get_device_info(serial: &str) -> AppResult<Device> {
     Ok(Device {
         serial: serial.to_string(),
         model,
-        android_version,
+        android_version: android_version.clone(),
         screen_width,
         screen_height,
+        platform: crate::device::Platform::Android,
+        os_version: android_version,
     })
 }
 

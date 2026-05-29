@@ -5,6 +5,14 @@
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Platform {
+    #[default]
+    Android,
+    Ios,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Device {
     pub serial: String,
@@ -12,6 +20,10 @@ pub struct Device {
     pub android_version: String,
     pub screen_width: u32,
     pub screen_height: u32,
+    #[serde(default)]
+    pub platform: Platform,
+    #[serde(default)]
+    pub os_version: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,3 +65,33 @@ pub struct DeviceListEntry {
 }
 
 pub mod adb;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_device_json_defaults_to_android() {
+        let json = r#"{"serial":"R5","model":"Pixel","android_version":"14","screen_width":1080,"screen_height":2400}"#;
+        let d: Device = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(d.platform, Platform::Android);
+        assert_eq!(d.os_version, "");
+    }
+
+    #[test]
+    fn ios_device_round_trips() {
+        let d = Device {
+            serial: "00008".into(),
+            model: "iPhone 15".into(),
+            android_version: String::new(),
+            screen_width: 1179,
+            screen_height: 2556,
+            platform: Platform::Ios,
+            os_version: "18.0".into(),
+        };
+        let s = serde_json::to_string(&d).unwrap();
+        let back: Device = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.platform, Platform::Ios);
+        assert_eq!(back.os_version, "18.0");
+    }
+}

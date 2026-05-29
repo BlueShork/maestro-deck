@@ -1,12 +1,16 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
+export type Platform = "android" | "ios";
+
 export interface Device {
   serial: string;
   model: string;
   android_version: string;
   screen_width: number;
   screen_height: number;
+  platform: Platform;
+  os_version: string;
 }
 
 export interface Bounds {
