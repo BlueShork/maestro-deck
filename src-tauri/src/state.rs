@@ -33,4 +33,7 @@ pub struct AppState {
 
     pub ios_driver: AsyncMutex<Option<Arc<IosDriverKeeper>>>,
     pub ios_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+
+    pub web_driver: AsyncMutex<Option<Arc<crate::web_session::WebStudioKeeper>>>,
+    pub web_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
 }
