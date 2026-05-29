@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { openFlowFile } from "@/lib/flow-io";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
-import { createFlowInDir, deleteFile } from "@/lib/workspace-ops";
+import { createFlowInDir, createFolderInDir, deleteFile } from "@/lib/workspace-ops";
 import { useFlowStore } from "@/stores/flowStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -41,6 +41,8 @@ export function WorkspaceTree() {
 
   // Transient: which directory currently shows the inline "new file" input.
   const [pendingNewDir, setPendingNewDir] = useState<string | null>(null);
+  // Transient: which directory currently shows the inline "new folder" input.
+  const [pendingNewFolderDir, setPendingNewFolderDir] = useState<string | null>(null);
 
   const refresh = useCallback(
     async (path: string) => {
@@ -86,6 +88,7 @@ export function WorkspaceTree() {
   const onClose = useCallback(() => setFolder(null), [setFolder]);
 
   const startNewFile = useCallback((dirPath: string) => {
+    setPendingNewFolderDir(null);
     useWorkspaceStore.getState().setExpanded(dirPath, true);
     setPendingNewDir(dirPath);
   }, []);
@@ -97,6 +100,19 @@ export function WorkspaceTree() {
 
   const cancelNewFile = useCallback(() => setPendingNewDir(null), []);
 
+  const startNewFolder = useCallback((dirPath: string) => {
+    setPendingNewDir(null);
+    useWorkspaceStore.getState().setExpanded(dirPath, true);
+    setPendingNewFolderDir(dirPath);
+  }, []);
+
+  const commitNewFolder = useCallback(async (dir: string, name: string) => {
+    setPendingNewFolderDir(null);
+    if (name.trim()) await createFolderInDir(dir, name);
+  }, []);
+
+  const cancelNewFolder = useCallback(() => setPendingNewFolderDir(null), []);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
@@ -106,6 +122,16 @@ export function WorkspaceTree() {
         <div className="flex items-center gap-0.5">
           {folderPath ? (
             <>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => startNewFolder(folderPath)}
+                aria-label="New folder"
+                title="New folder"
+                className="h-6 w-6"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+              </Button>
               <Button
                 size="icon"
                 variant="ghost"
@@ -181,6 +207,14 @@ export function WorkspaceTree() {
                 onCancel={cancelNewFile}
               />
             ) : null}
+            {pendingNewFolderDir === folderPath ? (
+              <NewItemInput
+                kind="folder"
+                depth={0}
+                onCommit={(name) => void commitNewFolder(folderPath, name)}
+                onCancel={cancelNewFolder}
+              />
+            ) : null}
             {tree.children.length === 0 && pendingNewDir !== folderPath ? (
               <div className="px-3 py-2 text-[11px] text-muted-foreground">
                 No YAML files. Click the + icon above to create one.
@@ -196,6 +230,10 @@ export function WorkspaceTree() {
                     onStartNewFile={startNewFile}
                     onCommitNewFile={(dir, name) => void commitNewFile(dir, name)}
                     onCancelNewFile={cancelNewFile}
+                    pendingNewFolderDir={pendingNewFolderDir}
+                    onStartNewFolder={startNewFolder}
+                    onCommitNewFolder={(dir, name) => void commitNewFolder(dir, name)}
+                    onCancelNewFolder={cancelNewFolder}
                   />
                 ))}
               </ul>
@@ -229,6 +267,10 @@ interface TreeItemProps {
   onStartNewFile: (dirPath: string) => void;
   onCommitNewFile: (dir: string, name: string) => void;
   onCancelNewFile: () => void;
+  pendingNewFolderDir: string | null;
+  onStartNewFolder: (dirPath: string) => void;
+  onCommitNewFolder: (dir: string, name: string) => void;
+  onCancelNewFolder: () => void;
 }
 
 function TreeItem({
@@ -238,6 +280,10 @@ function TreeItem({
   onStartNewFile,
   onCommitNewFile,
   onCancelNewFile,
+  pendingNewFolderDir,
+  onStartNewFolder,
+  onCommitNewFolder,
+  onCancelNewFolder,
 }: TreeItemProps) {
   const expanded = useWorkspaceStore((s) => s.expanded[node.path] ?? depth === 0);
   const toggle = useWorkspaceStore((s) => s.toggleExpanded);
@@ -245,6 +291,7 @@ function TreeItem({
 
   if (node.kind === "dir") {
     const showNew = pendingNewDir === node.path;
+    const showNewFolder = pendingNewFolderDir === node.path;
     return (
       <li>
         <div
@@ -273,6 +320,18 @@ function TreeItem({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              onStartNewFolder(node.path);
+            }}
+            aria-label={`New folder in ${node.name}`}
+            title="New folder here"
+            className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
+          >
+            <FolderPlus className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
               onStartNewFile(node.path);
             }}
             aria-label={`New flow in ${node.name}`}
@@ -292,6 +351,14 @@ function TreeItem({
                 onCancel={onCancelNewFile}
               />
             ) : null}
+            {showNewFolder ? (
+              <NewItemInput
+                kind="folder"
+                depth={depth + 1}
+                onCommit={(name) => onCommitNewFolder(node.path, name)}
+                onCancel={onCancelNewFolder}
+              />
+            ) : null}
             {node.children.length > 0 ? (
               <ul className="flex flex-col">
                 {node.children.map((c) => (
@@ -303,6 +370,10 @@ function TreeItem({
                     onStartNewFile={onStartNewFile}
                     onCommitNewFile={onCommitNewFile}
                     onCancelNewFile={onCancelNewFile}
+                    pendingNewFolderDir={pendingNewFolderDir}
+                    onStartNewFolder={onStartNewFolder}
+                    onCommitNewFolder={onCommitNewFolder}
+                    onCancelNewFolder={onCancelNewFolder}
                   />
                 ))}
               </ul>
