@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-//! iOS driver session: keeps the on-device Maestro XCTest HTTP server alive
-//! (via `maestro studio`) and reachable (via `iproxy`), and exposes a typed
-//! HTTP client for `/viewHierarchy`, `/touch`, `/inputText`, `/swipeV2`,
-//! `/screenshot`, `/deviceInfo`, `/status`.
+//! iOS Simulator driver session: boots a simulator and lets `maestro studio`
+//! install/launch/hold the on-device XCTest HTTP server, which on a simulator
+//! is reachable directly on `127.0.0.1:22087` (the sim shares the host network —
+//! no forwarding/tunnel). Exposes a typed HTTP client for `/viewHierarchy`,
+//! `/touch`, `/inputText`, `/swipeV2`, `/screenshot`, `/deviceInfo`, `/status`.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -76,8 +77,8 @@ pub struct InputTextBody {
     pub text: String,
 }
 
-/// Typed HTTP client for the on-device XCTest server, reached through the
-/// host-side port `iproxy` forwards to device `:22087`.
+/// Typed HTTP client for the on-device XCTest server. On a simulator the server
+/// is reachable directly on `127.0.0.1:22087` (the sim shares the host network).
 pub struct IosHttpClient {
     base: String,
     client: reqwest::Client,
@@ -197,40 +198,29 @@ impl IosHttpClient {
     }
 }
 
-/// Device port the Maestro XCTest runner (FlyingFox) listens on.
-pub const DEVICE_PORT: u16 = 22087;
-/// Host port we forward to it. Deterministic; chosen to avoid common ranges.
-pub const HOST_PORT: u16 = 7010;
-/// Readiness probe budget — `maestro studio`'s first build/install on a cold
-/// device can take 10–30 s.
-const READY_ATTEMPTS: u32 = 120;
+/// Port the Maestro XCTest runner serves on. On a SIMULATOR this is reachable
+/// directly on the host loopback (the sim shares the host network) — no iproxy,
+/// no tunnel.
+pub const DRIVER_PORT: u16 = 22087;
+/// Generous readiness budget: a cold simulator + first runner install can take
+/// well over a minute. ~180 s total.
+const READY_ATTEMPTS: u32 = 360;
 const READY_BACKOFF_MS: u64 = 500;
+/// Passed to maestro as MAESTRO_DRIVER_STARTUP_TIMEOUT so it doesn't give up on
+/// a cold simulator before the driver is ready (ms).
+const DRIVER_STARTUP_TIMEOUT_MS: &str = "120000";
 
-fn studio_args<'a>(udid: &'a str, team_id: Option<&'a str>) -> Vec<&'a str> {
-    let mut a = vec!["--device", udid, "studio", "--no-window"];
-    if let Some(t) = team_id {
-        a.push("--apple-team-id");
-        a.push(t);
-    }
-    a
+fn studio_args(udid: &str) -> Vec<&str> {
+    vec!["--device", udid, "studio", "--no-window"]
 }
 
-fn iproxy_args(host_port: u16, udid: &str) -> Vec<String> {
-    vec![
-        "-u".into(),
-        udid.to_string(),
-        format!("{host_port}:{DEVICE_PORT}"),
-    ]
-}
-
-/// Keeps the on-device runner alive (`maestro studio`) and reachable (`iproxy`),
-/// and owns the HTTP client + cached DeviceInfo for the session.
+/// Boots a simulator + lets `maestro studio` install/launch/hold the XCUITest
+/// runner on it, and owns the HTTP client + cached DeviceInfo for the session.
 pub struct IosDriverKeeper {
     udid: String,
     http: IosHttpClient,
     device_info: parking_lot::RwLock<Option<DeviceInfo>>,
     studio_child: AsyncMutex<Option<Child>>,
-    iproxy_child: AsyncMutex<Option<Child>>,
 }
 
 impl IosDriverKeeper {
@@ -245,11 +235,19 @@ impl IosDriverKeeper {
     }
 
     pub async fn start(udid: &str) -> AppResult<Arc<Self>> {
+        // 1. Boot the simulator. Idempotent: `simctl boot` errors if it's
+        //    already booted, which we ignore.
+        let _ = Command::new("xcrun")
+            .args(["simctl", "boot", udid])
+            .output()
+            .await;
+
+        // 2. Let maestro install + launch + hold the XCUITest runner on the sim.
+        //    The runner serves 127.0.0.1:22087 directly (no forwarding on a sim).
         let maestro = crate::tool_paths::maestro_bin();
-        let team = crate::tool_paths::apple_team_id();
-        let args = studio_args(udid, team.as_deref());
         let studio = Command::new(&maestro)
-            .args(args)
+            .args(studio_args(udid))
+            .env("MAESTRO_DRIVER_STARTUP_TIMEOUT", DRIVER_STARTUP_TIMEOUT_MS)
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| {
@@ -260,48 +258,34 @@ impl IosDriverKeeper {
                 }
             })?;
 
-        let iproxy = crate::tool_paths::iproxy_bin();
-        let ipx = Command::new(&iproxy)
-            .args(iproxy_args(HOST_PORT, udid))
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    AppError::IosToolMissing("iproxy not found — `brew install libusbmuxd`".into())
-                } else {
-                    AppError::IosCommandFailed(format!("iproxy: {e}"))
-                }
-            })?;
-
-        // If `IosHttpClient::new` fails here, `studio` and `ipx` are dropped on
-        // the way out and `kill_on_drop(true)` terminates both — no orphans.
         let keeper = Arc::new(Self {
             udid: udid.to_string(),
-            http: IosHttpClient::new(HOST_PORT)?,
+            http: IosHttpClient::new(DRIVER_PORT)?,
             device_info: parking_lot::RwLock::new(None),
             studio_child: AsyncMutex::new(Some(studio)),
-            iproxy_child: AsyncMutex::new(Some(ipx)),
         });
 
+        // 3. Poll until the runner serves REAL data: /status ok AND /deviceInfo
+        //    parses into DeviceInfo (while warming up the server returns a schema
+        //    stub that fails to parse, so this naturally waits for true readiness).
         for attempt in 0..READY_ATTEMPTS {
             if keeper.http.status().await {
                 if let Ok(di) = keeper.http.device_info().await {
                     *keeper.device_info.write() = Some(di);
-                    info!(udid, "iOS driver ready");
+                    info!(udid, "iOS simulator driver ready");
                     return Ok(keeper);
                 }
             }
             if attempt % 10 == 0 {
-                info!(udid, attempt, "waiting for iOS driver...");
+                info!(udid, attempt, "waiting for iOS simulator driver...");
             }
-            // Skip the final sleep so the failure path doesn't waste a backoff.
             if attempt + 1 < READY_ATTEMPTS {
                 sleep(std::time::Duration::from_millis(READY_BACKOFF_MS)).await;
             }
         }
         keeper.stop().await;
         Err(AppError::IosDriverUnreachable(
-            "maestro studio did not bring up the XCTest server on :22087 in time".into(),
+            "maestro studio did not bring up the simulator driver on :22087 in time".into(),
         ))
     }
 
@@ -309,9 +293,7 @@ impl IosDriverKeeper {
         if let Some(mut c) = self.studio_child.lock().await.take() {
             let _ = c.kill().await;
         }
-        if let Some(mut c) = self.iproxy_child.lock().await.take() {
-            let _ = c.kill().await;
-        }
+        // Leave the simulator booted for reuse.
     }
 
     /// Cheap liveness check used by the screenshot poller / command preflight.
@@ -399,32 +381,10 @@ mod tests {
     }
 
     #[test]
-    fn builds_studio_args_with_team_id() {
-        let args = studio_args("UDID-1", Some("TEAM123"));
+    fn builds_studio_args() {
         assert_eq!(
-            args,
-            vec![
-                "--device",
-                "UDID-1",
-                "studio",
-                "--no-window",
-                "--apple-team-id",
-                "TEAM123"
-            ]
-        );
-    }
-
-    #[test]
-    fn builds_studio_args_without_team_id() {
-        let args = studio_args("UDID-1", None);
-        assert_eq!(args, vec!["--device", "UDID-1", "studio", "--no-window"]);
-    }
-
-    #[test]
-    fn builds_iproxy_args() {
-        assert_eq!(
-            iproxy_args(7010, "UDID-1"),
-            vec!["-u", "UDID-1", "7010:22087"]
+            studio_args("UDID-1"),
+            vec!["--device", "UDID-1", "studio", "--no-window"]
         );
     }
 }
