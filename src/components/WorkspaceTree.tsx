@@ -174,7 +174,8 @@ export function WorkspaceTree() {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
             {pendingNewDir === folderPath ? (
-              <NewFileInput
+              <NewItemInput
+                kind="file"
                 depth={0}
                 onCommit={(name) => void commitNewFile(folderPath, name)}
                 onCancel={cancelNewFile}
@@ -284,7 +285,8 @@ function TreeItem({
         {expanded ? (
           <>
             {showNew ? (
-              <NewFileInput
+              <NewItemInput
+                kind="file"
                 depth={depth + 1}
                 onCommit={(name) => onCommitNewFile(node.path, name)}
                 onCancel={onCancelNewFile}
@@ -355,11 +357,13 @@ function TreeItem({
   );
 }
 
-function NewFileInput({
+function NewItemInput({
+  kind,
   depth,
   onCommit,
   onCancel,
 }: {
+  kind: "file" | "folder";
   depth: number;
   onCommit: (name: string) => void;
   onCancel: () => void;
@@ -376,9 +380,12 @@ function NewFileInput({
     }
   };
 
+  const Icon = kind === "folder" ? FolderClosed : FileCode2;
+  const placeholder = kind === "folder" ? "folder-name" : "flow-name.yaml";
+
   return (
     <div className="flex items-center gap-1.5" style={{ paddingLeft: `${depth * 12 + 22}px` }}>
-      <FileCode2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <input
         autoFocus
         type="text"
@@ -386,7 +393,7 @@ function NewFileInput({
         onChange={(e) => setValue(e.currentTarget.value)}
         onKeyDown={onKeyDown}
         onBlur={() => (value.trim() ? onCommit(value) : onCancel())}
-        placeholder="flow-name.yaml"
+        placeholder={placeholder}
         className="my-0.5 w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary/70"
       />
     </div>
