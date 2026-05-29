@@ -69,19 +69,30 @@ fn non_empty(s: Option<String>) -> Option<String> {
     s.filter(|v| !v.is_empty())
 }
 
-fn convert(node: AxElement, next_index: &mut usize) -> UINode {
+fn convert(node: AxElement, next_index: &mut usize, screen: Option<(i32, i32)>) -> UINode {
     let f = node.frame.unwrap_or(AxFrame {
         x: 0.0,
         y: 0.0,
         w: 0.0,
         h: 0.0,
     });
-    let bounds = Bounds {
+    let mut bounds = Bounds {
         left: f.x.round() as i32,
         top: f.y.round() as i32,
         right: (f.x + f.w).round() as i32,
         bottom: (f.y + f.h).round() as i32,
     };
+    // iOS AXElement frames are in POINTS and scrollable content reports frames
+    // far larger than the visible screen (e.g. 402x4568 vs a 402x874 screen).
+    // Clamp to the screen so off-screen content doesn't inflate the overlay's
+    // coordinate space (hierarchyDims) and throw off alignment; the overlay
+    // then draws only the visible portion.
+    if let Some((sw, sh)) = screen {
+        bounds.left = bounds.left.clamp(0, sw);
+        bounds.top = bounds.top.clamp(0, sh);
+        bounds.right = bounds.right.clamp(0, sw);
+        bounds.bottom = bounds.bottom.clamp(0, sh);
+    }
     let id = next_index.to_string();
     *next_index += 1;
 
@@ -91,7 +102,7 @@ fn convert(node: AxElement, next_index: &mut usize) -> UINode {
     let children = node
         .children
         .into_iter()
-        .map(|c| convert(c, next_index))
+        .map(|c| convert(c, next_index, screen))
         .collect();
 
     UINode {
@@ -120,7 +131,12 @@ struct ViewHierarchyResponse {
 
 /// Parse the `/viewHierarchy` JSON. The runner may prefix log lines, so we
 /// locate the first `{` like `parse_maestro_json` does.
-pub fn parse_ios_axelement(raw: &str) -> AppResult<HierarchyTree> {
+/// Parse the `/viewHierarchy` JSON. The runner may prefix log lines, so we
+/// locate the first `{` like `parse_maestro_json` does. `screen` is the device
+/// size in POINTS (from `/deviceInfo`); when provided, element frames are
+/// clamped to it so off-screen scroll content doesn't inflate the coordinate
+/// space the UI overlay scales against.
+pub fn parse_ios_axelement(raw: &str, screen: Option<(i32, i32)>) -> AppResult<HierarchyTree> {
     let start = raw
         .find('{')
         .ok_or_else(|| AppError::HierarchyParse("no JSON object in viewHierarchy output".into()))?;
@@ -135,7 +151,7 @@ pub fn parse_ios_axelement(raw: &str) -> AppResult<HierarchyTree> {
     };
     let mut next_index = 0usize;
     Ok(HierarchyTree {
-        root: Some(convert(root, &mut next_index)),
+        root: Some(convert(root, &mut next_index, screen)),
         xml_raw: raw.to_string(),
     })
 }
@@ -149,7 +165,7 @@ mod tests {
 
     #[test]
     fn maps_axelement_fields_to_uinode() {
-        let tree = parse_ios_axelement(FIXTURE).expect("parse");
+        let tree = parse_ios_axelement(FIXTURE, None).expect("parse");
         let root = tree.root.as_ref().expect("root");
         assert_eq!(root.bounds.right, 393);
         assert_eq!(root.bounds.bottom, 852);
@@ -187,7 +203,7 @@ mod tests {
         // v2.5.1 wraps the tree in `{depth, axElement}`; the real content must
         // be unwrapped, not parsed as a (defaulted, empty) AXElement.
         let json = r#"{"depth":24,"axElement":{"identifier":"root","frame":{"X":0,"Y":0,"Width":100,"Height":200},"elementType":0,"children":[{"identifier":"btn","frame":{"X":0,"Y":0,"Width":50,"Height":20},"title":"Go","elementType":9,"enabled":true,"children":[]}]}}"#;
-        let tree = parse_ios_axelement(json).expect("parse");
+        let tree = parse_ios_axelement(json, None).expect("parse");
         let root = tree.root.expect("root");
         assert_eq!(root.bounds.right, 100);
         assert_eq!(root.children.len(), 1);
@@ -195,10 +211,21 @@ mod tests {
     }
 
     #[test]
+    fn clamps_offscreen_frames_to_screen() {
+        // A scroll container reports a frame far taller than the screen; with a
+        // 402x874 screen it must be clamped so it doesn't inflate hierarchyDims.
+        let json = r#"{"identifier":"scroll","frame":{"X":0,"Y":0,"Width":402,"Height":4568},"elementType":0,"children":[]}"#;
+        let tree = parse_ios_axelement(json, Some((402, 874))).expect("parse");
+        let root = tree.root.expect("root");
+        assert_eq!(root.bounds.right, 402);
+        assert_eq!(root.bounds.bottom, 874);
+    }
+
+    #[test]
     fn text_falls_back_to_value_when_title_empty() {
         let json = r#"{"identifier":"f","frame":{"X":0,"Y":0,"Width":10,"Height":10},
             "title":"","value":"typed","label":"","elementType":49,"enabled":true,"children":[]}"#;
-        let tree = parse_ios_axelement(json).expect("parse");
+        let tree = parse_ios_axelement(json, None).expect("parse");
         assert_eq!(tree.root.unwrap().text.as_deref(), Some("typed"));
     }
 }

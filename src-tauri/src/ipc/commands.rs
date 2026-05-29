@@ -348,7 +348,12 @@ pub async fn enter_inspect_mode(
     if device.platform == crate::device::Platform::Ios {
         let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
         let json = keeper.http().view_hierarchy().await?;
-        let tree = crate::hierarchy::ios::parse_ios_axelement(&json)?;
+        // Screen size in POINTS clamps off-screen scroll content so the UI
+        // overlay coordinate space matches the visible screen.
+        let screen = keeper
+            .device_info()
+            .map(|d| (d.width_points as i32, d.height_points as i32));
+        let tree = crate::hierarchy::ios::parse_ios_axelement(&json, screen)?;
         return finalize_hierarchy(tree, state.inner()).await;
     }
     if device.platform == crate::device::Platform::Web {
