@@ -62,22 +62,34 @@ impl WebStudioClient {
         format!("{}/{}", self.base, path.trim_start_matches('/'))
     }
 
-    /// `GET /api/device-screen` — screenshot location + hierarchy in one call.
+    /// Read one event from the Server-Sent-Events stream `GET
+    /// /api/device-screen/sse` — Maestro Studio pushes the current screen
+    /// (screenshot URL + flat element list) as `data: {json}\n\n`. We open the
+    /// stream, return the first complete event, and drop the connection.
     pub async fn device_screen(&self) -> AppResult<DeviceScreen> {
-        let resp = self
+        let mut resp = self
             .client
-            .get(self.url("api/device-screen"))
+            .get(self.url("api/device-screen/sse"))
             .send()
             .await
-            .map_err(|e| AppError::Other(format!("device-screen: {e}")))?
+            .map_err(|e| AppError::Other(format!("device-screen/sse: {e}")))?
             .error_for_status()
-            .map_err(|e| AppError::Other(format!("device-screen: {e}")))?;
-        let txt = resp
-            .text()
+            .map_err(|e| AppError::Other(format!("device-screen/sse: {e}")))?;
+        let mut buf: Vec<u8> = Vec::new();
+        while let Some(chunk) = resp
+            .chunk()
             .await
-            .map_err(|e| AppError::Other(e.to_string()))?;
-        serde_json::from_str(&txt)
-            .map_err(|e| AppError::HierarchyParse(format!("device-screen parse: {e}")))
+            .map_err(|e| AppError::Other(format!("device-screen/sse read: {e}")))?
+        {
+            buf.extend_from_slice(&chunk);
+            if let Some(json) = extract_sse_data(&buf) {
+                return serde_json::from_str(&json)
+                    .map_err(|e| AppError::HierarchyParse(format!("device-screen parse: {e}")));
+            }
+        }
+        Err(AppError::Other(
+            "device-screen/sse closed before delivering an event".into(),
+        ))
     }
 
     /// Fetch PNG bytes for a screenshot path returned by `device_screen`.
@@ -103,8 +115,8 @@ impl WebStudioClient {
             .to_vec())
     }
 
-    /// `POST /api/run-command` — run a single maestro command (tap/text/swipe).
-    /// VERIFY (Task 1): the body shape. Documented/assumed: `{ "yaml": "<cmd>" }`.
+    /// `POST /api/run-command` — run a single maestro command. Studio expects
+    /// `{ "yaml": "<command yaml>", "dryRun": bool }`.
     pub async fn run_command(&self, body: serde_json::Value) -> AppResult<()> {
         self.client
             .post(self.url("api/run-command"))
@@ -117,14 +129,20 @@ impl WebStudioClient {
         Ok(())
     }
 
+    /// Liveness: the SPA serves 200 on every path, so a bare GET can't tell us
+    /// the driver is ready. Reading a real device-screen event can.
     pub async fn is_alive(&self) -> bool {
-        self.client
-            .get(self.url("api/device-screen"))
-            .send()
-            .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
+        self.device_screen().await.is_ok()
     }
+}
+
+/// Extract the JSON payload of the first complete `data: …` line in an SSE
+/// buffer. Returns `None` until a full line (terminated by `\n`) is present.
+fn extract_sse_data(buf: &[u8]) -> Option<String> {
+    let s = std::str::from_utf8(buf).ok()?;
+    let start = s.find("data: ")? + "data: ".len();
+    let rel_end = s[start..].find('\n')?;
+    Some(s[start..start + rel_end].trim().to_string())
 }
 
 const READY_ATTEMPTS: u32 = 120;
@@ -271,12 +289,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_device_screen_fixture() {
-        // VERIFY (Task 1): replace with assertions against the captured fixture.
-        let json = r#"{"screenshot":"/screenshot/abc.png","width":1280,"height":800,"elements":{"attributes":{},"children":[]}}"#;
+    fn parses_device_screen_event() {
+        // Shape captured from a real `maestro -p web studio` SSE event.
+        let json = r#"{"platform":"WEB","screenshot":"/screenshot/abc.png","width":1200,"height":766,"url":"https://x","elements":[{"id":"Search","bounds":{"x":413,"y":14,"width":338,"height":37},"resourceId":"Search","text":"Search…"}]}"#;
         let s: DeviceScreen = serde_json::from_str(json).expect("parse");
-        assert_eq!(s.width, 1280);
+        assert_eq!(s.width, 1200);
         assert_eq!(s.screenshot, "/screenshot/abc.png");
+        assert!(s.elements.is_array());
+    }
+
+    #[test]
+    fn extracts_first_sse_data_line() {
+        // Only a newline-terminated `data:` line counts as complete.
+        assert_eq!(extract_sse_data(b"data: {\"a\":1}"), None);
+        assert_eq!(
+            extract_sse_data(b"data: {\"a\":1}\n\n").as_deref(),
+            Some("{\"a\":1}")
+        );
+        assert_eq!(extract_sse_data(b":comment\n").is_none(), true);
     }
 
     #[test]

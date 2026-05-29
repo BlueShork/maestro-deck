@@ -19,10 +19,10 @@ fn pct(coord: f32, span: u16) -> f32 {
     (p.clamp(0.0, 100.0) * 10.0).round() / 10.0
 }
 
-/// Build the run-command body for a single command.
-/// VERIFY (Task 1): body shape — assumed `{ "yaml": "<command yaml>" }`.
+/// Build the run-command body for a single command. Maestro Studio expects
+/// `{ "yaml": "<command yaml>", "dryRun": bool }`.
 fn command_body(yaml: String) -> serde_json::Value {
-    serde_json::json!({ "yaml": yaml })
+    serde_json::json!({ "yaml": yaml, "dryRun": false })
 }
 
 pub async fn send(
