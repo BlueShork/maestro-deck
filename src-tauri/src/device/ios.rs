@@ -27,6 +27,8 @@ struct DeviceCtlDevice {
     device_properties: DeviceProps,
     #[serde(rename = "hardwareProperties", default)]
     hardware_properties: HardwareProps,
+    #[serde(rename = "connectionProperties", default)]
+    connection_properties: ConnectionProps,
 }
 #[derive(Debug, Default, Deserialize)]
 struct DeviceProps {
@@ -43,6 +45,27 @@ struct HardwareProps {
     product_type: String,
     #[serde(default)]
     platform: String,
+    /// "physical" for real hardware, "simulator" for simulators.
+    #[serde(default)]
+    reality: String,
+}
+#[derive(Debug, Default, Deserialize)]
+struct ConnectionProps {
+    /// Present (e.g. "wired"/"localNetwork") only while the device is actually
+    /// connected; absent for paired-but-disconnected devices.
+    #[serde(rename = "transportType", default)]
+    transport_type: Option<String>,
+    #[serde(rename = "tunnelState", default)]
+    tunnel_state: Option<String>,
+}
+
+impl ConnectionProps {
+    /// A device is currently reachable when it advertises a transport and its
+    /// tunnel isn't "unavailable" (the state devicectl reports for stale
+    /// paired devices that aren't plugged in).
+    fn is_connected(&self) -> bool {
+        self.transport_type.is_some() && self.tunnel_state.as_deref() != Some("unavailable")
+    }
 }
 
 /// Parse `xcrun devicectl list devices --json-output` into `Device`s,
@@ -53,10 +76,23 @@ pub fn parse_devicectl_json(json: &str) -> AppResult<Vec<Device>> {
         .map_err(|e| AppError::IosCommandFailed(format!("devicectl JSON parse: {e}")))?;
     let mut out = Vec::new();
     for d in parsed.result.devices {
-        if !d.hardware_properties.platform.eq_ignore_ascii_case("iOS") {
+        let hw = d.hardware_properties;
+        let conn = d.connection_properties;
+        // Only iOS, only real hardware (not simulators), and only devices that
+        // are actually connected right now — devicectl also lists paired
+        // devices that aren't plugged in.
+        if !hw.platform.eq_ignore_ascii_case("iOS") {
             continue;
         }
-        let hw = d.hardware_properties;
+        // Exclude simulators. We check for "simulator" explicitly rather than
+        // requiring "physical" so older devicectl versions that omit `reality`
+        // (field defaults to "") still treat real devices as physical.
+        if hw.reality.eq_ignore_ascii_case("simulator") {
+            continue;
+        }
+        if !conn.is_connected() {
+            continue;
+        }
         let model = if hw.marketing_name.is_empty() {
             hw.product_type
         } else {
@@ -114,15 +150,37 @@ mod tests {
     const FIXTURE: &str = include_str!("../../tests/fixtures/devicectl_list.json");
 
     #[test]
-    fn parses_iphone_and_skips_non_ios() {
+    fn returns_only_connected_physical_devices() {
+        // Fixture has: a connected physical iPhone (transportType present),
+        // a paired-but-disconnected physical iPad (tunnelState "unavailable",
+        // no transportType), and a simulator (reality "simulator").
+        // Only the first should be returned.
         let devices = parse_devicectl_json(FIXTURE).expect("parse");
-        assert_eq!(devices.len(), 1, "only the iOS iPhone should be returned");
+        assert_eq!(
+            devices.len(),
+            1,
+            "only the connected physical iPhone should be returned"
+        );
         let d = &devices[0];
-        assert_eq!(d.serial, "00008030-0011223344556677");
-        assert_eq!(d.model, "iPhone 15 Pro Max");
-        assert_eq!(d.os_version, "18.0");
+        assert_eq!(d.serial, "00008150-001909C011A1401C");
+        assert_eq!(d.model, "iPhone 17 Pro");
+        assert_eq!(d.os_version, "26.5");
         assert_eq!(d.platform, crate::device::Platform::Ios);
         assert_eq!(d.android_version, "");
         assert_eq!(d.screen_width, 0);
+    }
+
+    #[test]
+    fn excludes_disconnected_and_simulator() {
+        let devices = parse_devicectl_json(FIXTURE).expect("parse");
+        let serials: Vec<&str> = devices.iter().map(|d| d.serial.as_str()).collect();
+        assert!(
+            !serials.contains(&"00008112-001E28A9226BA01E"),
+            "disconnected iPad must be excluded"
+        );
+        assert!(
+            !serials.contains(&"5C8B8294-5B4F-4D2E-9F1A-000000000000"),
+            "simulator must be excluded"
+        );
     }
 }
