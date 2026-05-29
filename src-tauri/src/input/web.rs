@@ -19,10 +19,20 @@ fn pct(coord: f32, span: u16) -> f32 {
     (p.clamp(0.0, 100.0) * 10.0).round() / 10.0
 }
 
-/// Build the run-command body for a single command. Maestro Studio expects
-/// `{ "yaml": "<command yaml>", "dryRun": bool }`.
+/// Build the run-command body. Maestro Studio expects `{ "yaml": "<command>",
+/// "dryRun": bool }` where `<command>` is a SINGLE command line
+/// (`"<name>: <options>"`) — NOT a flow list. A leading `- ` is rejected with
+/// 400 "Invalid command format".
 fn command_body(yaml: String) -> serde_json::Value {
     serde_json::json!({ "yaml": yaml, "dryRun": false })
+}
+
+fn tap_yaml(x_pct: f32, y_pct: f32) -> String {
+    format!("tapOn: {{point: \"{x_pct}%,{y_pct}%\"}}")
+}
+
+fn swipe_yaml(x1: f32, y1: f32, x2: f32, y2: f32, duration_ms: u32) -> String {
+    format!("swipe: {{start: \"{x1}%,{y1}%\", end: \"{x2}%,{y2}%\", duration: {duration_ms}}}")
 }
 
 pub async fn send(
@@ -33,11 +43,7 @@ pub async fn send(
 ) -> AppResult<()> {
     match event {
         InputEvent::Tap { x, y } => {
-            let yaml = format!(
-                "- tapOn:\n    point: {}%,{}%",
-                pct(*x, screen_w),
-                pct(*y, screen_h)
-            );
+            let yaml = tap_yaml(pct(*x, screen_w), pct(*y, screen_h));
             http.run_command(command_body(yaml)).await
         }
         InputEvent::Swipe {
@@ -47,19 +53,18 @@ pub async fn send(
             y2,
             duration_ms,
         } => {
-            let yaml = format!(
-                "- swipe:\n    start: {}%,{}%\n    end: {}%,{}%\n    duration: {}",
+            let yaml = swipe_yaml(
                 pct(*x1, screen_w),
                 pct(*y1, screen_h),
                 pct(*x2, screen_w),
                 pct(*y2, screen_h),
-                duration_ms
+                *duration_ms,
             );
             http.run_command(command_body(yaml)).await
         }
         InputEvent::Text { text } => {
-            let yaml = format!("- inputText: {text}");
-            http.run_command(command_body(yaml)).await
+            http.run_command(command_body(format!("inputText: {text}")))
+                .await
         }
         // No general key-injection over the web driver in V1 (Android-only).
         InputEvent::Key { .. } => Ok(()),
@@ -83,8 +88,24 @@ mod tests {
     }
 
     #[test]
-    fn command_body_wraps_yaml() {
-        let b = command_body("- inputText: hi".to_string());
-        assert_eq!(b["yaml"], "- inputText: hi");
+    fn command_body_wraps_yaml_with_dryrun() {
+        let b = command_body("inputText: hi".to_string());
+        assert_eq!(b["yaml"], "inputText: hi");
+        assert_eq!(b["dryRun"], false);
+    }
+
+    #[test]
+    fn commands_are_single_line_not_flows() {
+        // Studio rejects a leading "- " (flow list) with 400.
+        let tap = tap_yaml(50.0, 50.0);
+        assert_eq!(tap, "tapOn: {point: \"50%,50%\"}");
+        assert!(!tap.starts_with("- "));
+
+        let sw = swipe_yaml(50.0, 50.0, 50.0, 20.0, 400);
+        assert_eq!(
+            sw,
+            "swipe: {start: \"50%,50%\", end: \"50%,20%\", duration: 400}"
+        );
+        assert!(!sw.starts_with("- "));
     }
 }

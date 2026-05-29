@@ -207,7 +207,8 @@ impl WebStudioKeeper {
                 // VERIFY (Task 1): the exact command — assumed an openLink. If
                 // studio ignores it, navigation may instead need a studio arg.
                 if let Some(u) = url {
-                    let yaml = format!("- openLink: {u}");
+                    // Single command, no leading `- ` (Studio rejects flows).
+                    let yaml = format!("openLink: {u}");
                     if let Err(e) = keeper
                         .http
                         .run_command(serde_json::json!({ "yaml": yaml }))
