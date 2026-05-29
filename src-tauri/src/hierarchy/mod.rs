@@ -20,6 +20,7 @@ pub mod grpc_client;
 pub mod ios;
 pub mod proto;
 pub mod studio;
+pub mod web;
 
 use std::collections::HashMap;
 use std::process::Command;
