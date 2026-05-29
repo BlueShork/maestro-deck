@@ -32,7 +32,11 @@ export function DeviceSelector() {
   const rows = devices.filter((d) => !(d.platform === "ios" && !d.booted));
   const shutdownSims = devices
     .filter((d) => d.platform === "ios" && !d.booted)
-    .sort((a, b) => a.model.localeCompare(b.model) || a.os_version.localeCompare(b.os_version));
+    .sort(
+      (a, b) =>
+        a.model.localeCompare(b.model) ||
+        a.os_version.localeCompare(b.os_version, undefined, { numeric: true }),
+    );
   const bootingSim = connecting && shutdownSims.some((d) => d.serial === pendingSerial);
 
   const [checkingSerial, setCheckingSerial] = useState<string | null>(null);
