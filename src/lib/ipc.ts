@@ -11,6 +11,7 @@ import type {
   InputEvent,
   KillReport,
   MaestroAction,
+  Platform,
   RunnerExitPayload,
   Selector,
   UINode,
@@ -60,8 +61,8 @@ export const ipc = {
   ping: () => call<string>("ping"),
   appVersion: () => call<string>("app_version"),
   listDevices: () => call<Device[]>("list_devices"),
-  connectDevice: (serial: string, streamEnabled: boolean) =>
-    call<void>("connect_device", { serial, streamEnabled }),
+  connectDevice: (serial: string, streamEnabled: boolean, platform: Platform) =>
+    call<void>("connect_device", { serial, streamEnabled, platform }),
   disconnectDevice: () => call<void>("disconnect_device"),
   enterInspectMode: (fastMode: boolean) => call<HierarchyTree>("enter_inspect_mode", { fastMode }),
   queryElement: (x: number, y: number) => call<UINode | null>("query_element", { x, y }),

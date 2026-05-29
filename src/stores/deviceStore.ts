@@ -57,7 +57,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       error: null,
     });
     try {
-      await ipc.connectDevice(serial, streamEnabled);
+      await ipc.connectDevice(serial, streamEnabled, device?.platform ?? "android");
       set({
         current: device ?? null,
         connecting: false,

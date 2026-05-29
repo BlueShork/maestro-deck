@@ -57,48 +57,84 @@ pub fn list_devices() -> AppResult<Vec<Device>> {
 pub async fn connect_device(
     serial: String,
     stream_enabled: bool,
+    platform: crate::device::Platform,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<()> {
-    let device = adb::get_device_info(&serial)?;
-    info!(
-        serial = %serial,
-        model = %device.model,
-        stream = stream_enabled,
-        "device connected",
-    );
-    *state.connected_device.write() = Some(device);
+    use crate::device::Platform;
+    match platform {
+        Platform::Android => {
+            let device = adb::get_device_info(&serial)?;
+            info!(
+                serial = %serial,
+                model = %device.model,
+                stream = stream_enabled,
+                "device connected",
+            );
+            *state.connected_device.write() = Some(device);
 
-    // Defensive cleanup: any leftover scrcpy server from a previous run holds
-    // the abstract socket name and would block start_server with EADDRINUSE.
-    teardown_scrcpy(&serial, state.inner()).await;
+            // Defensive cleanup: any leftover scrcpy server from a previous run holds
+            // the abstract socket name and would block start_server with EADDRINUSE.
+            teardown_scrcpy(&serial, state.inner()).await;
 
-    if !stream_enabled {
-        // Lightweight mode — no scrcpy. Inputs (taps/swipes) won't work since
-        // they go through the scrcpy control channel, but inspect (Maestro
-        // hierarchy) and run (maestro test) operate independently of the
-        // stream.
-        return Ok(());
+            if !stream_enabled {
+                // Lightweight mode — no scrcpy. Inputs (taps/swipes) won't work since
+                // they go through the scrcpy control channel, but inspect (Maestro
+                // hierarchy) and run (maestro test) operate independently of the
+                // stream.
+                return Ok(());
+            }
+
+            setup_scrcpy(&serial, app, state.inner()).await;
+            Ok(())
+        }
+        Platform::Ios => {
+            let keeper = ensure_ios_keeper(&serial, state.inner()).await?;
+            let di = keeper.device_info();
+            let mut device = crate::device::ios::list_devices()?
+                .into_iter()
+                .find(|d| d.serial == serial)
+                .ok_or(AppError::NoDevice)?;
+            if let Some(di) = di {
+                device.screen_width = di.width_pixels;
+                device.screen_height = di.height_pixels;
+            }
+            info!(udid = %serial, model = %device.model, stream = stream_enabled, "iOS device connected");
+            *state.connected_device.write() = Some(device);
+            if stream_enabled {
+                let abort = crate::ios_session::spawn_screenshot_poller(app, keeper);
+                *state.ios_screenshot_abort.lock().await = Some(abort);
+            }
+            Ok(())
+        }
     }
-
-    setup_scrcpy(&serial, app, state.inner()).await;
-    Ok(())
 }
 
 /// Bring up scrcpy for the currently connected device. Used by the settings
 /// toggle to enable mirroring without forcing a full reconnect.
 #[tauri::command]
 pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    let serial = state
+    let device = state
         .connected_device
         .read()
-        .as_ref()
-        .map(|d| d.serial.clone())
+        .clone()
         .ok_or(AppError::NoDevice)?;
-    // Tear any previous session down before starting a fresh one — same
-    // EADDRINUSE / dangling-process protection as connect_device.
-    teardown_scrcpy(&serial, state.inner()).await;
-    setup_scrcpy(&serial, app, state.inner()).await;
+    match device.platform {
+        crate::device::Platform::Android => {
+            // Tear any previous session down before starting a fresh one — same
+            // EADDRINUSE / dangling-process protection as connect_device.
+            teardown_scrcpy(&device.serial, state.inner()).await;
+            setup_scrcpy(&device.serial, app, state.inner()).await;
+        }
+        crate::device::Platform::Ios => {
+            if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
+                let _ = abort.send(());
+            }
+            let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+            let abort = crate::ios_session::spawn_screenshot_poller(app, keeper);
+            *state.ios_screenshot_abort.lock().await = Some(abort);
+        }
+    }
     Ok(())
 }
 
@@ -106,13 +142,27 @@ pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResu
 /// working since they don't depend on the stream.
 #[tauri::command]
 pub async fn stop_stream(state: State<'_, AppState>) -> AppResult<()> {
-    let serial = state
-        .connected_device
-        .read()
-        .as_ref()
-        .map(|d| d.serial.clone());
-    if let Some(serial) = serial {
-        teardown_scrcpy(&serial, state.inner()).await;
+    // Snapshot platform + serial under one guard (dropped before any await), so
+    // a concurrent disconnect can't make the two reads disagree.
+    let (platform, serial) = {
+        let g = state.connected_device.read();
+        (
+            g.as_ref().map(|d| d.platform),
+            g.as_ref().map(|d| d.serial.clone()),
+        )
+    };
+    match platform {
+        Some(crate::device::Platform::Ios) => {
+            if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
+                let _ = abort.send(());
+            }
+        }
+        Some(crate::device::Platform::Android) => {
+            if let Some(serial) = serial {
+                teardown_scrcpy(&serial, state.inner()).await;
+            }
+        }
+        None => {}
     }
     Ok(())
 }
@@ -158,11 +208,13 @@ async fn setup_scrcpy(serial: &str, app: AppHandle, state: &AppState) {
 
 #[tauri::command]
 pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
-    let serial = state
-        .connected_device
-        .read()
-        .as_ref()
-        .map(|d| d.serial.clone());
+    let (serial, platform) = {
+        let g = state.connected_device.read();
+        (
+            g.as_ref().map(|d| d.serial.clone()),
+            g.as_ref().map(|d| d.platform),
+        )
+    };
     *state.connected_device.write() = None;
     *state.last_hierarchy.write() = None;
     *state.spatial_index.write() = None;
@@ -175,8 +227,14 @@ pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
         keeper.stop().await;
     }
 
-    if let Some(serial) = serial {
-        teardown_scrcpy(&serial, state.inner()).await;
+    match platform {
+        Some(crate::device::Platform::Ios) => teardown_ios(state.inner()).await,
+        Some(crate::device::Platform::Android) => {
+            if let Some(serial) = serial {
+                teardown_scrcpy(&serial, state.inner()).await;
+            }
+        }
+        None => {}
     }
     Ok(())
 }
@@ -197,18 +255,35 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
     *state.scid.write() = None;
 }
 
+/// Tear down the iOS session: stop the screenshot poller and the keeper
+/// (kills `maestro studio` + `iproxy`).
+async fn teardown_ios(state: &AppState) {
+    if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
+        let _ = abort.send(());
+    }
+    if let Some(keeper) = state.ios_driver.lock().await.take() {
+        keeper.stop().await;
+    }
+}
+
 #[tauri::command]
 pub async fn enter_inspect_mode(
     fast_mode: bool,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<HierarchyTree> {
-    let serial = state
+    let device = state
         .connected_device
         .read()
-        .as_ref()
-        .map(|d| d.serial.clone())
+        .clone()
         .ok_or(AppError::NoDevice)?;
+    if device.platform == crate::device::Platform::Ios {
+        let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+        let json = keeper.http().view_hierarchy().await?;
+        let tree = crate::hierarchy::ios::parse_ios_axelement(&json)?;
+        return finalize_hierarchy(tree, state.inner()).await;
+    }
+    let serial = device.serial.clone();
 
     // Pre-flight: if the on-device driver isn't responding, force-stop
     // it and remove the port forward so the next maestro call spawns a
@@ -255,6 +330,30 @@ pub async fn enter_inspect_mode(
         .map_err(|e| AppError::HierarchyParse(format!("dump task panicked: {e}")))??;
 
     finalize_hierarchy(tree, state.inner()).await
+}
+
+/// Ensure an `IosDriverKeeper` is running for `udid`, returning it. Respawns
+/// if the cached keeper is for a different device. Mirrors the Android
+/// `dump_via_grpc` keeper-reuse pattern.
+async fn ensure_ios_keeper(
+    udid: &str,
+    state: &AppState,
+) -> AppResult<std::sync::Arc<crate::ios_session::IosDriverKeeper>> {
+    let mut slot = state.ios_driver.lock().await;
+    let needs_spawn = match slot.as_ref() {
+        Some(k) => k.udid() != udid,
+        None => true,
+    };
+    if needs_spawn {
+        if let Some(existing) = slot.take() {
+            existing.stop().await;
+        }
+        let keeper = crate::ios_session::IosDriverKeeper::start(udid).await?;
+        *slot = Some(keeper);
+    }
+    // Invariant: the needs_spawn branch always writes Some; otherwise slot was
+    // already Some. The lock is held throughout, so this is never None.
+    Ok(slot.as_ref().unwrap().clone())
 }
 
 /// Fast-mode helper: ensure a `maestro studio` keeper is running for
@@ -351,10 +450,24 @@ pub async fn send_input(
     // the matching screen dimensions. Trusting the frontend here avoids a
     // stream-vs-native mismatch on devices where scrcpy downscales (e.g.
     // QHD+ Galaxy with max_size=1080).
-    if state.connected_device.read().is_none() {
-        return Err(AppError::NoDevice);
+    let device = state
+        .connected_device
+        .read()
+        .clone()
+        .ok_or(AppError::NoDevice)?;
+    match device.platform {
+        crate::device::Platform::Android => {
+            input::send(&event, state.inner(), screen_w, screen_h).await
+        }
+        crate::device::Platform::Ios => {
+            let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+            let (pt_w, pt_h) = keeper
+                .device_info()
+                .map(|d| (d.width_points, d.height_points))
+                .unwrap_or((0, 0));
+            input::ios::send(&event, keeper.http(), screen_w, screen_h, pt_w, pt_h).await
+        }
     }
-    input::send(&event, state.inner(), screen_w, screen_h).await
 }
 
 #[tauri::command]
