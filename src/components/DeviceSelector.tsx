@@ -27,6 +27,14 @@ export function DeviceSelector() {
     disconnect,
   } = useDeviceStore();
 
+  // Booted iOS sims (and all non-iOS devices) render as normal rows; shutdown
+  // iOS sims go into the "Launch a simulator…" picker (there can be dozens).
+  const rows = devices.filter((d) => !(d.platform === "ios" && !d.booted));
+  const shutdownSims = devices
+    .filter((d) => d.platform === "ios" && !d.booted)
+    .sort((a, b) => a.model.localeCompare(b.model) || a.os_version.localeCompare(b.os_version));
+  const bootingSim = connecting && shutdownSims.some((d) => d.serial === pendingSerial);
+
   const [checkingSerial, setCheckingSerial] = useState<string | null>(null);
   const [report, setReport] = useState<HealthReport | null>(null);
 
@@ -82,7 +90,7 @@ export function DeviceSelector() {
       ) : null}
 
       <ul className="flex flex-col gap-1">
-        {devices.map((d) => {
+        {rows.map((d) => {
           const active = current?.serial === d.serial;
           const isPending = pendingSerial === d.serial;
           const isConnecting = isPending && pendingAction === "connect";
@@ -193,6 +201,39 @@ export function DeviceSelector() {
           );
         })}
       </ul>
+
+      {shutdownSims.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="sim-picker"
+            className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+          >
+            iOS Simulators
+          </label>
+          <select
+            id="sim-picker"
+            value=""
+            disabled={connecting}
+            onChange={(e) => {
+              const udid = e.target.value;
+              if (udid) void connect(udid);
+            }}
+            className="rounded border border-border bg-background px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="">{`Launch a simulator… (${shutdownSims.length})`}</option>
+            {shutdownSims.map((d) => (
+              <option key={d.serial} value={d.serial}>
+                {`${d.model} · iOS ${d.os_version}`}
+              </option>
+            ))}
+          </select>
+          {bootingSim ? (
+            <div className="text-[11px] text-muted-foreground">
+              Booting simulator &amp; starting driver… (can take a minute)
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {report && (
         <HealthcheckModal
