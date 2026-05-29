@@ -247,6 +247,77 @@ pub async fn spawn_web_runner(app: AppHandle, flow_path: &str) -> AppResult<u32>
     Ok(pid)
 }
 
+/// Spawn `maestro --udid <udid> test <flow>` for an iOS simulator. Like
+/// [`spawn_runner`] but without the adb emulator-ghost preamble (irrelevant to
+/// iOS). The caller stops the studio keeper first so `maestro test` can bring up
+/// its own XCTest driver on :22087 without contention. Streams stdout/stderr and
+/// emits `runner:exit` exactly like the other runners.
+pub async fn spawn_ios_runner(app: AppHandle, udid: &str, flow_path: &str) -> AppResult<u32> {
+    let bin = maestro_bin();
+    info!(bin = %bin, udid, flow = %flow_path, "spawning maestro (ios)");
+
+    let mut child = Command::new(&bin)
+        .no_window()
+        .args(["--udid", udid, "test"])
+        .arg(flow_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::RunnerNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+
+    let pid = child.id().ok_or_else(|| {
+        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
+    })?;
+
+    if let Some(stdout) = child.stdout.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stdout).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stdout", "{line}");
+                let _ = app.emit(EVT_STDOUT, &line);
+            }
+        });
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stderr", "{line}");
+                let _ = app.emit(EVT_STDERR, &line);
+            }
+        });
+    }
+
+    let (kill_tx, kill_rx) = oneshot::channel::<()>();
+    RUNNERS.lock().await.insert(pid, kill_tx);
+
+    let app_exit = app.clone();
+    tokio::spawn(async move {
+        let code = tokio::select! {
+            status = child.wait() => status.ok().and_then(|s| s.code()),
+            _ = kill_rx => {
+                if let Err(e) = child.kill().await {
+                    warn!(pid, error = %e, "child kill failed");
+                }
+                child.wait().await.ok().and_then(|s| s.code())
+            }
+        };
+        RUNNERS.lock().await.remove(&pid);
+        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
+    });
+
+    Ok(pid)
+}
+
 pub async fn kill_runner(pid: u32) -> AppResult<()> {
     let tx = RUNNERS.lock().await.remove(&pid);
     match tx {

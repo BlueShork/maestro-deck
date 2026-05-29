@@ -412,15 +412,17 @@ pub async fn enter_inspect_mode(
 }
 
 /// Ensure an `IosDriverKeeper` is running for `udid`, returning it. Respawns
-/// if the cached keeper is for a different device. Mirrors the Android
-/// `dump_via_grpc` keeper-reuse pattern.
+/// if the cached keeper is for a different device OR its driver has died
+/// (e.g. `maestro studio` was torn down by a flow run, timed out, or crashed) —
+/// otherwise we'd hand back a keeper whose :22087 is unreachable. Mirrors the
+/// Android `dump_via_grpc` keeper-reuse pattern.
 async fn ensure_ios_keeper(
     udid: &str,
     state: &AppState,
 ) -> AppResult<std::sync::Arc<crate::ios_session::IosDriverKeeper>> {
     let mut slot = state.ios_driver.lock().await;
     let needs_spawn = match slot.as_ref() {
-        Some(k) => k.udid() != udid,
+        Some(k) => k.udid() != udid || !k.is_alive().await,
         None => true,
     };
     if needs_spawn {
@@ -628,6 +630,20 @@ pub async fn run_flow(
         // contend with the one `maestro test` launches.
         teardown_web(state.inner()).await;
         return runner::spawn_web_runner(app, &file_path).await;
+    }
+
+    if device.platform == crate::device::Platform::Ios {
+        // iOS simulator: `maestro --udid <udid> test`. Stop the studio keeper
+        // first — it holds the XCTest driver on :22087, which `maestro test`
+        // needs to bring up itself; running both contends for the simulator.
+        // But KEEP the screenshot poller running: it captures the framebuffer
+        // via `simctl` (independent of the :22087 driver), so the simulator
+        // stays mirrored in-app throughout the run. The sim stays booted, so
+        // re-inspecting afterwards restarts the keeper.
+        if let Some(keeper) = state.ios_driver.lock().await.take() {
+            keeper.stop().await;
+        }
+        return runner::spawn_ios_runner(app, &device.serial, &file_path).await;
     }
 
     let serial = device.serial.clone();

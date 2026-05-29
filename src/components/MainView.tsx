@@ -22,7 +22,6 @@ import { parseFlow } from "@/lib/flowAst";
 import { buildPartialFlow } from "@/lib/partialFlow";
 import { useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
-import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
@@ -78,13 +77,6 @@ export function MainView() {
   const mainBottomSize = 100 - mainTopSize;
 
   const onRun = useCallback(async () => {
-    if (useDeviceStore.getState().current?.platform === "ios") {
-      toast.info(
-        "Running flows on iOS is coming soon",
-        "Maestro Deck doesn't run flows on physical iPhones yet — inspect and tap still work.",
-      );
-      return;
-    }
     const { content, filePath } = useFlowStore.getState();
     let path = filePath;
     try {
@@ -106,13 +98,6 @@ export function MainView() {
   }, [setRunning, appendLog, initSteps, resetSteps]);
 
   const onRunAll = useCallback(async () => {
-    if (useDeviceStore.getState().current?.platform === "ios") {
-      toast.info(
-        "Running flows on iOS is coming soon",
-        "Maestro Deck doesn't run flows on physical iPhones yet — inspect and tap still work.",
-      );
-      return;
-    }
     const folder = useWorkspaceStore.getState().folderPath;
     if (!folder) return;
     try {
@@ -135,13 +120,6 @@ export function MainView() {
 
   const onRunFrom = useCallback(
     async (line: number) => {
-      if (useDeviceStore.getState().current?.platform === "ios") {
-        toast.info(
-          "Running flows on iOS is coming soon",
-          "Maestro Deck doesn't run flows on physical iPhones yet — inspect and tap still work.",
-        );
-        return;
-      }
       const { content } = useFlowStore.getState();
       const partial = buildPartialFlow(content, line);
       if (!partial) return;
