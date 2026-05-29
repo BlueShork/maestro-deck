@@ -83,6 +83,7 @@ pub fn get_device_info(serial: &str) -> AppResult<Device> {
         screen_height,
         platform: crate::device::Platform::Android,
         os_version: android_version,
+        booted: false,
     })
 }
 

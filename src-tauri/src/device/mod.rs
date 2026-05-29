@@ -25,6 +25,10 @@ pub struct Device {
     pub platform: Platform,
     #[serde(default)]
     pub os_version: String,
+    /// iOS simulators only: true when the simulator is currently Booted.
+    /// Always false for Android and physical devices.
+    #[serde(default)]
+    pub booted: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +95,7 @@ mod tests {
             screen_height: 0,
             platform: Platform::Web,
             os_version: String::new(),
+            booted: false,
         };
         let s = serde_json::to_string(&d).unwrap();
         assert!(s.contains("\"platform\":\"web\""), "got {s}");
@@ -108,6 +113,7 @@ mod tests {
             screen_height: 2556,
             platform: Platform::Ios,
             os_version: "18.0".into(),
+            booted: false,
         };
         let s = serde_json::to_string(&d).unwrap();
         let back: Device = serde_json::from_str(&s).unwrap();

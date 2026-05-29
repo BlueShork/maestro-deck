@@ -110,6 +110,10 @@ pub async fn connect_device(
             }
             Ok(())
         }
+        Platform::Web => {
+            *state.connected_device.write() = Some(crate::device::web::synthetic_target());
+            Ok(())
+        }
     }
 }
 
@@ -137,6 +141,7 @@ pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResu
             let abort = crate::ios_session::spawn_screenshot_poller(app, keeper);
             *state.ios_screenshot_abort.lock().await = Some(abort);
         }
+        crate::device::Platform::Web => {}
     }
     Ok(())
 }
@@ -165,7 +170,7 @@ pub async fn stop_stream(state: State<'_, AppState>) -> AppResult<()> {
                 teardown_scrcpy(&serial, state.inner()).await;
             }
         }
-        None => {}
+        Some(crate::device::Platform::Web) | None => {}
     }
     Ok(())
 }
@@ -237,7 +242,7 @@ pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
                 teardown_scrcpy(&serial, state.inner()).await;
             }
         }
-        None => {}
+        Some(crate::device::Platform::Web) | None => {}
     }
     Ok(())
 }
@@ -470,6 +475,7 @@ pub async fn send_input(
                 .unwrap_or((0, 0));
             input::ios::send(&event, keeper.http(), screen_w, screen_h, pt_w, pt_h).await
         }
+        crate::device::Platform::Web => Err(AppError::Other("input not supported for web".into())),
     }
 }
 

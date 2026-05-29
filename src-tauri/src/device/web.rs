@@ -21,6 +21,7 @@ pub fn synthetic_target() -> Device {
         screen_height: 0,
         platform: Platform::Web,
         os_version: String::new(),
+        booted: false,
     }
 }
 

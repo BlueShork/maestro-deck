@@ -11,6 +11,7 @@ export interface Device {
   screen_height: number;
   platform: Platform;
   os_version: string;
+  booted: boolean;
 }
 
 export interface Bounds {
