@@ -142,31 +142,6 @@ pub async fn connect_device(
     }
 }
 
-/// Run a `!Send` SCK future on a dedicated current-thread runtime.
-///
-/// `spawn_ios_preview` and `PreviewHandle::teardown` hold Objective-C types
-/// that are not `Send` across `.await` points. Tauri command futures must be
-/// `Send`, so we bridge by running the non-Send work on a blocking thread that
-/// spins its own single-threaded Tokio runtime.
-#[cfg(target_os = "macos")]
-fn run_nonsend_sck<F, T>(f: F) -> T
-where
-    F: FnOnce() -> std::pin::Pin<Box<dyn std::future::Future<Output = T>>> + Send + 'static,
-    T: Send + 'static,
-{
-    std::thread::scope(|s| {
-        s.spawn(|| {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("single-thread runtime")
-                .block_on(f())
-        })
-        .join()
-        .expect("SCK thread panicked")
-    })
-}
-
 /// Upgrade the iOS live preview from the `simctl` screenshot poll to a fluid
 /// ScreenCaptureKit stream. Called by the frontend once an iOS device is
 /// connected with streaming. Returns `true` if SCK took over (screenshot poller
@@ -191,27 +166,14 @@ pub async fn upgrade_ios_preview_to_sck(
         None => return Ok(false),
     };
 
-    // `spawn_ios_preview` holds non-Send ObjC types across await points, so we
-    // drive it on a blocking thread with its own single-thread runtime.
-    let model = device.model.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        run_nonsend_sck(move || {
-            Box::pin(crate::ios_session::spawn_ios_preview(
-                keeper, model, channel,
-            ))
-        })
-    })
-    .await
-    .map_err(|e| AppError::Other(format!("SCK spawn task panicked: {e}")))?;
-
+    let result = crate::ios_session::spawn_ios_preview(keeper, device.model.clone(), channel).await;
     match result {
         Ok(handle) => {
             if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
                 let _ = abort.send(());
             }
-            // Tear down any previous SCK session on the same blocking helper.
             if let Some(old) = state.ios_sck_session.lock().await.take() {
-                sck_teardown(old).await;
+                old.teardown().await;
             }
             *state.ios_sck_session.lock().await = Some(handle);
             info!("iOS preview upgraded to ScreenCaptureKit");
@@ -222,15 +184,6 @@ pub async fn upgrade_ios_preview_to_sck(
             Ok(false)
         }
     }
-}
-
-/// Tear down a `PreviewHandle` from a `Send` context by offloading the
-/// non-Send `session.stop()` call to a blocking thread.
-#[cfg(target_os = "macos")]
-async fn sck_teardown(handle: crate::ios_session::PreviewHandle) {
-    tokio::task::spawn_blocking(move || run_nonsend_sck(move || Box::pin(handle.teardown())))
-        .await
-        .ok();
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -264,7 +217,7 @@ pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResu
             }
             #[cfg(target_os = "macos")]
             if let Some(handle) = state.ios_sck_session.lock().await.take() {
-                sck_teardown(handle).await;
+                handle.teardown().await;
             }
             let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
             let abort = crate::ios_session::spawn_screenshot_poller(app, keeper);
@@ -413,7 +366,7 @@ async fn teardown_ios(state: &AppState) {
     }
     #[cfg(target_os = "macos")]
     if let Some(handle) = state.ios_sck_session.lock().await.take() {
-        sck_teardown(handle).await;
+        handle.teardown().await;
     }
     if let Some(keeper) = state.ios_driver.lock().await.take() {
         keeper.stop().await;
