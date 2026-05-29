@@ -177,6 +177,64 @@ fn extract_bgra(sb: &CMSampleBuffer) -> Option<Frame> {
     }
 }
 
+/// Maximum fraction of the captured window height the top chrome (macOS title
+/// bar) may occupy before we treat the geometry as unrecognised. A default
+/// Simulator window's title bar is a small slice; anything larger (bezel mode,
+/// unusual layouts) fails this guard so the caller falls back to screenshots.
+const MAX_TITLEBAR_FRACTION: f64 = 0.30;
+
+/// Crop the macOS title bar off a captured Simulator-window frame and convert
+/// the device-screen region from BGRA to RGBA.
+///
+/// Assumes the device screen fills the full window width and is bottom-aligned,
+/// with chrome (the title bar) only at the top — true for a default
+/// Simulator.app window at any zoom. The screen height is derived purely from
+/// the device aspect ratio (`device_w:device_h`), so the result is zoom
+/// independent and exactly 1:1 with the device screen.
+///
+/// Returns `None` when the geometry can't be the assumed layout (frame or device
+/// dims zero, the implied screen is taller than the capture, or the title bar
+/// would exceed [`MAX_TITLEBAR_FRACTION`]); the caller should then keep using the
+/// `simctl` screenshot path. Output is dense RGBA (`out_w * out_h * 4`).
+pub fn crop_and_convert(
+    frame: &Frame,
+    device_w: u32,
+    device_h: u32,
+) -> Option<(u32, u32, Vec<u8>)> {
+    if device_w == 0 || device_h == 0 || frame.width == 0 || frame.height == 0 {
+        return None;
+    }
+    let w = frame.width;
+    let h = frame.height;
+    // Screen region fills the full width; its height follows the device aspect.
+    let screen_h = ((w as u64 * device_h as u64) as f64 / device_w as f64).round() as usize;
+    if screen_h == 0 || screen_h > h {
+        return None;
+    }
+    let crop_top = h - screen_h;
+    if crop_top as f64 > h as f64 * MAX_TITLEBAR_FRACTION {
+        return None;
+    }
+
+    let out_w = w;
+    let out_h = screen_h;
+    let mut rgba = vec![0u8; out_w * out_h * 4];
+    for y in 0..out_h {
+        let src_row = (crop_top + y) * w * 4; // Frame.bgra is dense (width*4 stride)
+        let dst_row = y * out_w * 4;
+        for x in 0..out_w {
+            let s = src_row + x * 4;
+            let d = dst_row + x * 4;
+            // BGRA -> RGBA
+            rgba[d] = frame.bgra[s + 2]; // R
+            rgba[d + 1] = frame.bgra[s + 1]; // G
+            rgba[d + 2] = frame.bgra[s]; // B
+            rgba[d + 3] = frame.bgra[s + 3]; // A
+        }
+    }
+    Some((out_w as u32, out_h as u32, rgba))
+}
+
 /// An active ScreenCaptureKit capture session.
 ///
 /// Holds the objc2 objects alive (the `SCStream`, the delegate, and the
@@ -478,5 +536,59 @@ mod tests {
         // Just exercise the FFI path; the actual grant state depends on the
         // host's TCC database, so we only assert it returns a bool.
         let _granted: bool = screen_capture_permitted();
+    }
+
+    /// Build a dense BGRA frame of `w`x`h` where every pixel is the same
+    /// B,G,R,A tuple — enough to assert the channel swap and crop geometry.
+    fn solid_frame(w: usize, h: usize, b: u8, g: u8, r: u8, a: u8) -> Frame {
+        let mut bgra = Vec::with_capacity(w * h * 4);
+        for _ in 0..(w * h) {
+            bgra.extend_from_slice(&[b, g, r, a]);
+        }
+        Frame {
+            width: w,
+            height: h,
+            bgra,
+        }
+    }
+
+    #[test]
+    fn crop_and_convert_no_titlebar_swaps_bgra_to_rgba() {
+        // 10x20 capture, device 10x20 → screen fills the whole frame, crop_top = 0.
+        let frame = solid_frame(10, 20, 0x11, 0x22, 0x33, 0xFF); // B=11 G=22 R=33
+        let (w, h, rgba) = crop_and_convert(&frame, 10, 20).expect("should crop");
+        assert_eq!((w, h), (10, 20));
+        assert_eq!(rgba.len(), 10 * 20 * 4);
+        // First pixel must be R,G,B,A = 33,22,11,FF.
+        assert_eq!(&rgba[0..4], &[0x33, 0x22, 0x11, 0xFF]);
+    }
+
+    #[test]
+    fn crop_and_convert_strips_top_titlebar() {
+        // 10-wide, 24-tall capture; device aspect 10x20 → screen height = 20,
+        // so crop_top = 4 rows of title bar are dropped.
+        let frame = solid_frame(10, 24, 1, 2, 3, 4);
+        let (w, h, rgba) = crop_and_convert(&frame, 10, 20).expect("should crop");
+        assert_eq!((w, h), (10, 20));
+        assert_eq!(rgba.len(), 10 * 20 * 4);
+    }
+
+    #[test]
+    fn crop_and_convert_rejects_degenerate_geometry() {
+        // Capture shorter than the device aspect demands → screen_h > h → None.
+        let frame = solid_frame(10, 10, 0, 0, 0, 0);
+        assert!(crop_and_convert(&frame, 10, 20).is_none());
+        // Zero device dims → None.
+        let frame2 = solid_frame(10, 20, 0, 0, 0, 0);
+        assert!(crop_and_convert(&frame2, 0, 20).is_none());
+    }
+
+    #[test]
+    fn crop_and_convert_rejects_implausible_titlebar() {
+        // A title bar taking >30% of the frame signals a non-default window
+        // (bezel mode, etc.) → reject so the caller falls back to screenshots.
+        // device 10x4 vs 10x20 capture → screen_h=4, crop_top=16 (80%) → None.
+        let frame = solid_frame(10, 20, 0, 0, 0, 0);
+        assert!(crop_and_convert(&frame, 10, 4).is_none());
     }
 }
