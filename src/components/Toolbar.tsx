@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { useNavigate } from "react-router-dom";
 
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
@@ -53,10 +54,10 @@ interface ToolbarProps {
   onRun: () => void;
   onRunAll: () => void;
   onStop: () => void;
-  onOpenSettings: () => void;
 }
 
-export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProps) {
+export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
+  const navigate = useNavigate();
   const chatOpen = useChatStore((s) => s.isOpen);
   const toggleChat = useChatStore((s) => s.toggle);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
@@ -243,7 +244,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" variant="ghost" onClick={onOpenSettings}>
+              <Button size="icon" variant="ghost" onClick={() => navigate("/settings")}>
                 <Settings className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
