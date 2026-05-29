@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Loader2, Plug, PlugZap, RefreshCw, Smartphone, Stethoscope } from "lucide-react";
+import { Apple, Loader2, Plug, PlugZap, RefreshCw, Smartphone, Stethoscope } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -76,7 +76,8 @@ export function DeviceSelector() {
 
       {!loading && devices.length === 0 && !error ? (
         <div className="rounded border border-dashed border-border p-2 text-[11px] text-muted-foreground">
-          No devices found. Plug in an Android device with USB debugging enabled.
+          No devices found. Plug in an Android device (USB debugging) or an iPhone (Developer Mode,
+          trusted).
         </div>
       ) : null}
 
@@ -86,6 +87,7 @@ export function DeviceSelector() {
           const isPending = pendingSerial === d.serial;
           const isConnecting = isPending && pendingAction === "connect";
           const isDisconnecting = isPending && pendingAction === "disconnect";
+          const DeviceIcon = d.platform === "ios" ? Apple : Smartphone;
           return (
             <li key={d.serial}>
               <button
@@ -112,7 +114,7 @@ export function DeviceSelector() {
                 )}
               >
                 <div className="relative shrink-0">
-                  <Smartphone
+                  <DeviceIcon
                     className={cn(
                       "h-4 w-4",
                       isConnecting && "text-emerald-500/70",
@@ -152,11 +154,11 @@ export function DeviceSelector() {
                       ? "Connecting…"
                       : isDisconnecting
                         ? "Disconnecting…"
-                        : `${d.serial} · Android ${d.android_version}`}
+                        : `${d.serial} · ${d.platform === "ios" ? "iOS" : "Android"} ${d.os_version}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {active && !isPending && (
+                  {active && !isPending && d.platform !== "ios" && (
                     <span
                       role="button"
                       aria-label="Healthcheck device"

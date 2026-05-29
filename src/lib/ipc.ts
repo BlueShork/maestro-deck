@@ -149,4 +149,16 @@ export const events = {
     listen<TargetChangedPayload>("metrics:target_changed", (e) => handler(e.payload)),
   onMetricsStopped: (handler: (p: MetricsStoppedPayload) => void): Promise<UnlistenFn> =>
     listen<MetricsStoppedPayload>("metrics:stopped", (e) => handler(e.payload)),
+  onIosFrame: (
+    handler: (p: { data: Uint8Array; width: number; height: number }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ data: number[] | Uint8Array | ArrayBuffer; width: number; height: number }>(
+      "ios_frame",
+      (e) =>
+        handler({
+          data: toUint8Array(e.payload.data),
+          width: e.payload.width,
+          height: e.payload.height,
+        }),
+    ),
 };
