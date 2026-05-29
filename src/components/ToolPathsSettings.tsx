@@ -52,7 +52,7 @@ export function ToolPathsSettings() {
     setError(null);
     setSaved(false);
     try {
-      const v = await ipc.setToolPaths(draft.adb || null, draft.maestro || null);
+      const v = await ipc.setToolPaths(draft.adb || null, draft.maestro || null, null, null);
       setView(v);
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);

@@ -82,14 +82,24 @@ export const ipc = {
   killMaestroProcesses: (serial: string, report: HealthReport) =>
     call<KillReport>("kill_maestro_processes", { serial, report }),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
-  setToolPaths: (adb: string | null, maestro: string | null) =>
-    call<ToolPathsView>("set_tool_paths", { adb, maestro }),
+  setToolPaths: (
+    adb: string | null,
+    maestro: string | null,
+    iproxy: string | null,
+    appleTeamId: string | null,
+  ) => call<ToolPathsView>("set_tool_paths", { adb, maestro, iproxy, appleTeamId }),
 };
 
 export interface ToolPathsView {
-  overrides: { adb: string | null; maestro: string | null };
+  overrides: {
+    adb: string | null;
+    maestro: string | null;
+    iproxy: string | null;
+    apple_team_id: string | null;
+  };
   resolved_adb: string;
   resolved_maestro: string;
+  resolved_iproxy: string;
 }
 
 export interface FrameEvent {

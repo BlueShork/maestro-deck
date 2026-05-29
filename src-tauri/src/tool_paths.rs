@@ -39,7 +39,7 @@ use crate::error::{AppError, AppResult};
 // Persistence
 // ---------------------------------------------------------------------------
 
-/// Persisted user-supplied overrides for tool paths. Both fields default to
+/// Persisted user-supplied overrides for tool paths. All fields default to
 /// `None` so the resolver falls through to env / common paths / shell.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ToolPaths {
@@ -47,6 +47,11 @@ pub struct ToolPaths {
     pub adb: Option<String>,
     #[serde(default)]
     pub maestro: Option<String>,
+    #[serde(default)]
+    pub iproxy: Option<String>,
+    /// Apple Team ID used to code-sign the iOS XCTest runner via `maestro studio`.
+    #[serde(default)]
+    pub apple_team_id: Option<String>,
 }
 
 /// Path of the JSON file we persist user overrides to. Per-OS conventional
@@ -109,6 +114,7 @@ fn save_overrides(paths: &ToolPaths) -> AppResult<()> {
 struct ResolvedCache {
     adb: Option<String>,
     maestro: Option<String>,
+    iproxy: Option<String>,
 }
 
 static CACHE: Lazy<RwLock<ResolvedCache>> = Lazy::new(|| RwLock::new(ResolvedCache::default()));
@@ -117,6 +123,7 @@ fn invalidate_cache() {
     let mut c = CACHE.write().unwrap();
     c.adb = None;
     c.maestro = None;
+    c.iproxy = None;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +132,7 @@ fn invalidate_cache() {
 
 const ADB_DEFAULT: &str = "adb";
 const MAESTRO_DEFAULT: &str = "maestro";
+const IPROXY_DEFAULT: &str = "iproxy";
 const DEVICECTL_DEFAULT: &str = "devicectl";
 
 pub fn adb_bin() -> String {
@@ -168,6 +176,29 @@ pub fn maestro_bin() -> String {
     );
     CACHE.write().unwrap().maestro = Some(resolved.clone());
     resolved
+}
+
+pub fn iproxy_bin() -> String {
+    if let Some(cached) = CACHE.read().unwrap().iproxy.clone() {
+        return cached;
+    }
+    let resolved = resolve_tool(
+        "iproxy",
+        "IPROXY_BIN",
+        IPROXY_DEFAULT,
+        load_overrides().iproxy.as_deref(),
+        &iproxy_common_paths(),
+    );
+    CACHE.write().unwrap().iproxy = Some(resolved.clone());
+    resolved
+}
+
+/// User-configured Apple Team ID (or None). The keeper passes it to
+/// `maestro studio --apple-team-id`; if None, maestro uses its own config.
+pub fn apple_team_id() -> Option<String> {
+    load_overrides()
+        .apple_team_id
+        .filter(|s| !s.trim().is_empty())
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +282,14 @@ fn adb_common_paths() -> Vec<PathBuf> {
     out
 }
 
+fn iproxy_common_paths() -> Vec<PathBuf> {
+    vec![
+        PathBuf::from("/opt/homebrew/bin/iproxy"),
+        PathBuf::from("/usr/local/bin/iproxy"),
+        PathBuf::from("/usr/bin/iproxy"),
+    ]
+}
+
 fn maestro_common_paths() -> Vec<PathBuf> {
     let mut out = Vec::new();
     if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
@@ -326,6 +365,7 @@ pub struct ToolPathsView {
     /// like `"adb"` if nothing was found).
     pub resolved_adb: String,
     pub resolved_maestro: String,
+    pub resolved_iproxy: String,
 }
 
 #[tauri::command]
@@ -334,6 +374,7 @@ pub fn get_tool_paths() -> ToolPathsView {
         overrides: load_overrides(),
         resolved_adb: adb_bin(),
         resolved_maestro: maestro_bin(),
+        resolved_iproxy: iproxy_bin(),
     }
 }
 
@@ -341,13 +382,20 @@ pub fn get_tool_paths() -> ToolPathsView {
 /// next `*_bin()` call picks up the new value. Empty / blank strings mean
 /// "clear the override".
 #[tauri::command]
-pub fn set_tool_paths(adb: Option<String>, maestro: Option<String>) -> AppResult<ToolPathsView> {
+pub fn set_tool_paths(
+    adb: Option<String>,
+    maestro: Option<String>,
+    iproxy: Option<String>,
+    apple_team_id: Option<String>,
+) -> AppResult<ToolPathsView> {
     fn normalize(p: Option<String>) -> Option<String> {
         p.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
     }
     let new = ToolPaths {
         adb: normalize(adb),
         maestro: normalize(maestro),
+        iproxy: normalize(iproxy),
+        apple_team_id: normalize(apple_team_id),
     };
     save_overrides(&new)?;
     invalidate_cache();
@@ -413,5 +461,28 @@ mod tests {
         assert_eq!(normalize(Some("".into())), None);
         assert_eq!(normalize(Some("   ".into())), None);
         assert_eq!(normalize(Some("/tmp/x".into())), Some("/tmp/x".into()));
+    }
+
+    #[test]
+    fn tool_paths_round_trips_new_fields() {
+        let tp = ToolPaths {
+            adb: None,
+            maestro: None,
+            iproxy: Some("/opt/homebrew/bin/iproxy".into()),
+            apple_team_id: Some("ABCDE12345".into()),
+        };
+        let json = serde_json::to_string(&tp).unwrap();
+        let back: ToolPaths = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.iproxy.as_deref(), Some("/opt/homebrew/bin/iproxy"));
+        assert_eq!(back.apple_team_id.as_deref(), Some("ABCDE12345"));
+    }
+
+    #[test]
+    fn legacy_tool_paths_json_still_loads() {
+        let json = r#"{"adb":"/x/adb","maestro":"/y/maestro"}"#;
+        let tp: ToolPaths = serde_json::from_str(json).unwrap();
+        assert_eq!(tp.adb.as_deref(), Some("/x/adb"));
+        assert_eq!(tp.iproxy, None);
+        assert_eq!(tp.apple_team_id, None);
     }
 }
