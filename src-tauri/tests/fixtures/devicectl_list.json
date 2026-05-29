@@ -1,0 +1,26 @@
+{
+  "info": { "outcome": "success", "jsonVersion": 2 },
+  "result": {
+    "devices": [
+      {
+        "deviceProperties": { "name": "Ethan's iPhone", "osVersionNumber": "18.0" },
+        "hardwareProperties": {
+          "udid": "00008030-0011223344556677",
+          "productType": "iPhone16,2",
+          "marketingName": "iPhone 15 Pro Max",
+          "platform": "iOS",
+          "deviceType": "iPhone"
+        },
+        "connectionProperties": { "pairingState": "paired" }
+      },
+      {
+        "deviceProperties": { "name": "Some Watch", "osVersionNumber": "11.0" },
+        "hardwareProperties": {
+          "udid": "WATCH-UDID", "productType": "Watch7,1",
+          "marketingName": "Apple Watch", "platform": "watchOS", "deviceType": "appleWatch"
+        },
+        "connectionProperties": { "pairingState": "paired" }
+      }
+    ]
+  }
+}

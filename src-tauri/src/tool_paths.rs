@@ -125,6 +125,7 @@ fn invalidate_cache() {
 
 const ADB_DEFAULT: &str = "adb";
 const MAESTRO_DEFAULT: &str = "maestro";
+const DEVICECTL_DEFAULT: &str = "devicectl";
 
 pub fn adb_bin() -> String {
     if let Some(cached) = CACHE.read().unwrap().adb.clone() {
@@ -139,6 +140,19 @@ pub fn adb_bin() -> String {
     );
     CACHE.write().unwrap().adb = Some(resolved.clone());
     resolved
+}
+
+/// devicectl ships inside Xcode; `xcrun -f devicectl` prints its absolute path.
+pub fn devicectl_bin() -> String {
+    if let Ok(out) = Command::new("xcrun").args(["-f", "devicectl"]).output() {
+        if out.status.success() {
+            let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !p.is_empty() && Path::new(&p).is_file() {
+                return p;
+            }
+        }
+    }
+    DEVICECTL_DEFAULT.to_string()
 }
 
 pub fn maestro_bin() -> String {
