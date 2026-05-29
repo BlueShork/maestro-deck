@@ -9,6 +9,8 @@ mod env_shim;
 pub mod error;
 pub mod hierarchy;
 pub mod input;
+#[cfg(target_os = "macos")]
+pub mod ios_capture;
 pub mod ios_session;
 pub mod ipc;
 pub mod maestro_health;

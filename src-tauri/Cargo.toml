@@ -85,6 +85,24 @@ prost = "0.13"
 # pubkey baked into tauri.conf.json, and installs it.
 tauri-plugin-updater = "2.0"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# ScreenCaptureKit window capture (smooth-video / iOS Simulator mirroring).
+# These crates are macOS-only; gated so non-mac builds don't pull them.
+# The objc2-core-media feature on objc2-screen-capture-kit is REQUIRED — without
+# it the SCStreamOutput delegate method (which takes a CMSampleBuffer) is not
+# generated. (There is no `objc2-core-video` feature on this crate; CVPixelBuffer
+# extraction uses the standalone objc2-core-video dep below.)
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-screen-capture-kit = { version = "0.3.2", features = ["SCStream", "SCShareableContent", "objc2-core-media", "objc2-core-foundation", "objc2-core-graphics"] }
+# The `objc2-core-video` feature is what gates `CMSampleBuffer::image_buffer()`.
+objc2-core-media = { version = "0.3.2", features = ["objc2-core-video"] }
+objc2-core-video = "0.3.2"
+objc2-core-graphics = { version = "0.3.2", features = ["CGWindow"] }
+objc2-core-foundation = "0.3"
+block2 = "0.6"
+dispatch2 = "0.3"
+
 [dev-dependencies]
 tempfile = "3.13"
 pretty_assertions = "1.4"

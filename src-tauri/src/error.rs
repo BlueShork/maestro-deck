@@ -57,6 +57,9 @@ pub enum AppError {
     #[error("iOS driver unreachable: {0}")]
     IosDriverUnreachable(String),
 
+    #[error("screen capture failed: {0}")]
+    ScreenCaptureFailed(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
