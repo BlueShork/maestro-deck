@@ -96,8 +96,18 @@ fn convert(node: AxElement, next_index: &mut usize, screen: Option<(i32, i32)>) 
     let id = next_index.to_string();
     *next_index += 1;
 
-    // text = title if non-empty, else value (Maestro IOSDriver semantics).
-    let text = non_empty(node.title).or_else(|| non_empty(node.value));
+    // Visible text per Maestro IOSDriver semantics: title, else value.
+    let visible = non_empty(node.title).or_else(|| non_empty(node.value));
+    let label = non_empty(node.label);
+    // Cross-platform portability: on iOS the visible text usually lives only in
+    // the accessibility `label` (title/value are empty). Maestro's `text:`
+    // matcher checks text ∪ hintText ∪ accessibilityText on BOTH platforms, so
+    // folding the label into `text` makes the suggested `text:` selector match
+    // on Android too (where the same string is the element's `text`). A test
+    // authored on one platform then runs on the other. Keep `label` as a
+    // separate accessibilityText selector only when it wasn't promoted to text.
+    let text = visible.clone().or_else(|| label.clone());
+    let content_desc = if visible.is_some() { label } else { None };
 
     let children = node
         .children
@@ -109,7 +119,7 @@ fn convert(node: AxElement, next_index: &mut usize, screen: Option<(i32, i32)>) 
         id,
         resource_id: non_empty(node.identifier),
         text,
-        content_desc: non_empty(node.label),
+        content_desc,
         class_name: element_type_name(node.element_type).to_string(),
         package: String::new(),
         bounds,
@@ -184,7 +194,10 @@ mod tests {
 
         let login = login.expect("login node");
         assert_eq!(login.resource_id.as_deref(), Some("login_button"));
-        assert_eq!(login.content_desc.as_deref(), Some("Log in"));
+        // title/value empty + label "Log in" → label folds into `text` (portable
+        // `text:` selector), and is not also surfaced as accessibilityText.
+        assert_eq!(login.text.as_deref(), Some("Log in"));
+        assert_eq!(login.content_desc, None);
         assert_eq!(login.bounds.left, 20);
         assert_eq!(login.bounds.right, 373);
         assert!(login.enabled);
@@ -208,6 +221,30 @@ mod tests {
         assert_eq!(root.bounds.right, 100);
         assert_eq!(root.children.len(), 1);
         assert_eq!(root.children[0].text.as_deref(), Some("Go"));
+    }
+
+    #[test]
+    fn accessibility_label_folds_into_text_for_portability() {
+        // Pure label element (no title/value): label becomes `text` so the
+        // suggested selector is the cross-platform `text:`, not iOS-only
+        // accessibilityText. No separate content_desc is emitted.
+        let json = r#"{"identifier":"","title":"","value":"","label":"Gallery","elementType":48,"children":[]}"#;
+        let n = parse_ios_axelement(json, None)
+            .expect("parse")
+            .root
+            .unwrap();
+        assert_eq!(n.text.as_deref(), Some("Gallery"));
+        assert_eq!(n.content_desc, None);
+
+        // When visible text exists, the label stays as a separate
+        // accessibilityText selector.
+        let json2 = r#"{"identifier":"","title":"Submit","value":"","label":"Submit button","elementType":9,"children":[]}"#;
+        let n2 = parse_ios_axelement(json2, None)
+            .expect("parse")
+            .root
+            .unwrap();
+        assert_eq!(n2.text.as_deref(), Some("Submit"));
+        assert_eq!(n2.content_desc.as_deref(), Some("Submit button"));
     }
 
     #[test]
