@@ -222,9 +222,10 @@ export default function App() {
   const mainTopSize = bottomVisible ? 65 : 100;
   const mainBottomSize = 100 - mainTopSize;
   const deviceConnected = useDeviceStore((s) => Boolean(s.current));
+  const currentPlatform = useDeviceStore((s) => s.current?.platform ?? null);
 
   useEffect(() => {
-    if (!perfEnabled || !panelOpen || !deviceConnected) {
+    if (!perfEnabled || !panelOpen || !deviceConnected || currentPlatform === "ios") {
       void ipc.stopMetrics().catch(() => {});
       return;
     }
@@ -237,9 +238,16 @@ export default function App() {
     return () => {
       void ipc.stopMetrics().catch(() => {});
     };
-  }, [perfEnabled, panelOpen, deviceConnected]);
+  }, [perfEnabled, panelOpen, deviceConnected, currentPlatform]);
 
   const onRun = useCallback(async () => {
+    if (useDeviceStore.getState().current?.platform === "ios") {
+      toast.info(
+        "Running flows on iOS is coming soon",
+        "Maestro Deck doesn't run flows on physical iPhones yet — inspect and tap still work.",
+      );
+      return;
+    }
     const { content, filePath } = useFlowStore.getState();
     let path = filePath;
     try {
@@ -261,6 +269,13 @@ export default function App() {
   }, [setRunning, appendLog, initSteps, resetSteps]);
 
   const onRunAll = useCallback(async () => {
+    if (useDeviceStore.getState().current?.platform === "ios") {
+      toast.info(
+        "Running flows on iOS is coming soon",
+        "Maestro Deck doesn't run flows on physical iPhones yet — inspect and tap still work.",
+      );
+      return;
+    }
     const folder = useWorkspaceStore.getState().folderPath;
     if (!folder) return;
     try {
@@ -283,6 +298,13 @@ export default function App() {
 
   const onRunFrom = useCallback(
     async (line: number) => {
+      if (useDeviceStore.getState().current?.platform === "ios") {
+        toast.info(
+          "Running flows on iOS is coming soon",
+          "Maestro Deck doesn't run flows on physical iPhones yet — inspect and tap still work.",
+        );
+        return;
+      }
       const { content } = useFlowStore.getState();
       const partial = buildPartialFlow(content, line);
       if (!partial) return;
