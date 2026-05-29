@@ -50,6 +50,9 @@ pub fn list_devices() -> AppResult<Vec<Device>> {
         Ok(ios) => devices.extend(ios),
         Err(e) => warn!(error = ?e, "ios device discovery failed"),
     }
+    // Web is always available as a synthetic target; connect-time errors
+    // surface if maestro/Chromium can't start.
+    devices.push(crate::device::web::synthetic_target());
     Ok(devices)
 }
 

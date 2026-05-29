@@ -67,6 +67,7 @@ pub struct DeviceListEntry {
 
 pub mod adb;
 pub mod ios;
+pub mod web;
 
 #[cfg(test)]
 mod tests {
