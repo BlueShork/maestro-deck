@@ -323,8 +323,27 @@ pub struct IosFramePayload {
     pub height: u32,
 }
 
-/// Spawn a task that polls `/screenshot` and emits `ios_frame` until aborted.
-/// Returns the abort sender to store in `AppState.ios_screenshot_abort`.
+/// Capture a PNG screenshot of the booted simulator via `simctl`. The XCTest
+/// `/screenshot` HTTP route is unreliable on simulators (the connection is
+/// reset), so we use the simulator-native capture, which is fast and always
+/// available. Output is a native-resolution (pixel) PNG on stdout.
+async fn capture_simulator_screenshot(udid: &str) -> AppResult<Vec<u8>> {
+    let out = Command::new("xcrun")
+        .args(["simctl", "io", udid, "screenshot", "--type=png", "-"])
+        .output()
+        .await
+        .map_err(|e| AppError::IosCommandFailed(format!("simctl screenshot: {e}")))?;
+    if !out.status.success() {
+        return Err(AppError::IosDriverUnreachable(format!(
+            "simctl screenshot failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    Ok(out.stdout)
+}
+
+/// Spawn a task that captures the simulator screen and emits `ios_frame` until
+/// aborted. Returns the abort sender to store in `AppState.ios_screenshot_abort`.
 pub fn spawn_screenshot_poller(
     app: AppHandle,
     keeper: Arc<IosDriverKeeper>,
@@ -342,7 +361,7 @@ pub fn spawn_screenshot_poller(
                     info!("iOS screenshot poller aborted");
                     return;
                 }
-                shot = keeper.http().screenshot() => {
+                shot = capture_simulator_screenshot(keeper.udid()) => {
                     match shot {
                         Ok(data) => {
                             let payload = IosFramePayload { data, width: w, height: h };
