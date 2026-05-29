@@ -33,6 +33,8 @@ pub struct AppState {
 
     pub ios_driver: AsyncMutex<Option<Arc<IosDriverKeeper>>>,
     pub ios_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+    #[cfg(target_os = "macos")]
+    pub ios_sck_session: AsyncMutex<Option<crate::ios_session::PreviewHandle>>,
 
     pub web_driver: AsyncMutex<Option<Arc<crate::web_session::WebStudioKeeper>>>,
     pub web_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,

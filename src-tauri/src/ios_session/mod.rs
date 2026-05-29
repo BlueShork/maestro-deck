@@ -7,6 +7,11 @@
 //! no forwarding/tunnel). Exposes a typed HTTP client for `/viewHierarchy`,
 //! `/touch`, `/inputText`, `/swipeV2`, `/screenshot`, `/deviceInfo`, `/status`.
 
+#[cfg(target_os = "macos")]
+mod preview;
+#[cfg(target_os = "macos")]
+pub use preview::{spawn_ios_preview, PreviewHandle};
+
 use std::sync::Arc;
 use std::time::Duration;
 
