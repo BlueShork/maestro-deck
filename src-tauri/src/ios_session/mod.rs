@@ -75,6 +75,10 @@ pub struct SwipeBody {
 #[derive(Debug, Serialize)]
 pub struct InputTextBody {
     pub text: String,
+    // Required by the v2.5.1 XCTest server (`InputTextRequest`). The server
+    // auto-detects the foreground app, so an empty list is accepted.
+    #[serde(rename = "appIds")]
+    pub app_ids: Vec<String>,
 }
 
 /// Typed HTTP client for the on-device XCTest server. On a simulator the server
@@ -129,7 +133,10 @@ impl IosHttpClient {
     }
 
     pub async fn view_hierarchy(&self) -> AppResult<String> {
-        let body = serde_json::json!({ "excludeKeyboardElements": false });
+        // v2.5.1's `ViewHierarchyRequest` requires `appIds` (server auto-detects
+        // the foreground app, so an empty list is accepted). Omitting it yields
+        // 400 "incorrect request body provided".
+        let body = serde_json::json!({ "appIds": [], "excludeKeyboardElements": false });
         let resp = self
             .client
             .post(self.url("viewHierarchy"))
@@ -170,6 +177,7 @@ impl IosHttpClient {
             "inputText",
             &InputTextBody {
                 text: text.to_string(),
+                app_ids: Vec::new(),
             },
         )
         .await
