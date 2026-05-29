@@ -17,6 +17,7 @@
 //! and is also what consumes the driver's direct `ViewHierarchyResponse`.
 
 pub mod grpc_client;
+pub mod ios;
 pub mod proto;
 pub mod studio;
 

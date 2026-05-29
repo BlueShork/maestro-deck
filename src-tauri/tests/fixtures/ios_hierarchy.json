@@ -1,0 +1,22 @@
+{
+  "identifier": "",
+  "frame": { "X": 0, "Y": 0, "Width": 393, "Height": 852 },
+  "label": "", "title": "", "value": "", "elementType": 0,
+  "enabled": true, "selected": false, "hasFocus": false,
+  "children": [
+    {
+      "identifier": "login_button",
+      "frame": { "X": 20, "Y": 700, "Width": 353, "Height": 50 },
+      "label": "Log in", "title": "", "value": "", "elementType": 9,
+      "enabled": true, "selected": false, "hasFocus": false,
+      "children": []
+    },
+    {
+      "identifier": "",
+      "frame": { "X": 20, "Y": 100, "Width": 200, "Height": 30 },
+      "label": "", "title": "Welcome", "value": "", "elementType": 48,
+      "enabled": true, "selected": false, "hasFocus": false,
+      "children": []
+    }
+  ]
+}
