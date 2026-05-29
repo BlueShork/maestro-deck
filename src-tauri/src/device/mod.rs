@@ -11,6 +11,7 @@ pub enum Platform {
     #[default]
     Android,
     Ios,
+    Web,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,6 +78,23 @@ mod tests {
         let d: Device = serde_json::from_str(json).expect("deserialize");
         assert_eq!(d.platform, Platform::Android);
         assert_eq!(d.os_version, "");
+    }
+
+    #[test]
+    fn web_platform_round_trips() {
+        let d = Device {
+            serial: "web".into(),
+            model: "Web Browser (Chromium)".into(),
+            android_version: String::new(),
+            screen_width: 0,
+            screen_height: 0,
+            platform: Platform::Web,
+            os_version: String::new(),
+        };
+        let s = serde_json::to_string(&d).unwrap();
+        assert!(s.contains("\"platform\":\"web\""), "got {s}");
+        let back: Device = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.platform, Platform::Web);
     }
 
     #[test]
