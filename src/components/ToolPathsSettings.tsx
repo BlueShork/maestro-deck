@@ -20,11 +20,22 @@ const TOOLS = [
     placeholder: "~/.maestro/bin/maestro",
     hint: "Test runner — installed via the official curl script or Homebrew.",
   },
+  {
+    key: "iproxy" as const,
+    label: "iproxy (iOS)",
+    placeholder: "/opt/homebrew/bin/iproxy",
+    hint: "USB port-forwarder for physical iPhones — from libusbmuxd (`brew install libusbmuxd`).",
+  },
 ];
 
 export function ToolPathsSettings() {
   const [view, setView] = useState<ToolPathsView | null>(null);
-  const [draft, setDraft] = useState<{ adb: string; maestro: string }>({ adb: "", maestro: "" });
+  const [draft, setDraft] = useState<{
+    adb: string;
+    maestro: string;
+    iproxy: string;
+    appleTeamId: string;
+  }>({ adb: "", maestro: "", iproxy: "", appleTeamId: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -40,6 +51,8 @@ export function ToolPathsSettings() {
       setDraft({
         adb: v.overrides.adb ?? "",
         maestro: v.overrides.maestro ?? "",
+        iproxy: v.overrides.iproxy ?? "",
+        appleTeamId: v.overrides.apple_team_id ?? "",
       });
       setError(null);
     } catch (e) {
@@ -52,7 +65,12 @@ export function ToolPathsSettings() {
     setError(null);
     setSaved(false);
     try {
-      const v = await ipc.setToolPaths(draft.adb || null, draft.maestro || null, null, null);
+      const v = await ipc.setToolPaths(
+        draft.adb || null,
+        draft.maestro || null,
+        draft.iproxy || null,
+        draft.appleTeamId || null,
+      );
       setView(v);
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
@@ -63,7 +81,7 @@ export function ToolPathsSettings() {
     }
   }
 
-  async function handleBrowse(key: "adb" | "maestro") {
+  async function handleBrowse(key: "adb" | "maestro" | "iproxy") {
     try {
       const picked = await openFileDialog({
         multiple: false,
@@ -80,7 +98,10 @@ export function ToolPathsSettings() {
 
   const dirty =
     view !== null &&
-    ((view.overrides.adb ?? "") !== draft.adb || (view.overrides.maestro ?? "") !== draft.maestro);
+    ((view.overrides.adb ?? "") !== draft.adb ||
+      (view.overrides.maestro ?? "") !== draft.maestro ||
+      (view.overrides.iproxy ?? "") !== draft.iproxy ||
+      (view.overrides.apple_team_id ?? "") !== draft.appleTeamId);
 
   return (
     <div className="flex flex-col gap-3">
@@ -136,6 +157,29 @@ export function ToolPathsSettings() {
           </div>
         );
       })}
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium" htmlFor="tool-apple-team-id">
+          Apple Team ID (iOS)
+        </label>
+        <input
+          id="tool-apple-team-id"
+          type="text"
+          value={draft.appleTeamId}
+          onChange={(e) => {
+            const value = e.target.value;
+            setDraft((d) => ({ ...d, appleTeamId: value }));
+          }}
+          placeholder="ABCDE12345"
+          spellCheck={false}
+          className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Used to code-sign the iOS test driver when launching it via{" "}
+          <code className="font-mono">maestro studio</code>. Found in your Apple Developer account
+          (Membership → Team ID). Leave empty if maestro is already configured with it.
+        </p>
+      </div>
 
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] text-muted-foreground">
