@@ -61,6 +61,7 @@ pub async fn connect_device(
     serial: String,
     stream_enabled: bool,
     platform: crate::device::Platform,
+    url: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<()> {
@@ -111,7 +112,20 @@ pub async fn connect_device(
             Ok(())
         }
         Platform::Web => {
-            *state.connected_device.write() = Some(crate::device::web::synthetic_target());
+            // `url` is read from the open flow's `url:` header on the frontend
+            // and navigated to on a fresh studio spawn.
+            let keeper = ensure_web_keeper(url.as_deref(), state.inner()).await?;
+            let mut device = crate::device::web::synthetic_target();
+            if let Ok(s) = keeper.http().device_screen().await {
+                device.screen_width = s.width;
+                device.screen_height = s.height;
+            }
+            info!(stream = stream_enabled, "web browser connected");
+            *state.connected_device.write() = Some(device);
+            if stream_enabled {
+                let abort = crate::web_session::spawn_screenshot_poller(app, keeper);
+                *state.web_screenshot_abort.lock().await = Some(abort);
+            }
             Ok(())
         }
     }
@@ -141,7 +155,14 @@ pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResu
             let abort = crate::ios_session::spawn_screenshot_poller(app, keeper);
             *state.ios_screenshot_abort.lock().await = Some(abort);
         }
-        crate::device::Platform::Web => {}
+        crate::device::Platform::Web => {
+            if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
+                let _ = abort.send(());
+            }
+            let keeper = ensure_web_keeper(None, state.inner()).await?;
+            let abort = crate::web_session::spawn_screenshot_poller(app, keeper);
+            *state.web_screenshot_abort.lock().await = Some(abort);
+        }
     }
     Ok(())
 }
@@ -170,7 +191,12 @@ pub async fn stop_stream(state: State<'_, AppState>) -> AppResult<()> {
                 teardown_scrcpy(&serial, state.inner()).await;
             }
         }
-        Some(crate::device::Platform::Web) | None => {}
+        Some(crate::device::Platform::Web) => {
+            if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
+                let _ = abort.send(());
+            }
+        }
+        None => {}
     }
     Ok(())
 }
@@ -242,7 +268,8 @@ pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
                 teardown_scrcpy(&serial, state.inner()).await;
             }
         }
-        Some(crate::device::Platform::Web) | None => {}
+        Some(crate::device::Platform::Web) => teardown_web(state.inner()).await,
+        None => {}
     }
     Ok(())
 }
@@ -274,6 +301,39 @@ async fn teardown_ios(state: &AppState) {
     }
 }
 
+/// Ensure a `WebStudioKeeper` is running, returning it. Respawns if the cached
+/// keeper has died. `url` is navigated to on a fresh spawn (from the open flow).
+async fn ensure_web_keeper(
+    url: Option<&str>,
+    state: &AppState,
+) -> AppResult<std::sync::Arc<crate::web_session::WebStudioKeeper>> {
+    let mut slot = state.web_driver.lock().await;
+    let alive = match slot.as_ref() {
+        Some(k) => k.http().is_alive().await,
+        None => false,
+    };
+    if !alive {
+        if let Some(existing) = slot.take() {
+            existing.stop().await;
+        }
+        let keeper =
+            crate::web_session::WebStudioKeeper::start(crate::web_session::STUDIO_PORT, url)
+                .await?;
+        *slot = Some(keeper);
+    }
+    Ok(slot.as_ref().unwrap().clone())
+}
+
+/// Tear down the web session: stop the poller and kill the studio process.
+async fn teardown_web(state: &AppState) {
+    if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
+        let _ = abort.send(());
+    }
+    if let Some(keeper) = state.web_driver.lock().await.take() {
+        keeper.stop().await;
+    }
+}
+
 #[tauri::command]
 pub async fn enter_inspect_mode(
     fast_mode: bool,
@@ -289,6 +349,12 @@ pub async fn enter_inspect_mode(
         let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
         let json = keeper.http().view_hierarchy().await?;
         let tree = crate::hierarchy::ios::parse_ios_axelement(&json)?;
+        return finalize_hierarchy(tree, state.inner()).await;
+    }
+    if device.platform == crate::device::Platform::Web {
+        let keeper = ensure_web_keeper(None, state.inner()).await?;
+        let screen = keeper.http().device_screen().await?;
+        let tree = crate::hierarchy::web::parse_device_screen_hierarchy(&screen.elements)?;
         return finalize_hierarchy(tree, state.inner()).await;
     }
     let serial = device.serial.clone();
@@ -475,7 +541,10 @@ pub async fn send_input(
                 .unwrap_or((0, 0));
             input::ios::send(&event, keeper.http(), screen_w, screen_h, pt_w, pt_h).await
         }
-        crate::device::Platform::Web => Err(AppError::Other("input not supported for web".into())),
+        crate::device::Platform::Web => {
+            let keeper = ensure_web_keeper(None, state.inner()).await?;
+            input::web::send(&event, keeper.http(), screen_w, screen_h).await
+        }
     }
 }
 
@@ -523,12 +592,21 @@ pub async fn run_flow(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<u32> {
-    let serial = state
+    let device = state
         .connected_device
         .read()
-        .as_ref()
-        .map(|d| d.serial.clone())
+        .clone()
         .ok_or(AppError::NoDevice)?;
+
+    if device.platform == crate::device::Platform::Web {
+        // Web flows run with no `--udid`; maestro targets the browser via the
+        // flow's `url:` header. Pause the studio keeper so its browser doesn't
+        // contend with the one `maestro test` launches.
+        teardown_web(state.inner()).await;
+        return runner::spawn_web_runner(app, &file_path).await;
+    }
+
+    let serial = device.serial.clone();
 
     // Pre-flight: kick a hung driver if needed (see preflight spec).
     let app_for_preflight = app.clone();
