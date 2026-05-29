@@ -118,14 +118,27 @@ impl WebStudioClient {
     /// `POST /api/run-command` — run a single maestro command. Studio expects
     /// `{ "yaml": "<command yaml>", "dryRun": bool }`.
     pub async fn run_command(&self, body: serde_json::Value) -> AppResult<()> {
-        self.client
+        let resp = self
+            .client
             .post(self.url("api/run-command"))
             .json(&body)
             .send()
             .await
-            .map_err(|e| AppError::Other(format!("run-command: {e}")))?
-            .error_for_status()
             .map_err(|e| AppError::Other(format!("run-command: {e}")))?;
+        let status = resp.status();
+        if !status.is_success() {
+            // Surface the server's explanation (e.g. "Invalid command format")
+            // and the offending yaml — a bare status code is useless to debug.
+            let detail = resp.text().await.unwrap_or_default();
+            let sent = body
+                .get("yaml")
+                .and_then(|v| v.as_str())
+                .unwrap_or("<none>");
+            return Err(AppError::Other(format!(
+                "run-command {status}: {} | sent yaml: {sent}",
+                detail.trim()
+            )));
+        }
         Ok(())
     }
 
