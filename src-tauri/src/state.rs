@@ -8,6 +8,7 @@ use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 use crate::device::Device;
 use crate::hierarchy::studio::StudioKeeper;
 use crate::hierarchy::HierarchyTree;
+use crate::ios_session::IosDriverKeeper;
 use crate::selector::SpatialIndex;
 
 #[derive(Default)]
@@ -29,4 +30,7 @@ pub struct AppState {
     // on the first fast-mode inspect request and torn down when the
     // device disconnects (see `commands::disconnect_device`).
     pub studio: AsyncMutex<Option<Arc<StudioKeeper>>>,
+
+    pub ios_driver: AsyncMutex<Option<Arc<IosDriverKeeper>>>,
+    pub ios_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
 }

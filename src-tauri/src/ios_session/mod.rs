@@ -6,9 +6,14 @@
 //! HTTP client for `/viewHierarchy`, `/touch`, `/inputText`, `/swipeV2`,
 //! `/screenshot`, `/deviceInfo`, `/status`.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use tokio::process::{Child, Command};
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::time::sleep;
+use tracing::info;
 
 use crate::error::{AppError, AppResult};
 
@@ -190,6 +195,129 @@ impl IosHttpClient {
     }
 }
 
+/// Device port the Maestro XCTest runner (FlyingFox) listens on.
+pub const DEVICE_PORT: u16 = 22087;
+/// Host port we forward to it. Deterministic; chosen to avoid common ranges.
+pub const HOST_PORT: u16 = 7010;
+/// Readiness probe budget — `maestro studio`'s first build/install on a cold
+/// device can take 10–30 s.
+const READY_ATTEMPTS: u32 = 120;
+const READY_BACKOFF_MS: u64 = 500;
+
+fn studio_args<'a>(udid: &'a str, team_id: Option<&'a str>) -> Vec<&'a str> {
+    let mut a = vec!["--device", udid, "studio", "--no-window"];
+    if let Some(t) = team_id {
+        a.push("--apple-team-id");
+        a.push(t);
+    }
+    a
+}
+
+fn iproxy_args(host_port: u16, udid: &str) -> Vec<String> {
+    vec![
+        "-u".into(),
+        udid.to_string(),
+        format!("{host_port}:{DEVICE_PORT}"),
+    ]
+}
+
+/// Keeps the on-device runner alive (`maestro studio`) and reachable (`iproxy`),
+/// and owns the HTTP client + cached DeviceInfo for the session.
+pub struct IosDriverKeeper {
+    udid: String,
+    http: IosHttpClient,
+    device_info: parking_lot::RwLock<Option<DeviceInfo>>,
+    studio_child: AsyncMutex<Option<Child>>,
+    iproxy_child: AsyncMutex<Option<Child>>,
+}
+
+impl IosDriverKeeper {
+    pub fn udid(&self) -> &str {
+        &self.udid
+    }
+    pub fn http(&self) -> &IosHttpClient {
+        &self.http
+    }
+    pub fn device_info(&self) -> Option<DeviceInfo> {
+        *self.device_info.read()
+    }
+
+    pub async fn start(udid: &str) -> AppResult<Arc<Self>> {
+        let maestro = crate::tool_paths::maestro_bin();
+        let team = crate::tool_paths::apple_team_id();
+        let args = studio_args(udid, team.as_deref());
+        let studio = Command::new(&maestro)
+            .args(args)
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    AppError::RunnerNotFound
+                } else {
+                    AppError::IosCommandFailed(format!("maestro studio: {e}"))
+                }
+            })?;
+
+        let iproxy = crate::tool_paths::iproxy_bin();
+        let ipx = Command::new(&iproxy)
+            .args(iproxy_args(HOST_PORT, udid))
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    AppError::IosToolMissing("iproxy not found — `brew install libusbmuxd`".into())
+                } else {
+                    AppError::IosCommandFailed(format!("iproxy: {e}"))
+                }
+            })?;
+
+        // If `IosHttpClient::new` fails here, `studio` and `ipx` are dropped on
+        // the way out and `kill_on_drop(true)` terminates both — no orphans.
+        let keeper = Arc::new(Self {
+            udid: udid.to_string(),
+            http: IosHttpClient::new(HOST_PORT)?,
+            device_info: parking_lot::RwLock::new(None),
+            studio_child: AsyncMutex::new(Some(studio)),
+            iproxy_child: AsyncMutex::new(Some(ipx)),
+        });
+
+        for attempt in 0..READY_ATTEMPTS {
+            if keeper.http.status().await {
+                if let Ok(di) = keeper.http.device_info().await {
+                    *keeper.device_info.write() = Some(di);
+                    info!(udid, "iOS driver ready");
+                    return Ok(keeper);
+                }
+            }
+            if attempt % 10 == 0 {
+                info!(udid, attempt, "waiting for iOS driver...");
+            }
+            // Skip the final sleep so the failure path doesn't waste a backoff.
+            if attempt + 1 < READY_ATTEMPTS {
+                sleep(std::time::Duration::from_millis(READY_BACKOFF_MS)).await;
+            }
+        }
+        keeper.stop().await;
+        Err(AppError::IosDriverUnreachable(
+            "maestro studio did not bring up the XCTest server on :22087 in time".into(),
+        ))
+    }
+
+    pub async fn stop(&self) {
+        if let Some(mut c) = self.studio_child.lock().await.take() {
+            let _ = c.kill().await;
+        }
+        if let Some(mut c) = self.iproxy_child.lock().await.take() {
+            let _ = c.kill().await;
+        }
+    }
+
+    /// Cheap liveness check used by the screenshot poller / command preflight.
+    pub async fn is_alive(&self) -> bool {
+        self.http.status().await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +344,35 @@ mod tests {
         assert!(s.contains("\"x\":100"), "got {s}");
         assert!(s.contains("\"y\":200"), "got {s}");
         assert!(s.contains("\"duration\":0"), "got {s}");
+    }
+
+    #[test]
+    fn builds_studio_args_with_team_id() {
+        let args = studio_args("UDID-1", Some("TEAM123"));
+        assert_eq!(
+            args,
+            vec![
+                "--device",
+                "UDID-1",
+                "studio",
+                "--no-window",
+                "--apple-team-id",
+                "TEAM123"
+            ]
+        );
+    }
+
+    #[test]
+    fn builds_studio_args_without_team_id() {
+        let args = studio_args("UDID-1", None);
+        assert_eq!(args, vec!["--device", "UDID-1", "studio", "--no-window"]);
+    }
+
+    #[test]
+    fn builds_iproxy_args() {
+        assert_eq!(
+            iproxy_args(7010, "UDID-1"),
+            vec!["-u", "UDID-1", "7010:22087"]
+        );
     }
 }
