@@ -207,7 +207,8 @@ pub fn crop_and_convert(
     let w = frame.width;
     let h = frame.height;
     // Screen region fills the full width; its height follows the device aspect.
-    let screen_h = ((w as u64 * device_h as u64) as f64 / device_w as f64).round() as usize;
+    let numerator = w as u64 * device_h as u64;
+    let screen_h = (numerator as f64 / device_w as f64).round() as usize;
     if screen_h == 0 || screen_h > h {
         return None;
     }
@@ -220,7 +221,7 @@ pub fn crop_and_convert(
     let out_h = screen_h;
     let mut rgba = vec![0u8; out_w * out_h * 4];
     for y in 0..out_h {
-        let src_row = (crop_top + y) * w * 4; // Frame.bgra is dense (width*4 stride)
+        let src_row = (crop_top + y) * w * 4;
         let dst_row = y * out_w * 4;
         for x in 0..out_w {
             let s = src_row + x * 4;
@@ -571,6 +572,39 @@ mod tests {
         let (w, h, rgba) = crop_and_convert(&frame, 10, 20).expect("should crop");
         assert_eq!((w, h), (10, 20));
         assert_eq!(rgba.len(), 10 * 20 * 4);
+    }
+
+    #[test]
+    fn crop_and_convert_keeps_bottom_rows_not_top() {
+        // 10px wide, 10px tall capture; device aspect 10x8 → screen_h = 8,
+        // crop_top = 2 rows (20 % < MAX_TITLEBAR_FRACTION).
+        // Fill the top 2 rows (the title bar) with one colour and the bottom
+        // 8 rows (the device screen) with another, then assert the output holds
+        // ONLY the bottom colour — proving bottom-alignment. A bug that cropped
+        // from the top instead of the bottom would produce title-bar pixels and
+        // fail the per-pixel assertion.
+        let w = 10usize;
+        let h = 10usize;
+        let mut bgra = Vec::new();
+        // Top 2 rows = title bar: BGRA (10,20,30,40)
+        for _ in 0..(w * 2) {
+            bgra.extend_from_slice(&[10, 20, 30, 40]);
+        }
+        // Bottom 8 rows = device screen: BGRA (70,80,90,100)
+        for _ in 0..(w * (h - 2)) {
+            bgra.extend_from_slice(&[70, 80, 90, 100]);
+        }
+        let frame = Frame {
+            width: w,
+            height: h,
+            bgra,
+        };
+        let (ow, oh, rgba) = crop_and_convert(&frame, 10, 8).expect("should crop");
+        assert_eq!((ow, oh), (10, 8));
+        // Every output pixel must be the BOTTOM colour, RGBA = (90,80,70,100).
+        for px in rgba.chunks_exact(4) {
+            assert_eq!(px, &[90, 80, 70, 100]);
+        }
     }
 
     #[test]
