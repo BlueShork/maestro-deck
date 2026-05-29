@@ -40,7 +40,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
   }, [logs]);
 
   return (
-    <section className="flex h-48 shrink-0 flex-col border-t border-border bg-muted/40">
+    <section className="flex h-full min-h-0 flex-col border-t border-border bg-muted/40">
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

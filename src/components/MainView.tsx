@@ -69,8 +69,12 @@ export function MainView() {
     (panels.inspector ? INSPECTOR_SIZE : 0) -
     (chatOpen ? CHAT_SIZE : 0);
 
+  // The bottom row (console / metrics) opens at its minimum height so the
+  // editor + device get the most room; the user can drag it taller and the
+  // size persists. `BOTTOM_MIN` must match the `main-bottom` Panel's `minSize`.
+  const BOTTOM_MIN = 10;
   const bottomVisible = panels.console || (perfEnabled && panelOpen && panels.metrics);
-  const mainTopSize = bottomVisible ? 65 : 100;
+  const mainTopSize = bottomVisible ? 100 - BOTTOM_MIN : 100;
   const mainBottomSize = 100 - mainTopSize;
 
   const onRun = useCallback(async () => {
@@ -237,7 +241,7 @@ export function MainView() {
           ) : null}
 
           <Panel id="main" order={3} defaultSize={mainSize} minSize={30}>
-            <PanelGroup direction="vertical" autoSaveId="maestro-deck.layout.main">
+            <PanelGroup direction="vertical" autoSaveId="maestro-deck.layout.main.v2">
               <Panel id="main-top" order={1} defaultSize={mainTopSize} minSize={20}>
                 <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.top">
                   {streamEnabled && panels.device ? (
@@ -285,7 +289,12 @@ export function MainView() {
               {panels.console || (perfEnabled && panelOpen && panels.metrics) ? (
                 <>
                   <PanelResizeHandle className={RESIZE_HANDLE_V} />
-                  <Panel id="main-bottom" order={2} defaultSize={mainBottomSize} minSize={10}>
+                  <Panel
+                    id="main-bottom"
+                    order={2}
+                    defaultSize={mainBottomSize}
+                    minSize={BOTTOM_MIN}
+                  >
                     <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
                       {panels.console ? (
                         <Panel

@@ -62,3 +62,4 @@ coverage/
 # Local-only working docs (not for public repo)
 docs/superpowers/
 AUDIT.md
+AUDIT_SECU.md
