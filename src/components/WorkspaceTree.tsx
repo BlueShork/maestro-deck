@@ -215,7 +215,9 @@ export function WorkspaceTree() {
                 onCancel={cancelNewFolder}
               />
             ) : null}
-            {tree.children.length === 0 && pendingNewDir !== folderPath ? (
+            {tree.children.length === 0 &&
+            pendingNewDir !== folderPath &&
+            pendingNewFolderDir !== folderPath ? (
               <div className="px-3 py-2 text-[11px] text-muted-foreground">
                 No YAML files. Click the + icon above to create one.
               </div>
