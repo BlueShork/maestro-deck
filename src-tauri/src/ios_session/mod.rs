@@ -10,10 +10,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 use tokio::process::{Child, Command};
+use tokio::sync::oneshot;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::sleep;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::{AppError, AppResult};
 
@@ -316,6 +318,56 @@ impl IosDriverKeeper {
     pub async fn is_alive(&self) -> bool {
         self.http.status().await
     }
+}
+
+/// Poll interval for the V1 screenshot preview (~3 fps). Live mirror is V2.
+const SCREENSHOT_INTERVAL_MS: u64 = 350;
+const IOS_FRAME_EVENT: &str = "ios_frame";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IosFramePayload {
+    /// PNG bytes from `GET /screenshot` (native pixels).
+    pub data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Spawn a task that polls `/screenshot` and emits `ios_frame` until aborted.
+/// Returns the abort sender to store in `AppState.ios_screenshot_abort`.
+pub fn spawn_screenshot_poller(
+    app: AppHandle,
+    keeper: Arc<IosDriverKeeper>,
+) -> oneshot::Sender<()> {
+    let (abort_tx, mut abort_rx) = oneshot::channel::<()>();
+    tokio::spawn(async move {
+        let (w, h) = keeper
+            .device_info()
+            .map(|d| (d.width_pixels, d.height_pixels))
+            .unwrap_or((0, 0));
+        loop {
+            tokio::select! {
+                biased;
+                _ = &mut abort_rx => {
+                    info!("iOS screenshot poller aborted");
+                    return;
+                }
+                shot = keeper.http().screenshot() => {
+                    match shot {
+                        Ok(data) => {
+                            let payload = IosFramePayload { data, width: w, height: h };
+                            if let Err(e) = app.emit(IOS_FRAME_EVENT, &payload) {
+                                warn!(error = %e, "failed to emit ios_frame");
+                            }
+                        }
+                        Err(e) => warn!(error = %e, "screenshot poll failed"),
+                    }
+                    sleep(std::time::Duration::from_millis(SCREENSHOT_INTERVAL_MS)).await;
+                }
+            }
+        }
+    });
+    abort_tx
 }
 
 #[cfg(test)]
