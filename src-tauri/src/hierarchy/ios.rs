@@ -109,14 +109,30 @@ fn convert(node: AxElement, next_index: &mut usize) -> UINode {
     }
 }
 
+/// v2.5.1 wraps the tree as `{ "depth": N, "axElement": { … } }`. `axElement`
+/// is required, so this only deserializes the wrapped shape (a bare AXElement
+/// has no `axElement` key and falls through to the legacy path below).
+#[derive(Debug, Deserialize)]
+struct ViewHierarchyResponse {
+    #[serde(rename = "axElement")]
+    ax_element: AxElement,
+}
+
 /// Parse the `/viewHierarchy` JSON. The runner may prefix log lines, so we
 /// locate the first `{` like `parse_maestro_json` does.
 pub fn parse_ios_axelement(raw: &str) -> AppResult<HierarchyTree> {
     let start = raw
         .find('{')
         .ok_or_else(|| AppError::HierarchyParse("no JSON object in viewHierarchy output".into()))?;
-    let root: AxElement = serde_json::from_str(&raw[start..])
-        .map_err(|e| AppError::HierarchyParse(format!("AXElement parse error: {e}")))?;
+    let json = &raw[start..];
+    // Prefer the v2.5.1 wrapper `{depth, axElement}`; fall back to a bare
+    // AXElement for older runners. AXElement fields all default, so the wrapper
+    // would otherwise silently parse into an empty root (0 targetable nodes).
+    let root: AxElement = match serde_json::from_str::<ViewHierarchyResponse>(json) {
+        Ok(resp) => resp.ax_element,
+        Err(_) => serde_json::from_str(json)
+            .map_err(|e| AppError::HierarchyParse(format!("AXElement parse error: {e}")))?,
+    };
     let mut next_index = 0usize;
     Ok(HierarchyTree {
         root: Some(convert(root, &mut next_index)),
@@ -164,6 +180,18 @@ mod tests {
         assert_eq!(welcome.class_name, "StaticText");
         // elementType 48 (StaticText) is not interactive → not clickable.
         assert!(!welcome.clickable);
+    }
+
+    #[test]
+    fn unwraps_v251_depth_axelement_envelope() {
+        // v2.5.1 wraps the tree in `{depth, axElement}`; the real content must
+        // be unwrapped, not parsed as a (defaulted, empty) AXElement.
+        let json = r#"{"depth":24,"axElement":{"identifier":"root","frame":{"X":0,"Y":0,"Width":100,"Height":200},"elementType":0,"children":[{"identifier":"btn","frame":{"X":0,"Y":0,"Width":50,"Height":20},"title":"Go","elementType":9,"enabled":true,"children":[]}]}}"#;
+        let tree = parse_ios_axelement(json).expect("parse");
+        let root = tree.root.expect("root");
+        assert_eq!(root.bounds.right, 100);
+        assert_eq!(root.children.len(), 1);
+        assert_eq!(root.children[0].text.as_deref(), Some("Go"));
     }
 
     #[test]
