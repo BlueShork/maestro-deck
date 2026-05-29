@@ -93,22 +93,31 @@ pub async fn connect_device(
             Ok(())
         }
         Platform::Ios => {
-            let keeper = ensure_ios_keeper(&serial, state.inner()).await?;
-            let di = keeper.device_info();
-            let mut device = crate::device::ios::list_devices()?
+            // Resolve model/OS for display (simctl, fast). Screen size is unknown
+            // until the driver's /deviceInfo is ready; the canvas uses the
+            // screenshot's own dimensions, and input reads dims from the keeper.
+            let device = crate::device::ios::list_devices()?
                 .into_iter()
                 .find(|d| d.serial == serial)
                 .ok_or(AppError::NoDevice)?;
-            if let Some(di) = di {
-                device.screen_width = di.width_pixels;
-                device.screen_height = di.height_pixels;
-            }
             info!(udid = %serial, model = %device.model, stream = stream_enabled, "iOS device connected");
             *state.connected_device.write() = Some(device);
+
+            // Boot the sim + spawn the driver WITHOUT blocking on readiness.
+            let keeper = ensure_ios_keeper(&serial, state.inner()).await?;
+
+            // Show the screen immediately — the poller captures via simctl,
+            // independent of the (still-warming) XCTest driver.
             if stream_enabled {
-                let abort = crate::ios_session::spawn_screenshot_poller(app, keeper);
+                let abort = crate::ios_session::spawn_screenshot_poller(app, keeper.clone());
                 *state.ios_screenshot_abort.lock().await = Some(abort);
             }
+
+            // Warm the XCTest driver in the background so inspect/tap become
+            // available (~1-2 min on a cold sim) without blocking the connect.
+            tokio::spawn(async move {
+                keeper.wait_until_ready().await;
+            });
             Ok(())
         }
         Platform::Web => {
@@ -347,9 +356,12 @@ pub async fn enter_inspect_mode(
         .ok_or(AppError::NoDevice)?;
     if device.platform == crate::device::Platform::Ios {
         let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+        if !keeper.wait_until_ready().await {
+            return Err(AppError::IosDriverUnreachable(
+                "the iOS simulator driver is still starting — try again in a moment".into(),
+            ));
+        }
         let json = keeper.http().view_hierarchy().await?;
-        // Screen size in POINTS clamps off-screen scroll content so the UI
-        // overlay coordinate space matches the visible screen.
         let screen = keeper
             .device_info()
             .map(|d| (d.width_points as i32, d.height_points as i32));
@@ -411,29 +423,24 @@ pub async fn enter_inspect_mode(
     finalize_hierarchy(tree, state.inner()).await
 }
 
-/// Ensure an `IosDriverKeeper` is running for `udid`, returning it. Respawns
-/// if the cached keeper is for a different device OR its driver has died
-/// (e.g. `maestro studio` was torn down by a flow run, timed out, or crashed) —
-/// otherwise we'd hand back a keeper whose :22087 is unreachable. Mirrors the
-/// Android `dump_via_grpc` keeper-reuse pattern.
 async fn ensure_ios_keeper(
     udid: &str,
     state: &AppState,
 ) -> AppResult<std::sync::Arc<crate::ios_session::IosDriverKeeper>> {
     let mut slot = state.ios_driver.lock().await;
-    let needs_spawn = match slot.as_ref() {
-        Some(k) => k.udid() != udid || !k.is_alive().await,
-        None => true,
+    // Reuse the keeper for the same sim while its `maestro studio` process is
+    // still running — even if the driver isn't *ready* yet (it may be warming).
+    // Only respawn for a different sim or a dead process.
+    let reuse = match slot.as_ref() {
+        Some(k) => k.udid() == udid && k.is_process_alive().await,
+        None => false,
     };
-    if needs_spawn {
+    if !reuse {
         if let Some(existing) = slot.take() {
             existing.stop().await;
         }
-        let keeper = crate::ios_session::IosDriverKeeper::start(udid).await?;
-        *slot = Some(keeper);
+        *slot = Some(crate::ios_session::IosDriverKeeper::spawn(udid).await?);
     }
-    // Invariant: the needs_spawn branch always writes Some; otherwise slot was
-    // already Some. The lock is held throughout, so this is never None.
     Ok(slot.as_ref().unwrap().clone())
 }
 
@@ -542,6 +549,11 @@ pub async fn send_input(
         }
         crate::device::Platform::Ios => {
             let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+            if !keeper.wait_until_ready().await {
+                return Err(AppError::IosDriverUnreachable(
+                    "the iOS simulator driver is still starting".into(),
+                ));
+            }
             let (pt_w, pt_h) = keeper
                 .device_info()
                 .map(|d| (d.width_points, d.height_points))
@@ -571,6 +583,11 @@ pub async fn ios_press_home(state: State<'_, AppState>) -> AppResult<()> {
         ));
     }
     let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+    if !keeper.wait_until_ready().await {
+        return Err(AppError::IosDriverUnreachable(
+            "the iOS simulator driver is still starting".into(),
+        ));
+    }
     keeper.http().press_button("home").await
 }
 

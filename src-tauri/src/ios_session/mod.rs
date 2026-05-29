@@ -260,16 +260,21 @@ impl IosDriverKeeper {
         *self.device_info.read()
     }
 
-    pub async fn start(udid: &str) -> AppResult<Arc<Self>> {
-        // 1. Boot the simulator. Idempotent: `simctl boot` errors if it's
-        //    already booted, which we ignore.
+    /// True once the driver has served real data at least once (cached). Cheap, no I/O.
+    pub fn is_ready(&self) -> bool {
+        self.device_info.read().is_some()
+    }
+
+    /// Boot the simulator and spawn `maestro studio` (installs/launches the XCTest
+    /// runner). Returns IMMEDIATELY — does NOT wait for readiness (~2 min cold).
+    /// Call `wait_until_ready` before issuing driver requests (hierarchy/input).
+    pub async fn spawn(udid: &str) -> AppResult<Arc<Self>> {
+        // Boot the sim (idempotent — `simctl boot` errors if already booted, ignored).
         let _ = Command::new("xcrun")
             .args(["simctl", "boot", udid])
             .output()
             .await;
 
-        // 2. Let maestro install + launch + hold the XCUITest runner on the sim.
-        //    The runner serves 127.0.0.1:22087 directly (no forwarding on a sim).
         let maestro = crate::tool_paths::maestro_bin();
         let studio = Command::new(&maestro)
             .args(studio_args(udid))
@@ -284,35 +289,43 @@ impl IosDriverKeeper {
                 }
             })?;
 
-        let keeper = Arc::new(Self {
+        Ok(Arc::new(Self {
             udid: udid.to_string(),
             http: IosHttpClient::new(DRIVER_PORT)?,
             device_info: parking_lot::RwLock::new(None),
             studio_child: AsyncMutex::new(Some(studio)),
-        });
+        }))
+    }
 
-        // 3. Poll until the runner serves REAL data: /status ok AND /deviceInfo
-        //    parses into DeviceInfo (while warming up the server returns a schema
-        //    stub that fails to parse, so this naturally waits for true readiness).
+    /// Probe `/status` + `/deviceInfo` until the runner serves real data, caching
+    /// the geometry. Returns `true` once ready (instantly if already ready),
+    /// `false` after the ~180 s budget. Safe to call concurrently.
+    pub async fn wait_until_ready(&self) -> bool {
+        if self.is_ready() {
+            return true;
+        }
         for attempt in 0..READY_ATTEMPTS {
-            if keeper.http.status().await {
-                if let Ok(di) = keeper.http.device_info().await {
-                    *keeper.device_info.write() = Some(di);
-                    info!(udid, "iOS simulator driver ready");
-                    return Ok(keeper);
+            // Bail out promptly if `maestro studio` exited (e.g. the session was
+            // torn down on disconnect/run) instead of probing a dead socket for
+            // the full budget.
+            if !self.is_process_alive().await {
+                return false;
+            }
+            if self.http.status().await {
+                if let Ok(di) = self.http.device_info().await {
+                    *self.device_info.write() = Some(di);
+                    info!(udid = %self.udid, "iOS simulator driver ready");
+                    return true;
                 }
             }
             if attempt % 10 == 0 {
-                info!(udid, attempt, "waiting for iOS simulator driver...");
+                info!(udid = %self.udid, attempt, "waiting for iOS simulator driver...");
             }
             if attempt + 1 < READY_ATTEMPTS {
                 sleep(std::time::Duration::from_millis(READY_BACKOFF_MS)).await;
             }
         }
-        keeper.stop().await;
-        Err(AppError::IosDriverUnreachable(
-            "maestro studio did not bring up the simulator driver on :22087 in time".into(),
-        ))
+        false
     }
 
     pub async fn stop(&self) {
@@ -322,7 +335,16 @@ impl IosDriverKeeper {
         // Leave the simulator booted for reuse.
     }
 
-    /// Cheap liveness check used by the screenshot poller / command preflight.
+    /// True while the `maestro studio` child is still running (regardless of
+    /// driver readiness). Used to decide whether a cached keeper is reusable.
+    pub async fn is_process_alive(&self) -> bool {
+        match self.studio_child.lock().await.as_mut() {
+            Some(child) => matches!(child.try_wait(), Ok(None)),
+            None => false,
+        }
+    }
+
+    /// Cheap HTTP liveness check.
     pub async fn is_alive(&self) -> bool {
         self.http.status().await
     }
