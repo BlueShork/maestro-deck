@@ -144,9 +144,11 @@ pub async fn connect_device(
 
 /// Upgrade the iOS live preview from the `simctl` screenshot poll to a fluid
 /// ScreenCaptureKit stream. Called by the frontend once an iOS device is
-/// connected with streaming. Returns `true` if SCK took over (screenshot poller
-/// aborted), `false` if SCK was unavailable and the screenshot poller keeps
-/// running. Never errors in a way that blanks the screen.
+/// connected with streaming. Waits for the background-warmed driver to become
+/// ready (SCK needs `device_info` for the aspect-ratio crop) before attempting
+/// the upgrade. Returns `true` if SCK took over (screenshot poller aborted),
+/// `false` if SCK was unavailable and the screenshot poller keeps running.
+/// Never errors in a way that blanks the screen.
 #[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn upgrade_ios_preview_to_sck(
@@ -166,9 +168,31 @@ pub async fn upgrade_ios_preview_to_sck(
         None => return Ok(false),
     };
 
-    let result = crate::ios_session::spawn_ios_preview(keeper, device.model.clone(), channel).await;
-    match result {
+    // The connect flow warms the driver in the background; `device_info` (needed
+    // for the aspect-ratio crop) only exists once the driver is ready. Wait for
+    // it here. `wait_until_ready` is idempotent/concurrent-safe and returns
+    // `false` promptly if the session was torn down (e.g. user disconnected).
+    if !keeper.wait_until_ready().await {
+        return Ok(false);
+    }
+
+    match crate::ios_session::spawn_ios_preview(keeper.clone(), device.model.clone(), channel).await
+    {
         Ok(handle) => {
+            // Guard: the user may have disconnected or switched devices during
+            // the readiness wait / SCK start. If so, don't install a stale
+            // session (which would leak); tear it down immediately.
+            let still_connected = state
+                .connected_device
+                .read()
+                .as_ref()
+                .map(|d| d.serial.as_str() == keeper.udid())
+                .unwrap_or(false);
+            if !still_connected {
+                handle.teardown().await;
+                return Ok(false);
+            }
+
             if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
                 let _ = abort.send(());
             }
