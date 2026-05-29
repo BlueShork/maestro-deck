@@ -149,6 +149,73 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
   }, [canvasRef, pushFrame]);
 }
 
+function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
+  const pushFrame = useStreamStore((s) => s.pushFrame);
+  const pendingRef = useRef<ImageBitmap | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+
+    const drawNext = () => {
+      rafRef.current = null;
+      const canvas = canvasRef.current;
+      const bmp = pendingRef.current;
+      pendingRef.current = null;
+      if (!bmp) return;
+      if (!canvas) {
+        bmp.close();
+        return;
+      }
+      if (canvas.width !== bmp.width) canvas.width = bmp.width;
+      if (canvas.height !== bmp.height) canvas.height = bmp.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bmp.close();
+        return;
+      }
+      ctx.drawImage(bmp, 0, 0);
+      pushFrame({ width: bmp.width, height: bmp.height });
+      bmp.close();
+    };
+
+    void events
+      .onIosFrame(async (payload) => {
+        try {
+          // Copy the exact view region into a fresh buffer: robust if `data`
+          // is ever a subarray, and yields a concrete-buffer typed array that
+          // satisfies BlobPart without an `as` cast.
+          const blob = new Blob([new Uint8Array(payload.data)], { type: "image/png" });
+          const bmp = await createImageBitmap(blob);
+          if (cancelled) {
+            bmp.close();
+            return;
+          }
+          if (pendingRef.current) pendingRef.current.close();
+          pendingRef.current = bmp;
+          if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
+        } catch {
+          // Ignore a single bad frame; the next poll replaces it.
+        }
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      });
+
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (pendingRef.current) {
+        pendingRef.current.close();
+        pendingRef.current = null;
+      }
+    };
+  }, [canvasRef, pushFrame]);
+}
+
 export function DeviceView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -174,7 +241,12 @@ export function DeviceView() {
     selector: Selector | null;
   } | null>(null);
 
+  const isIos = current?.platform === "ios";
+  // Both hooks mount unconditionally (Rules of Hooks). They listen to
+  // different events (`frame` vs `ios_frame`), so only the connected
+  // platform actually paints — the Android H.264 hook is unchanged.
   useFrameStream(canvasRef);
+  useScreenshotStream(canvasRef);
 
   const deviceWidth = streamW || current?.screen_width || 1080;
   const deviceHeight = streamH || current?.screen_height || 2340;
@@ -358,7 +430,7 @@ export function DeviceView() {
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [togglingDark, setTogglingDark] = useState(false);
   useEffect(() => {
-    if (!connectedSerial) {
+    if (!connectedSerial || isIos) {
       setDarkMode(null);
       return;
     }
@@ -376,7 +448,7 @@ export function DeviceView() {
     return () => {
       cancelled = true;
     };
-  }, [connectedSerial]);
+  }, [connectedSerial, isIos]);
   const toggleDarkMode = useCallback(async () => {
     if (togglingDark) return;
     const next = !(darkMode ?? false);
@@ -551,17 +623,19 @@ export function DeviceView() {
 
       {hasFrame ? (
         <div className="absolute right-3 top-3 z-10 flex gap-2">
-          <button
-            type="button"
-            onClick={() => void toggleDarkMode()}
-            disabled={togglingDark || !connectedSerial}
-            title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
-            aria-label="Toggle device dark mode"
-            aria-pressed={darkMode ?? false}
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-          </button>
+          {!isIos ? (
+            <button
+              type="button"
+              onClick={() => void toggleDarkMode()}
+              disabled={togglingDark || !connectedSerial}
+              title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
+              aria-label="Toggle device dark mode"
+              aria-pressed={darkMode ?? false}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => void takeScreenshot()}
