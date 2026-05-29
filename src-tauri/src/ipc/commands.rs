@@ -553,6 +553,25 @@ pub async fn send_input(
     }
 }
 
+/// Press the iOS Home button (return to the home screen). iOS-only: the XCTest
+/// `/pressButton` route maps to `XCUIDevice.shared.press(.home)`. Errors if the
+/// connected device isn't an iOS simulator.
+#[tauri::command]
+pub async fn ios_press_home(state: State<'_, AppState>) -> AppResult<()> {
+    let device = state
+        .connected_device
+        .read()
+        .clone()
+        .ok_or(AppError::NoDevice)?;
+    if device.platform != crate::device::Platform::Ios {
+        return Err(AppError::IosCommandFailed(
+            "Home button is only available for iOS devices".into(),
+        ));
+    }
+    let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+    keeper.http().press_button("home").await
+}
+
 #[tauri::command]
 pub async fn set_dark_mode(enabled: bool, state: State<'_, AppState>) -> AppResult<()> {
     let serial = state

@@ -72,6 +72,8 @@ export const ipc = {
     call<void>("send_input", { event, screenW, screenH }),
   setDarkMode: (enabled: boolean) => call<void>("set_dark_mode", { enabled }),
   getDarkMode: () => call<boolean>("get_dark_mode"),
+  // iOS-only: press the Home button to return to the home screen.
+  iosPressHome: () => call<void>("ios_press_home"),
   runFlow: (filePath: string) => call<number>("run_flow", { filePath }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),

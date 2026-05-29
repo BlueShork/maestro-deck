@@ -71,6 +71,7 @@ pub fn run() {
             suggest_selectors,
             generate_command,
             send_input,
+            ios_press_home,
             set_dark_mode,
             get_dark_mode,
             run_flow,

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
-import { Camera, Moon, Smartphone, Sun } from "lucide-react";
+import { Camera, House, Moon, Smartphone, Sun } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -468,6 +468,23 @@ export function DeviceView() {
     }
   }, [darkMode, togglingDark]);
 
+  // iOS-only Home button: presses the device Home button (XCTest
+  // `/pressButton`) to return to the home screen. Mirrors where the
+  // Android-only dark-mode toggle sits in the control cluster.
+  const isIos = current?.platform === "ios";
+  const [pressingHome, setPressingHome] = useState(false);
+  const pressHome = useCallback(async () => {
+    if (pressingHome) return;
+    setPressingHome(true);
+    try {
+      await ipc.iosPressHome();
+    } catch (err) {
+      toast.error("Home button failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setPressingHome(false);
+    }
+  }, [pressingHome]);
+
   const [capturing, setCapturing] = useState(false);
   const takeScreenshot = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -626,6 +643,18 @@ export function DeviceView() {
 
       {hasFrame ? (
         <div className="absolute right-3 top-3 z-10 flex gap-2">
+          {isIos ? (
+            <button
+              type="button"
+              onClick={() => void pressHome()}
+              disabled={pressingHome || !connectedSerial}
+              title="Press Home (return to home screen)"
+              aria-label="Press Home button"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <House className="h-4 w-4" />
+            </button>
+          ) : null}
           {!noDarkMode ? (
             <button
               type="button"

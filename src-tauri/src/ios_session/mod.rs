@@ -73,6 +73,12 @@ pub struct SwipeBody {
 }
 
 #[derive(Debug, Serialize)]
+pub struct PressButtonBody {
+    /// XCTest server `PressButtonRequest.Button` raw value: `"home"` or `"lock"`.
+    pub button: String,
+}
+
+#[derive(Debug, Serialize)]
 pub struct InputTextBody {
     pub text: String,
     // Required by the v2.5.1 XCTest server (`InputTextRequest`). The server
@@ -187,6 +193,18 @@ impl IosHttpClient {
             return Ok(());
         }
         self.post_ok("swipe", b).await
+    }
+    /// Press a hardware button via the XCTest `/pressButton` route
+    /// (`XCUIDevice.shared.press(.home)`). `button` is the server's raw value
+    /// (`"home"` or `"lock"`).
+    pub async fn press_button(&self, button: &str) -> AppResult<()> {
+        self.post_ok(
+            "pressButton",
+            &PressButtonBody {
+                button: button.to_string(),
+            },
+        )
+        .await
     }
 
     async fn post_ok<B: Serialize>(&self, path: &str, body: &B) -> AppResult<()> {
@@ -411,6 +429,16 @@ mod tests {
         assert!(s.contains("\"x\":100"), "got {s}");
         assert!(s.contains("\"y\":200"), "got {s}");
         assert!(s.contains("\"duration\":0"), "got {s}");
+    }
+
+    #[test]
+    fn press_button_body_serializes_home() {
+        // Must match the XCTest server's `PressButtonRequest{button:"home"}`.
+        let s = serde_json::to_string(&PressButtonBody {
+            button: "home".into(),
+        })
+        .unwrap();
+        assert_eq!(s, r#"{"button":"home"}"#);
     }
 
     #[test]
