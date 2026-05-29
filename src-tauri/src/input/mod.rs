@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
+pub mod ios;
+
 // Control message type codes (subset).
 pub const TYPE_INJECT_KEYCODE: u8 = 0;
 pub const TYPE_INJECT_TEXT: u8 = 1;
