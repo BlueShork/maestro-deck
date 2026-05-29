@@ -353,3 +353,9 @@ pub fn schedule_studio_restart(app: tauri::AppHandle) {
         }
     });
 }
+
+/// Public wrapper so the web session can reuse studio orphan-killing.
+/// Matches any lingering `maestro studio` (mobile or web) — acceptable for V1.
+pub async fn kill_orphan_studios_pub() {
+    kill_orphan_studios().await;
+}

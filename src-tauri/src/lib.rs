@@ -21,6 +21,7 @@ pub mod state;
 pub mod tool_paths;
 pub mod vertex;
 pub mod video;
+mod web_session;
 pub mod workspace;
 pub mod yaml;
 
