@@ -1,12 +1,13 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { SettingsSection } from "@/components/settings/SettingsPrimitives";
+import { Logo } from "@/components/Logo";
 
 export function AboutSettings() {
   return (
-    <SettingsSection title="About">
-      <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+    <section className="flex min-h-[70vh] flex-col items-center justify-center gap-4">
+      <Logo className="mx-auto h-20 w-auto text-foreground" />
+      <div className="flex flex-col gap-1 text-center text-[11px] text-muted-foreground">
         <span>Maestro Deck v{__APP_VERSION__} — © 2026 Ethan Morisset</span>
         <span>
           Licensed under the{" "}
@@ -26,6 +27,6 @@ export function AboutSettings() {
           the Maestro framework and remains the property of its respective owner.
         </span>
       </div>
-    </SettingsSection>
+    </section>
   );
 }
