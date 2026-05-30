@@ -230,6 +230,16 @@ function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean)
     if (!enabled) return;
     let cancelled = false;
 
+    // Temporary throughput instrumentation: frames received over the Channel vs
+    // frames actually painted (rAF drops coalesced frames), logged each second.
+    let received = 0;
+    let painted = 0;
+    const fpsTimer = window.setInterval(() => {
+      console.debug(`[sck] received ${received}/s, painted ${painted}/s`);
+      received = 0;
+      painted = 0;
+    }, 1000);
+
     const drawNext = () => {
       rafRef.current = null;
       const canvas = canvasRef.current;
@@ -241,12 +251,14 @@ function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean)
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.putImageData(new ImageData(frame.rgba, frame.w, frame.h), 0, 0);
+      painted += 1;
       pushFrame({ width: frame.w, height: frame.h });
     };
 
     const channel = new Channel<ArrayBuffer>();
     channel.onmessage = (buf) => {
       if (cancelled || buf.byteLength < 8) return;
+      received += 1;
       const view = new DataView(buf);
       const w = view.getUint32(0, true);
       const h = view.getUint32(4, true);
@@ -263,6 +275,7 @@ function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean)
 
     return () => {
       cancelled = true;
+      window.clearInterval(fpsTimer);
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       pendingRef.current = null;

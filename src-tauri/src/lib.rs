@@ -19,6 +19,8 @@ pub mod process_ext;
 pub mod runner;
 pub mod scrcpy;
 pub mod selector;
+#[cfg(target_os = "macos")]
+pub mod sim_capture;
 pub mod state;
 pub mod tool_paths;
 pub mod vertex;
@@ -27,6 +29,7 @@ mod web_session;
 pub mod workspace;
 pub mod yaml;
 
+use tauri::Manager;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use credentials::{delete_credential, get_credential, save_credential};
@@ -93,6 +96,11 @@ pub fn run() {
         ])
         .setup(|app| {
             ipc::register_events(app)?;
+            // The static `maximized` window flag is unreliable (notably on macOS),
+            // so maximize explicitly once the window exists.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.maximize();
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -57,11 +57,18 @@ const PIXEL_FORMAT_BGRA: u32 = 0x4247_5241; // 'BGRA'
 /// rather than blocking the SCK dispatch queue.
 const FRAME_CHANNEL_CAPACITY: usize = 4;
 
-/// Assumed Retina backing scale used to size the capture surface from the
-/// window's point-space frame. SCK requests a fixed pixel surface; the actual
-/// delivered buffer reports its own width/height (see [`Frame`]), so an
-/// imperfect guess here only affects sharpness, never correctness.
-const BACKING_SCALE: f64 = 2.0;
+/// Factor used to size the capture surface from the window's point-space frame.
+/// SCK scales the captured content to this fixed pixel surface; the delivered
+/// buffer reports its own width/height (see [`Frame`]), so this only affects
+/// sharpness and per-frame byte volume, never correctness or tap mapping (which
+/// is ratio-based against the displayed frame).
+///
+/// `1.0` captures at the window's point size (~½ the native-retina dimensions,
+/// ~¼ the bytes) — chosen for a smooth live preview, since pushing native-retina
+/// RGBA (~6 MB/frame) through the IPC + main-thread `putImageData` at ~60fps
+/// (~340 MB/s) is the dominant smoothness bottleneck. Raise toward `2.0` for a
+/// sharper (heavier) image.
+const BACKING_SCALE: f64 = 1.0;
 
 /// A single captured video frame as tightly-packed (no row padding) BGRA bytes.
 ///
@@ -177,25 +184,26 @@ fn extract_bgra(sb: &CMSampleBuffer) -> Option<Frame> {
     }
 }
 
-/// Maximum fraction of the captured window height the top chrome (macOS title
-/// bar) may occupy before we treat the geometry as unrecognised. A default
-/// Simulator window's title bar is a small slice; anything larger (bezel mode,
-/// unusual layouts) fails this guard so the caller falls back to screenshots.
-const MAX_TITLEBAR_FRACTION: f64 = 0.30;
+/// Maximum fraction of the captured frame that may be cropped away as
+/// chrome/padding before we treat the geometry as unrecognised. The real
+/// Simulator window hugs the device screen (only a few px of padding / an
+/// optional title bar); anything larger (bezel mode, unusual layouts) fails this
+/// guard so the caller falls back to screenshots.
+const MAX_CHROME_FRACTION: f64 = 0.35;
 
-/// Crop the macOS title bar off a captured Simulator-window frame and convert
-/// the device-screen region from BGRA to RGBA.
+/// Crop the largest device-screen-aspect sub-rect out of a captured
+/// Simulator-window frame and convert it from BGRA to RGBA.
 ///
-/// Assumes the device screen fills the full window width and is bottom-aligned,
-/// with chrome (the title bar) only at the top — true for a default
-/// Simulator.app window at any zoom. The screen height is derived purely from
-/// the device aspect ratio (`device_w:device_h`), so the result is zoom
-/// independent and exactly 1:1 with the device screen.
+/// The captured window hugs the device screen but rarely matches its aspect
+/// exactly: it may be slightly TALLER than the device aspect (a top title bar →
+/// crop the top) or slightly WIDER (small horizontal padding → crop the sides,
+/// centered). We fit the device aspect (`device_w:device_h`) inside the frame and
+/// take the largest matching rect, so the result is zoom-independent and 1:1 with
+/// the device screen (keeping tap mapping correct).
 ///
-/// Returns `None` when the geometry can't be the assumed layout (frame or device
-/// dims zero, the implied screen is taller than the capture, or the title bar
-/// would exceed [`MAX_TITLEBAR_FRACTION`]); the caller should then keep using the
-/// `simctl` screenshot path. Output is dense RGBA (`out_w * out_h * 4`).
+/// Returns `None` when dims are zero or the cropped-away chrome/padding exceeds
+/// [`MAX_CHROME_FRACTION`] (signals a non-default layout); the caller then keeps
+/// the `simctl` screenshot path. Output is dense RGBA (`out_w * out_h * 4`).
 pub fn crop_and_convert(
     frame: &Frame,
     device_w: u32,
@@ -206,22 +214,31 @@ pub fn crop_and_convert(
     }
     let w = frame.width;
     let h = frame.height;
-    // Screen region fills the full width; its height follows the device aspect.
-    let numerator = w as u64 * device_h as u64;
-    let screen_h = (numerator as f64 / device_w as f64).round() as usize;
-    if screen_h == 0 || screen_h > h {
-        return None;
-    }
-    let crop_top = h - screen_h;
-    if crop_top as f64 > h as f64 * MAX_TITLEBAR_FRACTION {
+    let cap_aspect = w as f64 / h as f64;
+    let dev_aspect = device_w as f64 / device_h as f64;
+
+    // Fit the device aspect inside the captured frame; take the largest matching
+    // sub-rect. `x_off`/`y_off` position it (centered horizontally; bottom-
+    // aligned vertically, since any chrome — a title bar — sits at the top).
+    let (out_w, out_h, x_off, y_off) = if cap_aspect > dev_aspect {
+        // Frame is wider than the device → pillarbox: full height, crop width.
+        let ow = ((h as f64 * dev_aspect).round() as usize).clamp(1, w);
+        (ow, h, (w - ow) / 2, 0)
+    } else {
+        // Frame is taller than the device → letterbox / top title bar: full
+        // width, crop height, bottom-aligned.
+        let oh = ((w as f64 / dev_aspect).round() as usize).clamp(1, h);
+        (w, oh, 0, h - oh)
+    };
+
+    let dropped = 1.0 - (out_w * out_h) as f64 / (w * h) as f64;
+    if dropped > MAX_CHROME_FRACTION {
         return None;
     }
 
-    let out_w = w;
-    let out_h = screen_h;
     let mut rgba = vec![0u8; out_w * out_h * 4];
     for y in 0..out_h {
-        let src_row = (crop_top + y) * w * 4;
+        let src_row = ((y_off + y) * w + x_off) * 4;
         let dst_row = y * out_w * 4;
         for x in 0..out_w {
             let s = src_row + x * 4;
