@@ -46,6 +46,9 @@ export function ToolPathsSettings() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Physical-iOS bridge (devicelab) auto-install state.
+  const [bridgeInstalled, setBridgeInstalled] = useState<boolean | null>(null);
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     void refresh();
@@ -65,6 +68,24 @@ export function ToolPathsSettings() {
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+    try {
+      setBridgeInstalled(await ipc.iosDeviceBridgeInstalled());
+    } catch {
+      setBridgeInstalled(null);
+    }
+  }
+
+  async function handleInstallBridge() {
+    setInstalling(true);
+    setError(null);
+    try {
+      await ipc.installIosDeviceBridge();
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setInstalling(false);
     }
   }
 
@@ -164,6 +185,24 @@ export function ToolPathsSettings() {
                 {!overridden && resolved !== tool.key && " (auto-detected)"}
               </span>
             </p>
+            {tool.key === "maestro_ios_device" && bridgeInstalled === false && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={installing}
+                  onClick={() => void handleInstallBridge()}
+                  className="self-start rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  {installing ? "Installing…" : "Install automatically"}
+                </button>
+                <span className="text-[11px] text-muted-foreground">
+                  Downloads the devicelab bridge + XCTest runner (~once, needs network).
+                </span>
+              </div>
+            )}
+            {tool.key === "maestro_ios_device" && bridgeInstalled === true && (
+              <span className="text-[11px] text-green-600">✓ Installed</span>
+            )}
           </div>
         );
       })}

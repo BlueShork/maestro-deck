@@ -752,6 +752,93 @@ pub async fn get_dark_mode(state: State<'_, AppState>) -> AppResult<bool> {
     Ok(out.to_lowercase().contains("yes"))
 }
 
+/// Whether the `maestro-ios-device` bridge (devicelab) is installed. The
+/// frontend uses this to decide whether to offer the one-click auto-install for
+/// physical iOS support.
+#[tauri::command]
+pub fn ios_device_bridge_installed() -> bool {
+    crate::tool_paths::maestro_ios_device_installed()
+}
+
+/// Auto-install devicelab's `maestro-ios-device` bridge (Option A): download the
+/// release binary for this Mac's arch, mark it executable, run its `setup`
+/// (which fetches the XCTest runner + patched maestro jars into `~/.maestro`),
+/// and persist its path. Apache-2.0, so redistribution-by-fetch is fine. Only
+/// users who actually connect a physical iPhone ever trigger this.
+#[tauri::command]
+pub async fn install_ios_device_bridge() -> AppResult<String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    if !cfg!(target_os = "macos") {
+        return Err(AppError::Other("physical iOS support is macOS-only".into()));
+    }
+    let arch = match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "amd64",
+        other => {
+            return Err(AppError::Other(format!(
+                "no maestro-ios-device build for this architecture ({other})"
+            )))
+        }
+    };
+    let url = format!(
+        "https://github.com/devicelab-dev/maestro-ios-device/releases/latest/download/maestro-ios-device-darwin-{arch}"
+    );
+    info!(%url, "downloading maestro-ios-device bridge");
+
+    let bytes = reqwest::Client::builder()
+        .build()
+        .map_err(|e| AppError::Other(format!("http client: {e}")))?
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| AppError::Other(format!("download maestro-ios-device: {e}")))?
+        .error_for_status()
+        .map_err(|e| AppError::Other(format!("download maestro-ios-device: {e}")))?
+        .bytes()
+        .await
+        .map_err(|e| AppError::Other(format!("read maestro-ios-device: {e}")))?;
+
+    let home =
+        std::env::var_os("HOME").ok_or_else(|| AppError::Other("no HOME directory".into()))?;
+    let dir = std::path::PathBuf::from(home).join(".maestro/bin");
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(AppError::Io)?;
+    let dest = dir.join("maestro-ios-device");
+    tokio::fs::write(&dest, &bytes)
+        .await
+        .map_err(AppError::Io)?;
+    let mut perm = tokio::fs::metadata(&dest)
+        .await
+        .map_err(AppError::Io)?
+        .permissions();
+    perm.set_mode(0o755);
+    tokio::fs::set_permissions(&dest, perm)
+        .await
+        .map_err(AppError::Io)?;
+
+    // `setup` fetches the prebuilt XCTest runner + patched maestro jars into
+    // ~/.maestro. No device required for this step.
+    info!("running maestro-ios-device setup");
+    let out = tokio::process::Command::new(&dest)
+        .arg("setup")
+        .output()
+        .await
+        .map_err(|e| AppError::Other(format!("maestro-ios-device setup: {e}")))?;
+    if !out.status.success() {
+        return Err(AppError::Other(format!(
+            "maestro-ios-device setup failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+
+    let dest_str = dest.to_string_lossy().to_string();
+    crate::tool_paths::set_maestro_ios_device_path(&dest_str)?;
+    info!(path = %dest_str, "maestro-ios-device installed");
+    Ok(dest_str)
+}
+
 #[tauri::command]
 pub async fn run_flow(
     file_path: String,

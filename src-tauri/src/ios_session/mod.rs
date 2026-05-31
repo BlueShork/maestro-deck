@@ -354,8 +354,8 @@ impl IosDriverKeeper {
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     AppError::IosToolMissing(
-                        "maestro-ios-device not found — install devicelab's maestro-ios-device \
-                         (setup.sh) and set its path in Settings"
+                        "maestro-ios-device not found — install it from Settings → Tool paths \
+                         (\"Install automatically\") to enable physical iOS devices"
                             .into(),
                     )
                 } else {

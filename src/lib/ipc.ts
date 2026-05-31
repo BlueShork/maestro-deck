@@ -90,6 +90,10 @@ export const ipc = {
     call<KillReport>("kill_maestro_processes", { serial, report }),
   upgradeIosPreview: (channel: Channel<ArrayBuffer>) =>
     call<boolean>("upgrade_ios_preview", { channel }),
+  // Physical iOS bridge (devicelab maestro-ios-device): check if installed, and
+  // one-click auto-install (downloads the binary + runs its `setup`).
+  iosDeviceBridgeInstalled: () => call<boolean>("ios_device_bridge_installed"),
+  installIosDeviceBridge: () => call<string>("install_ios_device_bridge"),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
   setToolPaths: (
     adb: string | null,

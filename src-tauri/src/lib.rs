@@ -78,6 +78,8 @@ pub fn run() {
             generate_command,
             send_input,
             ios_press_home,
+            ios_device_bridge_installed,
+            install_ios_device_bridge,
             set_dark_mode,
             get_dark_mode,
             run_flow,

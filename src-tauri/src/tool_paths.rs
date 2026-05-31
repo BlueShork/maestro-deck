@@ -218,6 +218,22 @@ pub fn maestro_ios_device_bin() -> String {
     resolved
 }
 
+/// True if `maestro-ios-device` resolves to a real file (installed), vs the
+/// bare-name fallback. Used to decide whether to offer the auto-install.
+pub fn maestro_ios_device_installed() -> bool {
+    Path::new(&maestro_ios_device_bin()).is_file()
+}
+
+/// Persist just the `maestro-ios-device` override (used after auto-install) and
+/// invalidate the cache so the next resolve picks the freshly-installed binary.
+pub fn set_maestro_ios_device_path(path: &str) -> AppResult<()> {
+    let mut overrides = load_overrides();
+    overrides.maestro_ios_device = Some(path.to_string());
+    save_overrides(&overrides)?;
+    invalidate_cache();
+    Ok(())
+}
+
 /// User-configured Apple Team ID (or None). The keeper passes it to
 /// `maestro studio --apple-team-id` (simulators) or `maestro-ios-device
 /// --team-id` (physical); if None, maestro uses its own config.
