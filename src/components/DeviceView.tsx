@@ -152,7 +152,13 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
 
 function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
-  const pendingRef = useRef<ImageBitmap | null>(null);
+  // Hold the decoded bitmap plus the frame's *reported* dimensions. For iOS the
+  // reported dims equal the bitmap's natural size, but for web the PNG is at
+  // devicePixelRatio (e.g. 2400×1532) while the reported size is the CSS
+  // viewport (1200×766) — the coordinate space the hierarchy bounds live in.
+  // We paint at the bitmap's native resolution (crisp) but report the CSS size
+  // so overlay scaling and hit-testing use the right space.
+  const pendingRef = useRef<{ bmp: ImageBitmap; w: number; h: number } | null>(null);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -162,13 +168,16 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
     const drawNext = () => {
       rafRef.current = null;
       const canvas = canvasRef.current;
-      const bmp = pendingRef.current;
+      const pending = pendingRef.current;
       pendingRef.current = null;
-      if (!bmp) return;
+      if (!pending) return;
+      const { bmp, w, h } = pending;
       if (!canvas) {
         bmp.close();
         return;
       }
+      // Paint at the bitmap's native resolution so a high-DPR screenshot stays
+      // crisp; report the CSS dimensions as the device coordinate space.
       if (canvas.width !== bmp.width) canvas.width = bmp.width;
       if (canvas.height !== bmp.height) canvas.height = bmp.height;
       const ctx = canvas.getContext("2d");
@@ -177,13 +186,13 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
         return;
       }
       ctx.drawImage(bmp, 0, 0);
-      pushFrame({ width: bmp.width, height: bmp.height });
+      pushFrame({ width: w, height: h });
       bmp.close();
     };
 
     // iOS and web both deliver PNG screenshots; only the connected platform's
     // poller emits, so subscribing to both events is safe.
-    const onShot = async (payload: { data: Uint8Array }) => {
+    const onShot = async (payload: { data: Uint8Array; width: number; height: number }) => {
       try {
         // Copy the exact view region into a fresh buffer: robust if `data`
         // is ever a subarray, and yields a concrete-buffer typed array that
@@ -194,8 +203,14 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
           bmp.close();
           return;
         }
-        if (pendingRef.current) pendingRef.current.close();
-        pendingRef.current = bmp;
+        if (pendingRef.current) pendingRef.current.bmp.close();
+        // Fall back to the bitmap's own size if the poller reports 0 (older
+        // payloads / iOS where the two coincide anyway).
+        pendingRef.current = {
+          bmp,
+          w: payload.width || bmp.width,
+          h: payload.height || bmp.height,
+        };
         if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
       } catch {
         // Ignore a single bad frame; the next poll replaces it.
@@ -212,7 +227,7 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
       unlistens.forEach((un) => un());
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       if (pendingRef.current) {
-        pendingRef.current.close();
+        pendingRef.current.bmp.close();
         pendingRef.current = null;
       }
     };
@@ -331,7 +346,15 @@ export function DeviceView() {
   // max_size=1080, while a Galaxy S24 Ultra is natively 1440×3120). Detect
   // the hierarchy coordinate space from the tree itself so overlays line up
   // and hit-tests resolve to the right element.
+  //
+  // Web is the exception: the screenshot only covers the CSS viewport (e.g.
+  // 1200×766) but the element list includes below-the-fold nodes and a
+  // full-document wrapper whose bounds run far past it (e.g. 1860 tall). Taking
+  // the max bounds would stretch the overlay vertically, so for web the
+  // coordinate space is exactly the reported viewport (streamW/H).
+  const isWeb = current?.platform === "web";
   const hierarchyDims = useMemo(() => {
+    if (isWeb) return streamW > 0 && streamH > 0 ? { w: streamW, h: streamH } : null;
     if (!tree?.root) return null;
     let w = 0;
     let h = 0;
@@ -343,7 +366,7 @@ export function DeviceView() {
       for (const c of n.children) stack.push(c);
     }
     return w > 0 && h > 0 ? { w, h } : null;
-  }, [tree]);
+  }, [tree, isWeb, streamW, streamH]);
 
   const overlayScaleX = hierarchyDims ? displayW / hierarchyDims.w : scale;
   const overlayScaleY = hierarchyDims ? displayH / hierarchyDims.h : scale;
