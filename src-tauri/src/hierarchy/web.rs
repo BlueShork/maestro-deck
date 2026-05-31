@@ -71,7 +71,19 @@ fn bounding_box(nodes: &[UINode]) -> Bounds {
 
 /// Convert the `elements` array from a device-screen event into a
 /// `HierarchyTree`: a synthetic root whose children are the flat elements.
-pub fn parse_device_screen_hierarchy(elements: &serde_json::Value) -> AppResult<HierarchyTree> {
+///
+/// `viewport` is the device-screen event's reported `(width, height)` in CSS
+/// pixels — the true coordinate space the element bounds live in. The root is
+/// sized to that viewport (not the bounding box of the detected elements) so
+/// the overlay's coordinate-space auto-detection — which reads the max bounds
+/// in the tree — recovers the real viewport rather than a tight union that
+/// usually falls short of the screen edges (e.g. 960×232 for a sparse page in
+/// a 1200×766 viewport), which otherwise stretches the inspector overlay. When
+/// the viewport is unknown (either dimension 0) we fall back to the union.
+pub fn parse_device_screen_hierarchy(
+    elements: &serde_json::Value,
+    viewport: (u32, u32),
+) -> AppResult<HierarchyTree> {
     let els: Vec<WebElement> = serde_json::from_value(elements.clone())
         .map_err(|e| AppError::HierarchyParse(format!("web elements parse: {e}")))?;
     // Root takes index 0; children follow in document order.
@@ -80,6 +92,15 @@ pub fn parse_device_screen_hierarchy(elements: &serde_json::Value) -> AppResult<
         .enumerate()
         .map(|(i, e)| web_element_to_node(e, i + 1))
         .collect();
+    let root_bounds = match viewport {
+        (w, h) if w > 0 && h > 0 => Bounds {
+            left: 0,
+            top: 0,
+            right: w as i32,
+            bottom: h as i32,
+        },
+        _ => bounding_box(&children),
+    };
     let root = UINode {
         id: "0".to_string(),
         resource_id: None,
@@ -87,7 +108,7 @@ pub fn parse_device_screen_hierarchy(elements: &serde_json::Value) -> AppResult<
         content_desc: None,
         class_name: "Document".to_string(),
         package: String::new(),
-        bounds: bounding_box(&children),
+        bounds: root_bounds,
         clickable: false,
         enabled: true,
         focused: false,
@@ -109,11 +130,13 @@ mod tests {
             {"id":"0,0,1200,64","bounds":{"x":0,"y":0,"width":1200,"height":64}},
             {"id":"Search-Search…","bounds":{"x":413,"y":14,"width":338,"height":37},"resourceId":"Search","text":"Search…"}
         ]);
-        let tree = parse_device_screen_hierarchy(&v).expect("parse");
+        let tree = parse_device_screen_hierarchy(&v, (1200, 766)).expect("parse");
         let root = tree.root.expect("root");
         assert_eq!(root.children.len(), 2);
-        // Root must enclose every element.
+        // Root spans the reported viewport (not the tight union of children) so
+        // the overlay's coordinate-space detection recovers the real screen.
         assert_eq!(root.bounds.right, 1200);
+        assert_eq!(root.bounds.bottom, 766);
 
         let search = &root.children[1];
         assert_eq!(search.resource_id.as_deref(), Some("Search"));
@@ -130,8 +153,37 @@ mod tests {
     }
 
     #[test]
+    fn root_spans_viewport_not_union_when_elements_are_sparse() {
+        // Regression: a sparse page (content clustered top-left) used to size
+        // the root to the union of bounds (here 960×232), which stretched the
+        // inspector overlay. The root must instead span the reported viewport.
+        let v = serde_json::json!([
+            {"bounds":{"x":240,"y":115,"width":720,"height":28},"text":"Example Domain"},
+            {"bounds":{"x":240,"y":213,"width":82,"height":19},"text":"Learn more"}
+        ]);
+        let tree = parse_device_screen_hierarchy(&v, (1200, 766)).expect("parse");
+        let root = tree.root.expect("root");
+        // Union would be 960×232; viewport is 1200×766.
+        assert_eq!(root.bounds.right, 1200);
+        assert_eq!(root.bounds.bottom, 766);
+    }
+
+    #[test]
+    fn unknown_viewport_falls_back_to_union() {
+        // Either dimension 0 → we can't trust the viewport, so the root falls
+        // back to enclosing the elements (the prior behaviour).
+        let v = serde_json::json!([
+            {"bounds":{"x":0,"y":0,"width":300,"height":50}}
+        ]);
+        let tree = parse_device_screen_hierarchy(&v, (0, 0)).expect("parse");
+        let root = tree.root.expect("root");
+        assert_eq!(root.bounds.right, 300);
+        assert_eq!(root.bounds.bottom, 50);
+    }
+
+    #[test]
     fn empty_elements_yield_empty_root() {
-        let tree = parse_device_screen_hierarchy(&serde_json::json!([])).expect("parse");
+        let tree = parse_device_screen_hierarchy(&serde_json::json!([]), (0, 0)).expect("parse");
         let root = tree.root.expect("root");
         assert!(root.children.is_empty());
         assert_eq!(root.bounds.area(), 0);

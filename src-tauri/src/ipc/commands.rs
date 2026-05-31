@@ -459,7 +459,10 @@ pub async fn enter_inspect_mode(
     if device.platform == crate::device::Platform::Web {
         let keeper = ensure_web_keeper(None, state.inner()).await?;
         let screen = keeper.http().device_screen().await?;
-        let tree = crate::hierarchy::web::parse_device_screen_hierarchy(&screen.elements)?;
+        let tree = crate::hierarchy::web::parse_device_screen_hierarchy(
+            &screen.elements,
+            (screen.width, screen.height),
+        )?;
         return finalize_hierarchy(tree, state.inner()).await;
     }
     let serial = device.serial.clone();
