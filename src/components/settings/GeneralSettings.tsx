@@ -22,6 +22,8 @@ export function GeneralSettings() {
   const setAutoSaveEnabled = useSettingsStore((s) => s.setAutoSaveEnabled);
   const autoCheckUpdatesEnabled = useSettingsStore((s) => s.autoCheckUpdatesEnabled);
   const setAutoCheckUpdatesEnabled = useSettingsStore((s) => s.setAutoCheckUpdatesEnabled);
+  const confirmBeforeQuit = useSettingsStore((s) => s.confirmBeforeQuit);
+  const setConfirmBeforeQuit = useSettingsStore((s) => s.setConfirmBeforeQuit);
 
   return (
     <SettingsSection
@@ -66,6 +68,13 @@ export function GeneralSettings() {
         description="Silently checks GitHub releases and prompts you when a new version is available."
         checked={autoCheckUpdatesEnabled}
         onCheckedChange={setAutoCheckUpdatesEnabled}
+      />
+
+      <ToggleRow
+        label="Confirm before quitting"
+        description="Asks for confirmation on Cmd+Q / window close so a stray quit doesn't drop a running session."
+        checked={confirmBeforeQuit}
+        onCheckedChange={setConfirmBeforeQuit}
       />
 
       <label className="flex items-center justify-between gap-3">

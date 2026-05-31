@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { MainView } from "@/components/MainView";
+import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { Toaster } from "@/components/ui/Toast";
@@ -226,6 +227,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <UpdateDialog />
+      <QuitConfirmDialog />
       <Toaster />
     </>
   );

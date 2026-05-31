@@ -38,4 +38,10 @@ pub struct AppState {
 
     pub web_driver: AsyncMutex<Option<Arc<crate::web_session::WebStudioKeeper>>>,
     pub web_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+
+    /// Set once the user has confirmed quitting (or opted out of the prompt).
+    /// The window-close / app-exit handlers prevent the first quit to show the
+    /// confirmation dialog; `confirm_quit` flips this so the second exit — the
+    /// one it triggers after cleanup — is allowed through.
+    pub quit_confirmed: std::sync::atomic::AtomicBool,
 }

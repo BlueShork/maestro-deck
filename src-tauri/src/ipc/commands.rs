@@ -335,6 +335,16 @@ async fn setup_scrcpy(serial: &str, app: AppHandle, state: &AppState) {
 
 #[tauri::command]
 pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
+    teardown_all_sessions(state.inner()).await;
+    Ok(())
+}
+
+/// Tear down every running session and its spawned subprocesses: the
+/// background `maestro studio` keeper plus the connected platform's stream /
+/// driver / browser. Shared by `disconnect_device` and the quit handler so a
+/// fast Cmd+Q doesn't leave orphaned studio / chromedriver / Chrome / iproxy
+/// processes behind.
+pub async fn teardown_all_sessions(state: &AppState) {
     let (serial, platform) = {
         let g = state.connected_device.read();
         (
@@ -355,15 +365,28 @@ pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
     }
 
     match platform {
-        Some(crate::device::Platform::Ios) => teardown_ios(state.inner()).await,
+        Some(crate::device::Platform::Ios) => teardown_ios(state).await,
         Some(crate::device::Platform::Android) => {
             if let Some(serial) = serial {
-                teardown_scrcpy(&serial, state.inner()).await;
+                teardown_scrcpy(&serial, state).await;
             }
         }
-        Some(crate::device::Platform::Web) => teardown_web(state.inner()).await,
+        Some(crate::device::Platform::Web) => teardown_web(state).await,
         None => {}
     }
+}
+
+/// Cleanly quit the app: tear down all sessions (so nothing is orphaned), then
+/// exit. Called by the frontend once the user confirms the quit dialog (or has
+/// opted out of it). Setting `quit_confirmed` lets the subsequent exit through
+/// the close/exit guards installed in `lib.rs`.
+#[tauri::command]
+pub async fn confirm_quit(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    state
+        .quit_confirmed
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    teardown_all_sessions(state.inner()).await;
+    app.exit(0);
     Ok(())
 }
 

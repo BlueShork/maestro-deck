@@ -26,6 +26,9 @@ interface SettingsState {
   fastHierarchyEnabled: boolean;
   autoSaveEnabled: boolean;
   autoCheckUpdatesEnabled: boolean;
+  /** Show a confirmation dialog before quitting the app. Users can opt out
+   * from the dialog itself ("don't ask again") or re-enable it in Settings. */
+  confirmBeforeQuit: boolean;
   consoleMode: ConsoleMode;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
@@ -35,6 +38,7 @@ interface SettingsState {
   setFastHierarchyEnabled: (v: boolean) => void;
   setAutoSaveEnabled: (v: boolean) => void;
   setAutoCheckUpdatesEnabled: (v: boolean) => void;
+  setConfirmBeforeQuit: (v: boolean) => void;
   setConsoleMode: (m: ConsoleMode) => void;
 }
 
@@ -49,6 +53,7 @@ export const useSettingsStore = create<SettingsState>()(
       fastHierarchyEnabled: false,
       autoSaveEnabled: true,
       autoCheckUpdatesEnabled: true,
+      confirmBeforeQuit: true,
       consoleMode: "simple",
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
@@ -58,6 +63,7 @@ export const useSettingsStore = create<SettingsState>()(
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
       setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
       setAutoCheckUpdatesEnabled: (autoCheckUpdatesEnabled) => set({ autoCheckUpdatesEnabled }),
+      setConfirmBeforeQuit: (confirmBeforeQuit) => set({ confirmBeforeQuit }),
       setConsoleMode: (consoleMode) => set({ consoleMode }),
     }),
     {
@@ -71,6 +77,7 @@ export const useSettingsStore = create<SettingsState>()(
         fastHierarchyEnabled: s.fastHierarchyEnabled,
         autoSaveEnabled: s.autoSaveEnabled,
         autoCheckUpdatesEnabled: s.autoCheckUpdatesEnabled,
+        confirmBeforeQuit: s.confirmBeforeQuit,
         consoleMode: s.consoleMode,
       }),
     },

@@ -64,6 +64,10 @@ export const ipc = {
   connectDevice: (serial: string, streamEnabled: boolean, platform: Platform, url?: string) =>
     call<void>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
   disconnectDevice: () => call<void>("disconnect_device"),
+  // Tear down all sessions and exit. Called once the user confirms the quit
+  // dialog (or has opted out of it). The app process exits, so this never
+  // resolves on success.
+  confirmQuit: () => call<void>("confirm_quit"),
   enterInspectMode: (fastMode: boolean) => call<HierarchyTree>("enter_inspect_mode", { fastMode }),
   queryElement: (x: number, y: number) => call<UINode | null>("query_element", { x, y }),
   suggestSelectors: (node: UINode) => call<Selector[]>("suggest_selectors", { node }),
@@ -147,6 +151,10 @@ export const events = {
     listen<RunnerExitPayload>("runner:exit", (e) => handler(e.payload)),
   onDeviceDisconnected: (handler: () => void): Promise<UnlistenFn> =>
     listen<null>("device:disconnected", () => handler()),
+  // Emitted by the backend when the user tries to quit (window close or Cmd+Q);
+  // the backend holds the exit until the frontend calls `confirmQuit`.
+  onQuitRequested: (handler: () => void): Promise<UnlistenFn> =>
+    listen<null>("quit-requested", () => handler()),
   onMetricsSample: (handler: (p: MetricsSamplePayload) => void): Promise<UnlistenFn> =>
     listen<MetricsSamplePayload>("metrics:sample", (e) => handler(e.payload)),
   onMetricsTargetChanged: (handler: (p: TargetChangedPayload) => void): Promise<UnlistenFn> =>

@@ -29,7 +29,7 @@ mod web_session;
 pub mod workspace;
 pub mod yaml;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tracing_subscriber::{fmt, EnvFilter};
 
 use credentials::{delete_credential, get_credential, save_credential};
@@ -69,6 +69,7 @@ pub fn run() {
             list_devices,
             connect_device,
             disconnect_device,
+            confirm_quit,
             check_device_health,
             kill_maestro_processes,
             enter_inspect_mode,
@@ -103,6 +104,29 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        // Intercept the window close button (and Windows close): hold the close
+        // and ask the frontend to confirm. `confirm_quit` flips `quit_confirmed`
+        // and triggers the real exit once the user agrees.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.state::<state::AppState>();
+                if !state.quit_confirmed.load(std::sync::atomic::Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.emit("quit-requested", ());
+                }
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        // Intercept app-level quit (macOS Cmd+Q): same confirm-then-cleanup path
+        // as the window close button.
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let state = app_handle.state::<state::AppState>();
+                if !state.quit_confirmed.load(std::sync::atomic::Ordering::SeqCst) {
+                    api.prevent_exit();
+                    let _ = app_handle.emit("quit-requested", ());
+                }
+            }
+        });
 }
