@@ -174,6 +174,40 @@ fn studio_args() -> Vec<String> {
     ]
 }
 
+/// Kill orphaned Chromium automation processes left behind by
+/// `maestro studio -p web`. Maestro drives Chrome through a Selenium-managed
+/// `chromedriver`; SIGKILLing the `maestro studio` JVM (our teardown path, via
+/// `kill_on_drop`/`stop`) reaps neither the driver nor the browser it spawned,
+/// so headed Chrome windows pile up across sessions. We match the Selenium
+/// chromedriver and the `--test-type=webdriver` Chrome it launches — markers a
+/// user's normal Chrome never carries, so personal browsing is untouched. Like
+/// [`kill_orphan_studios_pub`], this is a coarse machine-wide sweep: it would
+/// also catch another tool's Selenium session, which is acceptable for V1.
+#[cfg(unix)]
+async fn kill_orphan_web_browsers() {
+    // chromedriver lives under the Selenium cache; the driven Chrome carries
+    // the webdriver test-type flag. Killing both closes the window and frees
+    // the driver port.
+    for pattern in ["selenium/chromedriver", "test-type=webdriver"] {
+        let Ok(output) = Command::new("pgrep").args(["-f", pattern]).output().await else {
+            continue;
+        };
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let Ok(pid) = line.trim().parse::<u32>() else {
+                continue;
+            };
+            warn!(pid, pattern, "SIGKILL orphan web automation process");
+            let _ = Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output()
+                .await;
+        }
+    }
+}
+
+#[cfg(not(unix))]
+async fn kill_orphan_web_browsers() {}
+
 /// Keeps `maestro studio -p web` alive and owns the HTTP client for the session.
 pub struct WebStudioKeeper {
     http: WebStudioClient,
@@ -191,8 +225,11 @@ impl WebStudioKeeper {
 
     pub async fn start(port: u16, url: Option<&str>) -> AppResult<Arc<Self>> {
         // Cull any orphan studio from a crashed prior session (mirrors the
-        // Android StudioKeeper orphan-kill). Reuse the existing helper.
+        // Android StudioKeeper orphan-kill). Reuse the existing helper, then
+        // sweep the browsers a dead studio leaves behind so a fresh session
+        // doesn't add yet another Chrome window to a growing pile.
         crate::hierarchy::studio::kill_orphan_studios_pub().await;
+        kill_orphan_web_browsers().await;
 
         let maestro = crate::tool_paths::maestro_bin();
         let studio = Command::new(&maestro)
@@ -249,6 +286,9 @@ impl WebStudioKeeper {
         if let Some(mut c) = self.studio_child.lock().await.take() {
             let _ = c.kill().await;
         }
+        // Killing the studio JVM orphans the chromedriver + Chrome it spawned;
+        // reap them so the window closes instead of lingering.
+        kill_orphan_web_browsers().await;
     }
 }
 
