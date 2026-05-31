@@ -12,6 +12,8 @@ export interface Device {
   platform: Platform;
   os_version: string;
   booted: boolean;
+  /** True only for physical iPhones (vs iOS simulators). */
+  physical: boolean;
 }
 
 export interface Bounds {

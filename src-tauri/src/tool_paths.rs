@@ -49,9 +49,14 @@ pub struct ToolPaths {
     pub maestro: Option<String>,
     #[serde(default)]
     pub iproxy: Option<String>,
-    /// Apple Team ID used to code-sign the iOS XCTest runner via `maestro studio`.
+    /// Apple Team ID used to code-sign the iOS XCTest runner via `maestro studio`
+    /// (simulators) or `maestro-ios-device` (physical devices).
     #[serde(default)]
     pub apple_team_id: Option<String>,
+    /// `maestro-ios-device` bridge binary (devicelab) used to build/run the
+    /// XCTest runner + port-forward for physical iOS devices.
+    #[serde(default)]
+    pub maestro_ios_device: Option<String>,
 }
 
 /// Path of the JSON file we persist user overrides to. Per-OS conventional
@@ -115,6 +120,7 @@ struct ResolvedCache {
     adb: Option<String>,
     maestro: Option<String>,
     iproxy: Option<String>,
+    maestro_ios_device: Option<String>,
 }
 
 static CACHE: Lazy<RwLock<ResolvedCache>> = Lazy::new(|| RwLock::new(ResolvedCache::default()));
@@ -124,6 +130,7 @@ fn invalidate_cache() {
     c.adb = None;
     c.maestro = None;
     c.iproxy = None;
+    c.maestro_ios_device = None;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +141,7 @@ const ADB_DEFAULT: &str = "adb";
 const MAESTRO_DEFAULT: &str = "maestro";
 const IPROXY_DEFAULT: &str = "iproxy";
 const DEVICECTL_DEFAULT: &str = "devicectl";
+const MAESTRO_IOS_DEVICE_DEFAULT: &str = "maestro-ios-device";
 
 pub fn adb_bin() -> String {
     if let Some(cached) = CACHE.read().unwrap().adb.clone() {
@@ -193,8 +201,26 @@ pub fn iproxy_bin() -> String {
     resolved
 }
 
+/// `maestro-ios-device` bridge binary (devicelab). Installs alongside `maestro`
+/// (same dir as `which maestro`), so it shares maestro's common paths.
+pub fn maestro_ios_device_bin() -> String {
+    if let Some(cached) = CACHE.read().unwrap().maestro_ios_device.clone() {
+        return cached;
+    }
+    let resolved = resolve_tool(
+        "maestro-ios-device",
+        "MAESTRO_IOS_DEVICE_BIN",
+        MAESTRO_IOS_DEVICE_DEFAULT,
+        load_overrides().maestro_ios_device.as_deref(),
+        &maestro_ios_device_common_paths(),
+    );
+    CACHE.write().unwrap().maestro_ios_device = Some(resolved.clone());
+    resolved
+}
+
 /// User-configured Apple Team ID (or None). The keeper passes it to
-/// `maestro studio --apple-team-id`; if None, maestro uses its own config.
+/// `maestro studio --apple-team-id` (simulators) or `maestro-ios-device
+/// --team-id` (physical); if None, maestro uses its own config.
 pub fn apple_team_id() -> Option<String> {
     load_overrides()
         .apple_team_id
@@ -290,6 +316,18 @@ fn iproxy_common_paths() -> Vec<PathBuf> {
     ]
 }
 
+fn maestro_ios_device_common_paths() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if cfg!(target_os = "macos") {
+        if let Some(home) = dirs_home() {
+            out.push(home.join(".maestro/bin/maestro-ios-device"));
+        }
+        out.push(PathBuf::from("/opt/homebrew/bin/maestro-ios-device"));
+        out.push(PathBuf::from("/usr/local/bin/maestro-ios-device"));
+    }
+    out
+}
+
 fn maestro_common_paths() -> Vec<PathBuf> {
     let mut out = Vec::new();
     if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
@@ -366,6 +404,7 @@ pub struct ToolPathsView {
     pub resolved_adb: String,
     pub resolved_maestro: String,
     pub resolved_iproxy: String,
+    pub resolved_maestro_ios_device: String,
 }
 
 #[tauri::command]
@@ -375,6 +414,7 @@ pub fn get_tool_paths() -> ToolPathsView {
         resolved_adb: adb_bin(),
         resolved_maestro: maestro_bin(),
         resolved_iproxy: iproxy_bin(),
+        resolved_maestro_ios_device: maestro_ios_device_bin(),
     }
 }
 
@@ -387,6 +427,7 @@ pub fn set_tool_paths(
     maestro: Option<String>,
     iproxy: Option<String>,
     apple_team_id: Option<String>,
+    maestro_ios_device: Option<String>,
 ) -> AppResult<ToolPathsView> {
     fn normalize(p: Option<String>) -> Option<String> {
         p.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
@@ -396,6 +437,7 @@ pub fn set_tool_paths(
         maestro: normalize(maestro),
         iproxy: normalize(iproxy),
         apple_team_id: normalize(apple_team_id),
+        maestro_ios_device: normalize(maestro_ios_device),
     };
     save_overrides(&new)?;
     invalidate_cache();
@@ -470,11 +512,16 @@ mod tests {
             maestro: None,
             iproxy: Some("/opt/homebrew/bin/iproxy".into()),
             apple_team_id: Some("ABCDE12345".into()),
+            maestro_ios_device: Some("/opt/homebrew/bin/maestro-ios-device".into()),
         };
         let json = serde_json::to_string(&tp).unwrap();
         let back: ToolPaths = serde_json::from_str(&json).unwrap();
         assert_eq!(back.iproxy.as_deref(), Some("/opt/homebrew/bin/iproxy"));
         assert_eq!(back.apple_team_id.as_deref(), Some("ABCDE12345"));
+        assert_eq!(
+            back.maestro_ios_device.as_deref(),
+            Some("/opt/homebrew/bin/maestro-ios-device")
+        );
     }
 
     #[test]

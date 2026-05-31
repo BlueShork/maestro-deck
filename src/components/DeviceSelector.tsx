@@ -19,7 +19,7 @@ import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { toast } from "@/stores/toastStore";
-import type { HealthReport } from "@/types";
+import type { Device, HealthReport } from "@/types";
 import { isHealthReportClean } from "@/types";
 
 export function DeviceSelector() {
@@ -36,11 +36,14 @@ export function DeviceSelector() {
     disconnect,
   } = useDeviceStore();
 
-  // Booted iOS sims (and all non-iOS devices) render as normal rows; shutdown
-  // iOS sims go into the "Launch a simulator…" picker (there can be dozens).
-  const rows = devices.filter((d) => !(d.platform === "ios" && !d.booted));
+  // Booted iOS sims, physical iPhones, and all non-iOS devices render as normal
+  // rows; only SHUTDOWN iOS simulators go into the "Launch a simulator…" picker
+  // (there can be dozens). Physical devices have booted=false but must stay in
+  // the main list, hence the explicit `!d.physical` guard.
+  const isShutdownSim = (d: Device) => d.platform === "ios" && !d.booted && !d.physical;
+  const rows = devices.filter((d) => !isShutdownSim(d));
   const shutdownSims = devices
-    .filter((d) => d.platform === "ios" && !d.booted)
+    .filter(isShutdownSim)
     .sort(
       (a, b) =>
         a.model.localeCompare(b.model) ||
@@ -178,7 +181,9 @@ export function DeviceSelector() {
                         ? "Disconnecting…"
                         : d.platform === "web"
                           ? "Chromium"
-                          : `${d.serial} · ${d.platform === "ios" ? "iOS" : "Android"} ${d.os_version}`}
+                          : d.platform === "ios"
+                            ? `${d.serial} · iOS ${d.os_version} · ${d.physical ? "device" : "simulator"}`
+                            : `${d.serial} · Android ${d.os_version}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">

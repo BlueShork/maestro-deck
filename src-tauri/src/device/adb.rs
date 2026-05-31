@@ -84,6 +84,7 @@ pub fn get_device_info(serial: &str) -> AppResult<Device> {
         platform: crate::device::Platform::Android,
         os_version: android_version,
         booted: false,
+        physical: false,
     })
 }
 

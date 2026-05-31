@@ -22,6 +22,7 @@ pub fn synthetic_target() -> Device {
         platform: Platform::Web,
         os_version: String::new(),
         booted: false,
+        physical: false,
     }
 }
 

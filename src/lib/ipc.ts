@@ -96,7 +96,15 @@ export const ipc = {
     maestro: string | null,
     iproxy: string | null,
     appleTeamId: string | null,
-  ) => call<ToolPathsView>("set_tool_paths", { adb, maestro, iproxy, appleTeamId }),
+    maestroIosDevice: string | null,
+  ) =>
+    call<ToolPathsView>("set_tool_paths", {
+      adb,
+      maestro,
+      iproxy,
+      appleTeamId,
+      maestroIosDevice,
+    }),
 };
 
 export interface ToolPathsView {
@@ -105,10 +113,12 @@ export interface ToolPathsView {
     maestro: string | null;
     iproxy: string | null;
     apple_team_id: string | null;
+    maestro_ios_device: string | null;
   };
   resolved_adb: string;
   resolved_maestro: string;
   resolved_iproxy: string;
+  resolved_maestro_ios_device: string;
 }
 
 export interface FrameEvent {

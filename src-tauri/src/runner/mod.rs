@@ -318,6 +318,111 @@ pub async fn spawn_ios_runner(app: AppHandle, udid: &str, flow_path: &str) -> Ap
     Ok(pid)
 }
 
+/// True if the resolved maestro exposes the `--driver-host-port` flag, i.e. it
+/// is the devicelab-patched maestro that can drive a physical device by talking
+/// to an already-running XCTest driver (the `maestro-ios-device` bridge).
+async fn maestro_supports_driver_host_port(bin: &str) -> bool {
+    Command::new(bin)
+        .no_window()
+        .arg("--help")
+        .output()
+        .await
+        .map(|o| {
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&o.stdout),
+                String::from_utf8_lossy(&o.stderr)
+            );
+            text.contains("driver-host-port")
+        })
+        .unwrap_or(false)
+}
+
+/// Spawn `maestro --driver-host-port <port> --device <udid> test <flow>` for a
+/// physical iOS device. The run REUSES the `maestro-ios-device` bridge's
+/// already-running XCTest driver (forwarded on `port`) instead of bringing up
+/// its own — so the caller must keep the keeper alive. Requires the
+/// devicelab-patched maestro (stock maestro has no `--driver-host-port`); we
+/// preflight that flag and surface a clear setup error if it's missing.
+pub async fn spawn_ios_device_runner(
+    app: AppHandle,
+    udid: &str,
+    flow_path: &str,
+    port: u16,
+) -> AppResult<u32> {
+    let bin = maestro_bin();
+    if !maestro_supports_driver_host_port(&bin).await {
+        return Err(AppError::RunnerFailed(
+            "this maestro has no --driver-host-port flag — physical-device flow runs need \
+             devicelab's patched maestro (install maestro-ios-device via setup.sh)"
+                .into(),
+        ));
+    }
+    let port_str = port.to_string();
+    info!(bin = %bin, udid, port, flow = %flow_path, "spawning maestro (ios physical)");
+
+    let mut child = Command::new(&bin)
+        .no_window()
+        .args(["--driver-host-port", &port_str, "--device", udid, "test"])
+        .arg(flow_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::RunnerNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+
+    let pid = child.id().ok_or_else(|| {
+        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
+    })?;
+
+    if let Some(stdout) = child.stdout.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stdout).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stdout", "{line}");
+                let _ = app.emit(EVT_STDOUT, &line);
+            }
+        });
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stderr", "{line}");
+                let _ = app.emit(EVT_STDERR, &line);
+            }
+        });
+    }
+
+    let (kill_tx, kill_rx) = oneshot::channel::<()>();
+    RUNNERS.lock().await.insert(pid, kill_tx);
+
+    let app_exit = app.clone();
+    tokio::spawn(async move {
+        let code = tokio::select! {
+            status = child.wait() => status.ok().and_then(|s| s.code()),
+            _ = kill_rx => {
+                if let Err(e) = child.kill().await {
+                    warn!(pid, error = %e, "child kill failed");
+                }
+                child.wait().await.ok().and_then(|s| s.code())
+            }
+        };
+        RUNNERS.lock().await.remove(&pid);
+        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
+    });
+
+    Ok(pid)
+}
+
 pub async fn kill_runner(pid: u32) -> AppResult<()> {
     let tx = RUNNERS.lock().await.remove(&pid);
     match tx {

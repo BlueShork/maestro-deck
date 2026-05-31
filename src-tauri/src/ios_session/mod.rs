@@ -229,10 +229,13 @@ impl IosHttpClient {
     }
 }
 
-/// Port the Maestro XCTest runner serves on. On a SIMULATOR this is reachable
-/// directly on the host loopback (the sim shares the host network) — no iproxy,
-/// no tunnel.
+/// Port the Maestro XCTest runner serves on the device. On a SIMULATOR this is
+/// reachable directly on the host loopback (the sim shares the host network).
+/// On a PHYSICAL device, `maestro-ios-device` forwards a local port to it.
 pub const DRIVER_PORT: u16 = 22087;
+/// Local port `maestro-ios-device` forwards to the physical device's :22087
+/// (the bridge's default forward port).
+pub const PHYSICAL_BRIDGE_PORT: u16 = 6001;
 /// Generous readiness budget: a cold simulator + first runner install can take
 /// well over a minute. ~180 s total.
 const READY_ATTEMPTS: u32 = 360;
@@ -245,13 +248,29 @@ fn studio_args(udid: &str) -> Vec<&str> {
     vec!["--device", udid, "studio", "--no-window"]
 }
 
-/// Boots a simulator + lets `maestro studio` install/launch/hold the XCUITest
-/// runner on it, and owns the HTTP client + cached DeviceInfo for the session.
+/// Which kind of iOS target a keeper drives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IosTarget {
+    /// Booted simulator: `simctl boot` + `maestro studio`, driver on :22087,
+    /// screenshots via `simctl`.
+    Simulator,
+    /// Physical iPhone: the `maestro-ios-device` bridge builds/runs the runner
+    /// and forwards `PHYSICAL_BRIDGE_PORT` → device :22087; screenshots come
+    /// from the driver's HTTP `/screenshot`.
+    Physical,
+}
+
+/// Holds the on-device XCTest runner alive (`maestro studio` for simulators,
+/// `maestro-ios-device` for physical devices) and owns the HTTP client + cached
+/// DeviceInfo for the session.
 pub struct IosDriverKeeper {
     udid: String,
     http: IosHttpClient,
     device_info: parking_lot::RwLock<Option<DeviceInfo>>,
-    studio_child: AsyncMutex<Option<Child>>,
+    /// The supervised bridge child: `maestro studio` (sim) or
+    /// `maestro-ios-device` (physical).
+    driver_child: AsyncMutex<Option<Child>>,
+    target: IosTarget,
 }
 
 impl IosDriverKeeper {
@@ -264,16 +283,30 @@ impl IosDriverKeeper {
     pub fn device_info(&self) -> Option<DeviceInfo> {
         *self.device_info.read()
     }
+    /// True for physical devices (drives screenshot source + reuse checks).
+    pub fn is_physical(&self) -> bool {
+        self.target == IosTarget::Physical
+    }
 
     /// True once the driver has served real data at least once (cached). Cheap, no I/O.
     pub fn is_ready(&self) -> bool {
         self.device_info.read().is_some()
     }
 
+    /// Start the right keeper for the target. Returns IMMEDIATELY — does NOT
+    /// wait for readiness (cold start can take minutes). Call `wait_until_ready`
+    /// before issuing driver requests (hierarchy/input).
+    pub async fn spawn(udid: &str, physical: bool) -> AppResult<Arc<Self>> {
+        if physical {
+            Self::spawn_physical(udid).await
+        } else {
+            Self::spawn_simulator(udid).await
+        }
+    }
+
     /// Boot the simulator and spawn `maestro studio` (installs/launches the XCTest
-    /// runner). Returns IMMEDIATELY — does NOT wait for readiness (~2 min cold).
-    /// Call `wait_until_ready` before issuing driver requests (hierarchy/input).
-    pub async fn spawn(udid: &str) -> AppResult<Arc<Self>> {
+    /// runner on :22087).
+    async fn spawn_simulator(udid: &str) -> AppResult<Arc<Self>> {
         // Boot the sim (idempotent — `simctl boot` errors if already booted, ignored).
         let _ = Command::new("xcrun")
             .args(["simctl", "boot", udid])
@@ -298,7 +331,44 @@ impl IosDriverKeeper {
             udid: udid.to_string(),
             http: IosHttpClient::new(DRIVER_PORT)?,
             device_info: parking_lot::RwLock::new(None),
-            studio_child: AsyncMutex::new(Some(studio)),
+            driver_child: AsyncMutex::new(Some(studio)),
+            target: IosTarget::Simulator,
+        }))
+    }
+
+    /// Spawn the `maestro-ios-device` bridge (devicelab): it builds/installs/runs
+    /// the XCTest runner on the physical device and forwards
+    /// `PHYSICAL_BRIDGE_PORT` → device :22087. Requires an Apple Team ID to sign
+    /// the runner.
+    async fn spawn_physical(udid: &str) -> AppResult<Arc<Self>> {
+        let team = crate::tool_paths::apple_team_id().ok_or_else(|| {
+            AppError::IosCommandFailed(
+                "Set your Apple Team ID in Settings to drive a physical iOS device".into(),
+            )
+        })?;
+        let bin = crate::tool_paths::maestro_ios_device_bin();
+        let bridge = Command::new(&bin)
+            .args(["--team-id", &team, "--device", udid])
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    AppError::IosToolMissing(
+                        "maestro-ios-device not found — install devicelab's maestro-ios-device \
+                         (setup.sh) and set its path in Settings"
+                            .into(),
+                    )
+                } else {
+                    AppError::IosCommandFailed(format!("maestro-ios-device: {e}"))
+                }
+            })?;
+
+        Ok(Arc::new(Self {
+            udid: udid.to_string(),
+            http: IosHttpClient::new(PHYSICAL_BRIDGE_PORT)?,
+            device_info: parking_lot::RwLock::new(None),
+            driver_child: AsyncMutex::new(Some(bridge)),
+            target: IosTarget::Physical,
         }))
     }
 
@@ -319,12 +389,12 @@ impl IosDriverKeeper {
             if self.http.status().await {
                 if let Ok(di) = self.http.device_info().await {
                     *self.device_info.write() = Some(di);
-                    info!(udid = %self.udid, "iOS simulator driver ready");
+                    info!(udid = %self.udid, physical = self.is_physical(), "iOS driver ready");
                     return true;
                 }
             }
             if attempt % 10 == 0 {
-                info!(udid = %self.udid, attempt, "waiting for iOS simulator driver...");
+                info!(udid = %self.udid, attempt, physical = self.is_physical(), "waiting for iOS driver...");
             }
             if attempt + 1 < READY_ATTEMPTS {
                 sleep(std::time::Duration::from_millis(READY_BACKOFF_MS)).await;
@@ -334,16 +404,17 @@ impl IosDriverKeeper {
     }
 
     pub async fn stop(&self) {
-        if let Some(mut c) = self.studio_child.lock().await.take() {
+        if let Some(mut c) = self.driver_child.lock().await.take() {
             let _ = c.kill().await;
         }
-        // Leave the simulator booted for reuse.
+        // Leave the simulator booted for reuse (no-op for physical devices).
     }
 
-    /// True while the `maestro studio` child is still running (regardless of
-    /// driver readiness). Used to decide whether a cached keeper is reusable.
+    /// True while the bridge child (`maestro studio` / `maestro-ios-device`) is
+    /// still running (regardless of driver readiness). Used to decide whether a
+    /// cached keeper is reusable.
     pub async fn is_process_alive(&self) -> bool {
-        match self.studio_child.lock().await.as_mut() {
+        match self.driver_child.lock().await.as_mut() {
             Some(child) => matches!(child.try_wait(), Ok(None)),
             None => false,
         }
@@ -405,6 +476,9 @@ pub fn spawn_screenshot_poller(
             .device_info()
             .map(|d| (d.width_pixels, d.height_pixels))
             .unwrap_or((0, 0));
+        // Physical devices: the simulator `simctl` path doesn't apply — pull
+        // frames from the driver's HTTP `/screenshot` instead.
+        let physical = keeper.is_physical();
         loop {
             tokio::select! {
                 biased;
@@ -412,7 +486,13 @@ pub fn spawn_screenshot_poller(
                     info!("iOS screenshot poller aborted");
                     return;
                 }
-                shot = capture_simulator_screenshot(keeper.udid()) => {
+                shot = async {
+                    if physical {
+                        keeper.http().screenshot().await
+                    } else {
+                        capture_simulator_screenshot(keeper.udid()).await
+                    }
+                } => {
                     match shot {
                         Ok(data) => {
                             let payload = IosFramePayload { data, width: w, height: h };

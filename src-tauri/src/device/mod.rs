@@ -29,6 +29,12 @@ pub struct Device {
     /// Always false for Android and physical devices.
     #[serde(default)]
     pub booted: bool,
+    /// True only for physical iPhones (discovered via `devicectl`). Selects the
+    /// `maestro-ios-device` bridge keeper + HTTP screenshot path instead of the
+    /// simulator's `simctl`/`maestro studio` path. False for Android, Web, and
+    /// iOS simulators.
+    #[serde(default)]
+    pub physical: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,6 +102,7 @@ mod tests {
             platform: Platform::Web,
             os_version: String::new(),
             booted: false,
+            physical: false,
         };
         let s = serde_json::to_string(&d).unwrap();
         assert!(s.contains("\"platform\":\"web\""), "got {s}");
@@ -114,6 +121,7 @@ mod tests {
             platform: Platform::Ios,
             os_version: "18.0".into(),
             booted: false,
+            physical: false,
         };
         let s = serde_json::to_string(&d).unwrap();
         let back: Device = serde_json::from_str(&s).unwrap();

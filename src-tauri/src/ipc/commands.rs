@@ -541,10 +541,19 @@ async fn ensure_ios_keeper(
     udid: &str,
     state: &AppState,
 ) -> AppResult<std::sync::Arc<crate::ios_session::IosDriverKeeper>> {
+    // The keeper is always for the currently-connected device, so read its
+    // physical flag from state rather than threading it through every caller.
+    let physical = state
+        .connected_device
+        .read()
+        .as_ref()
+        .map(|d| d.physical)
+        .unwrap_or(false);
     let mut slot = state.ios_driver.lock().await;
-    // Reuse the keeper for the same sim while its `maestro studio` process is
-    // still running — even if the driver isn't *ready* yet (it may be warming).
-    // Only respawn for a different sim or a dead process.
+    // Reuse the keeper for the same device while its bridge process
+    // (`maestro studio` / `maestro-ios-device`) is still running — even if the
+    // driver isn't *ready* yet (it may be warming). Only respawn for a different
+    // device or a dead process.
     let reuse = match slot.as_ref() {
         Some(k) => k.udid() == udid && k.is_process_alive().await,
         None => false,
@@ -553,7 +562,7 @@ async fn ensure_ios_keeper(
         if let Some(existing) = slot.take() {
             existing.stop().await;
         }
-        *slot = Some(crate::ios_session::IosDriverKeeper::spawn(udid).await?);
+        *slot = Some(crate::ios_session::IosDriverKeeper::spawn(udid, physical).await?);
     }
     Ok(slot.as_ref().unwrap().clone())
 }
@@ -764,6 +773,19 @@ pub async fn run_flow(
     }
 
     if device.platform == crate::device::Platform::Ios {
+        if device.physical {
+            // Physical device: the run REUSES the already-running
+            // `maestro-ios-device` bridge driver via `--driver-host-port`, so we
+            // must NOT tear the keeper down (unlike the simulator path). The
+            // HTTP `/screenshot` poller keeps the device mirrored throughout.
+            return runner::spawn_ios_device_runner(
+                app,
+                &device.serial,
+                &file_path,
+                crate::ios_session::PHYSICAL_BRIDGE_PORT,
+            )
+            .await;
+        }
         // iOS simulator: `maestro --udid <udid> test`. Stop the studio keeper
         // first — it holds the XCTest driver on :22087, which `maestro test`
         // needs to bring up itself; running both contends for the simulator.

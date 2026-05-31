@@ -26,6 +26,12 @@ const TOOLS = [
     placeholder: "/opt/homebrew/bin/iproxy",
     hint: "USB port-forwarder for physical iPhones — from libusbmuxd (`brew install libusbmuxd`).",
   },
+  {
+    key: "maestro_ios_device" as const,
+    label: "maestro-ios-device (physical iOS)",
+    placeholder: "~/.maestro/bin/maestro-ios-device",
+    hint: "devicelab bridge that runs the XCTest driver on a real iPhone. Install via maestro-ios-device's setup.sh; needed only for physical iOS devices.",
+  },
 ];
 
 export function ToolPathsSettings() {
@@ -34,8 +40,9 @@ export function ToolPathsSettings() {
     adb: string;
     maestro: string;
     iproxy: string;
+    maestro_ios_device: string;
     appleTeamId: string;
-  }>({ adb: "", maestro: "", iproxy: "", appleTeamId: "" });
+  }>({ adb: "", maestro: "", iproxy: "", maestro_ios_device: "", appleTeamId: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -52,6 +59,7 @@ export function ToolPathsSettings() {
         adb: v.overrides.adb ?? "",
         maestro: v.overrides.maestro ?? "",
         iproxy: v.overrides.iproxy ?? "",
+        maestro_ios_device: v.overrides.maestro_ios_device ?? "",
         appleTeamId: v.overrides.apple_team_id ?? "",
       });
       setError(null);
@@ -70,6 +78,7 @@ export function ToolPathsSettings() {
         draft.maestro || null,
         draft.iproxy || null,
         draft.appleTeamId || null,
+        draft.maestro_ios_device || null,
       );
       setView(v);
       setSaved(true);
@@ -81,7 +90,7 @@ export function ToolPathsSettings() {
     }
   }
 
-  async function handleBrowse(key: "adb" | "maestro" | "iproxy") {
+  async function handleBrowse(key: "adb" | "maestro" | "iproxy" | "maestro_ios_device") {
     try {
       const picked = await openFileDialog({
         multiple: false,
@@ -101,6 +110,7 @@ export function ToolPathsSettings() {
     ((view.overrides.adb ?? "") !== draft.adb ||
       (view.overrides.maestro ?? "") !== draft.maestro ||
       (view.overrides.iproxy ?? "") !== draft.iproxy ||
+      (view.overrides.maestro_ios_device ?? "") !== draft.maestro_ios_device ||
       (view.overrides.apple_team_id ?? "") !== draft.appleTeamId);
 
   return (
