@@ -102,6 +102,62 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.maximize();
             }
+            // macOS only: the default app menu's "Quit" (Cmd+Q) calls AppKit
+            // `terminate:`, which hard-exits WITHOUT a preventable
+            // `RunEvent::ExitRequested` — so the confirm dialog never gets a
+            // chance. Replace the menu with one whose Quit is a plain item that
+            // emits `quit-requested` instead of terminating; the rest mirrors
+            // the macOS defaults (predefined items keep their native behaviour,
+            // so editor copy/paste/undo still work). Windows/Linux have no app
+            // menu and quit via the window close path (handled below).
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+                let h = app.handle();
+                let quit = MenuItemBuilder::new("Quit Maestro Deck")
+                    .id("quit")
+                    .accelerator("Cmd+Q")
+                    .build(h)?;
+                let app_menu = SubmenuBuilder::new(h, "Maestro Deck")
+                    .about(Some(AboutMetadata::default()))
+                    .separator()
+                    .services()
+                    .separator()
+                    .hide()
+                    .hide_others()
+                    .show_all()
+                    .separator()
+                    .item(&quit)
+                    .build()?;
+                let edit_menu = SubmenuBuilder::new(h, "Edit")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .select_all()
+                    .build()?;
+                let window_menu = SubmenuBuilder::new(h, "Window")
+                    .minimize()
+                    .maximize()
+                    .separator()
+                    .fullscreen()
+                    .close_window()
+                    .build()?;
+                let menu = MenuBuilder::new(h)
+                    .item(&app_menu)
+                    .item(&edit_menu)
+                    .item(&window_menu)
+                    .build()?;
+                app.set_menu(menu)?;
+                let quit_id = quit.id().clone();
+                app.on_menu_event(move |app, event| {
+                    if event.id() == &quit_id {
+                        let _ = app.emit("quit-requested", ());
+                    }
+                });
+            }
             Ok(())
         })
         // Intercept the window close button (and Windows close): hold the close
