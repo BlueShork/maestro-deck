@@ -143,15 +143,16 @@ pub async fn connect_device(
 }
 
 /// Upgrade the iOS live preview from the `simctl` screenshot poll to a fluid
-/// ScreenCaptureKit stream. Called by the frontend once an iOS device is
+/// headless-framebuffer stream. Called by the frontend once an iOS device is
 /// connected with streaming. Waits for the background-warmed driver to become
-/// ready (SCK needs `device_info` for the aspect-ratio crop) before attempting
-/// the upgrade. Returns `true` if SCK took over (screenshot poller aborted),
-/// `false` if SCK was unavailable and the screenshot poller keeps running.
-/// Never errors in a way that blanks the screen.
+/// ready (the crop needs `device_info` for the aspect-ratio crop) before
+/// attempting the upgrade. Returns `true` if the native preview took over
+/// (screenshot poller aborted), `false` if it was unavailable and the
+/// screenshot poller keeps running. Never errors in a way that blanks the
+/// screen.
 #[cfg(target_os = "macos")]
 #[tauri::command]
-pub async fn upgrade_ios_preview_to_sck(
+pub async fn upgrade_ios_preview(
     channel: Channel<InvokeResponseBody>,
     state: State<'_, AppState>,
 ) -> AppResult<bool> {
@@ -180,7 +181,7 @@ pub async fn upgrade_ios_preview_to_sck(
     {
         Ok(handle) => {
             // Guard: the user may have disconnected or switched devices during
-            // the readiness wait / SCK start. If so, don't install a stale
+            // the readiness wait / preview start. If so, don't install a stale
             // session (which would leak); tear it down immediately.
             let still_connected = state
                 .connected_device
@@ -196,15 +197,15 @@ pub async fn upgrade_ios_preview_to_sck(
             if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
                 let _ = abort.send(());
             }
-            if let Some(old) = state.ios_sck_session.lock().await.take() {
+            if let Some(old) = state.ios_preview_session.lock().await.take() {
                 old.teardown().await;
             }
-            *state.ios_sck_session.lock().await = Some(handle);
-            info!("iOS preview upgraded to ScreenCaptureKit");
+            *state.ios_preview_session.lock().await = Some(handle);
+            info!("iOS preview upgraded to headless framebuffer");
             Ok(true)
         }
         Err(e) => {
-            info!(error = %e, "SCK upgrade unavailable; staying on screenshot poller");
+            info!(error = %e, "native preview unavailable; staying on screenshot poller");
             Ok(false)
         }
     }
@@ -212,7 +213,7 @@ pub async fn upgrade_ios_preview_to_sck(
 
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
-pub async fn upgrade_ios_preview_to_sck(
+pub async fn upgrade_ios_preview(
     _channel: tauri::ipc::Channel<tauri::ipc::InvokeResponseBody>,
     _state: State<'_, AppState>,
 ) -> AppResult<bool> {
@@ -240,7 +241,7 @@ pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResu
                 let _ = abort.send(());
             }
             #[cfg(target_os = "macos")]
-            if let Some(handle) = state.ios_sck_session.lock().await.take() {
+            if let Some(handle) = state.ios_preview_session.lock().await.take() {
                 handle.teardown().await;
             }
             let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
@@ -382,14 +383,14 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
     *state.scid.write() = None;
 }
 
-/// Tear down the iOS session: stop the screenshot poller, the SCK stream (if
-/// active), and the keeper (kills `maestro studio` + `iproxy`).
+/// Tear down the iOS session: stop the screenshot poller, the native preview
+/// stream (if active), and the keeper (kills `maestro studio` + `iproxy`).
 async fn teardown_ios(state: &AppState) {
     if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
         let _ = abort.send(());
     }
     #[cfg(target_os = "macos")]
-    if let Some(handle) = state.ios_sck_session.lock().await.take() {
+    if let Some(handle) = state.ios_preview_session.lock().await.take() {
         handle.teardown().await;
     }
     if let Some(keeper) = state.ios_driver.lock().await.take() {

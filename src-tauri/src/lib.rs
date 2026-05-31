@@ -86,7 +86,7 @@ pub fn run() {
             stop_metrics,
             start_stream,
             stop_stream,
-            upgrade_ios_preview_to_sck,
+            upgrade_ios_preview,
             vertex_get_access_token,
             save_credential,
             get_credential,

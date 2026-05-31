@@ -9,9 +9,8 @@
 //! frontend over a Tauri binary [`Channel`].
 //!
 //! NOTE: the capture source is now the CoreSimulator display framebuffer
-//! (`IOSurface`), NOT ScreenCaptureKit. The command/hook names still say "sck"
-//! for now (cosmetic rename is a separate follow-up). The dormant SCK source
-//! lives in `crate::ios_capture` and is no longer used by this path.
+//! (`IOSurface`), NOT ScreenCaptureKit. The dormant SCK source lives in
+//! `crate::ios_capture` and is no longer used by this path.
 //!
 //! ## Threading
 //! [`SimCaptureSession::start`] / [`SimCaptureSession::stop`] are `Send` async
@@ -104,20 +103,16 @@ pub async fn spawn_ios_preview(
     // Drain task runs on the MAIN runtime (only touches Send values).
     let (abort_tx, mut abort_rx) = oneshot::channel::<()>();
     tokio::spawn(async move {
-        // Temporary throughput instrumentation: log frames actually sent per
-        // second + their pixel size, to confirm where any choppiness lives.
-        let mut sent: u32 = 0;
-        let mut last = std::time::Instant::now();
         loop {
             tokio::select! {
                 biased;
                 _ = &mut abort_rx => {
-                    info!("iOS SCK preview task aborted");
+                    info!("iOS preview task aborted");
                     return;
                 }
                 frame = rx.recv() => {
                     let Some(frame) = frame else {
-                        warn!("SCK frame channel closed");
+                        warn!("preview frame channel closed");
                         return;
                     };
                     // Identity crop + BGRA→RGBA: the IOSurface is already the pure
@@ -130,14 +125,8 @@ pub async fn spawn_ios_preview(
                             .send(InvokeResponseBody::Raw(encode_frame(w, h, &rgba)))
                             .is_err()
                         {
-                            info!("SCK frame channel send failed (frontend gone)");
+                            info!("preview frame channel send failed (frontend gone)");
                             return;
-                        }
-                        sent += 1;
-                        if last.elapsed().as_secs() >= 1 {
-                            info!("SCK preview throughput: {sent} frames/s sent ({w}x{h})");
-                            sent = 0;
-                            last = std::time::Instant::now();
                         }
                     }
                 }
@@ -145,7 +134,7 @@ pub async fn spawn_ios_preview(
         }
     });
 
-    info!(device = %device_name, "iOS SCK preview started (headless CoreSimulator framebuffer)");
+    info!(device = %device_name, "iOS preview started (headless CoreSimulator framebuffer)");
     Ok(PreviewHandle {
         session: Some(session),
         abort: Some(abort_tx),

@@ -219,7 +219,7 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   }, [canvasRef, pushFrame]);
 }
 
-function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean) {
+function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<{ w: number; h: number; rgba: Uint8ClampedArray<ArrayBuffer> } | null>(
     null,
@@ -229,16 +229,6 @@ function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean)
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-
-    // Temporary throughput instrumentation: frames received over the Channel vs
-    // frames actually painted (rAF drops coalesced frames), logged each second.
-    let received = 0;
-    let painted = 0;
-    const fpsTimer = window.setInterval(() => {
-      console.debug(`[sck] received ${received}/s, painted ${painted}/s`);
-      received = 0;
-      painted = 0;
-    }, 1000);
 
     const drawNext = () => {
       rafRef.current = null;
@@ -251,14 +241,12 @@ function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean)
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.putImageData(new ImageData(frame.rgba, frame.w, frame.h), 0, 0);
-      painted += 1;
       pushFrame({ width: frame.w, height: frame.h });
     };
 
     const channel = new Channel<ArrayBuffer>();
     channel.onmessage = (buf) => {
       if (cancelled || buf.byteLength < 8) return;
-      received += 1;
       const view = new DataView(buf);
       const w = view.getUint32(0, true);
       const h = view.getUint32(4, true);
@@ -271,15 +259,14 @@ function useSckStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean)
     };
 
     // Fire-and-forget: false just means we stay on the screenshot path.
-    void ipc.upgradeIosPreviewToSck(channel).catch(() => {});
+    void ipc.upgradeIosPreview(channel).catch(() => {});
 
     return () => {
       cancelled = true;
-      window.clearInterval(fpsTimer);
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       pendingRef.current = null;
-      // Backend tears the SCK session down on disconnect/start_stream.
+      // Backend tears the preview session down on disconnect/start_stream.
     };
   }, [canvasRef, enabled, pushFrame]);
 }
@@ -316,7 +303,7 @@ export function DeviceView() {
   // connected platform actually paints — the Android H.264 hook is unchanged.
   useFrameStream(canvasRef);
   useScreenshotStream(canvasRef);
-  useSckStream(canvasRef, current?.platform === "ios" && streamEnabled);
+  useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled);
 
   const deviceWidth = streamW || current?.screen_width || 1080;
   const deviceHeight = streamH || current?.screen_height || 2340;

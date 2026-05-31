@@ -84,8 +84,8 @@ export const ipc = {
   checkDeviceHealth: (serial: string) => call<HealthReport>("check_device_health", { serial }),
   killMaestroProcesses: (serial: string, report: HealthReport) =>
     call<KillReport>("kill_maestro_processes", { serial, report }),
-  upgradeIosPreviewToSck: (channel: Channel<ArrayBuffer>) =>
-    call<boolean>("upgrade_ios_preview_to_sck", { channel }),
+  upgradeIosPreview: (channel: Channel<ArrayBuffer>) =>
+    call<boolean>("upgrade_ios_preview", { channel }),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
   setToolPaths: (
     adb: string | null,
