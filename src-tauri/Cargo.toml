@@ -31,7 +31,7 @@ tauri-plugin-process = "2.0"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
 # JWT signing for Vertex Oauth2
-jsonwebtoken = "9"
+jsonwebtoken = "10"
 
 # HTTP for token exchange
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
