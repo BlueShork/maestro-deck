@@ -94,6 +94,8 @@ export const ipc = {
   // one-click auto-install (downloads the binary + runs its `setup`).
   iosDeviceBridgeInstalled: () => call<boolean>("ios_device_bridge_installed"),
   installIosDeviceBridge: () => call<string>("install_ios_device_bridge"),
+  // Auto-detected physical-iOS prerequisites for the in-app setup checklist.
+  iosPhysicalSetupStatus: () => call<IosPhysicalSetupStatus>("ios_physical_setup_status"),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
   setToolPaths: (
     adb: string | null,
@@ -110,6 +112,14 @@ export const ipc = {
       maestroIosDevice,
     }),
 };
+
+export interface IosPhysicalSetupStatus {
+  xcodeInstalled: boolean;
+  maestroVersion: string | null;
+  // serde `rename_all = "camelCase"` turns `maestro_is_2_5_1` into `maestroIs251`.
+  maestroIs251: boolean;
+  maestroPatched: boolean;
+}
 
 export interface ToolPathsView {
   overrides: {

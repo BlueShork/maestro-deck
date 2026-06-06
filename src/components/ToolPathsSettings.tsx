@@ -6,6 +6,7 @@ import { Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ipc, type ToolPathsView } from "@/lib/ipc";
+import { PhysicalIosSetup } from "@/components/settings/PhysicalIosSetup";
 
 const TOOLS = [
   {
@@ -49,6 +50,8 @@ export function ToolPathsSettings() {
   // Physical-iOS bridge (devicelab) auto-install state.
   const [bridgeInstalled, setBridgeInstalled] = useState<boolean | null>(null);
   const [installing, setInstalling] = useState(false);
+  // Bump to force the physical-iOS setup checklist to re-fetch its status.
+  const [setupRefresh, setSetupRefresh] = useState(0);
 
   useEffect(() => {
     void refresh();
@@ -82,6 +85,7 @@ export function ToolPathsSettings() {
     try {
       await ipc.installIosDeviceBridge();
       await refresh();
+      setSetupRefresh((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -103,6 +107,7 @@ export function ToolPathsSettings() {
       );
       setView(v);
       setSaved(true);
+      setSetupRefresh((n) => n + 1);
       window.setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -136,6 +141,14 @@ export function ToolPathsSettings() {
 
   return (
     <div className="flex flex-col gap-3">
+      <PhysicalIosSetup
+        bridgeInstalled={bridgeInstalled}
+        teamIdSet={draft.appleTeamId.trim() !== ""}
+        onInstall={() => void handleInstallBridge()}
+        installing={installing}
+        refreshKey={setupRefresh}
+      />
+
       <div>
         <span className="text-xs font-medium text-muted-foreground">Tool paths</span>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
