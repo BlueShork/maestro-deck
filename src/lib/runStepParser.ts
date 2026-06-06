@@ -16,28 +16,36 @@ interface Pattern {
   bareRe?: RegExp;
 }
 
-// Patterns are ordered most-specific-first. Each `re` captures the arg
-// (typically a quoted text/id); `bareRe` matches commands that have no
-// useful arg in the runner output. The Maestro CLI sometimes inserts
-// `(Optional)` after the verb when the YAML had `optional: true` —
-// we strip it in `stripOptionalMarker` before matching.
+// Patterns are ordered most-specific-first. For arg-bearing commands, `re`
+// captures the raw *target* in group 1 — which may be a quoted text selector
+// (`"Welcome"`), an unquoted id selector (`id: welcomeMessage`), or an unquoted
+// value (`Alice` for inputText). `argFromTarget` then normalizes it to the bare
+// value so it lines up with the YAML AST arg. `bareRe` matches commands with no
+// useful arg. The Maestro CLI sometimes inserts `(Optional)` after the verb when
+// the YAML had `optional: true` — we strip it in `stripOptionalMarker` first.
+//
+// Capture rules:
+//   - bare verbs (no trailing keyword): grab the target up to the `...` run
+//     indicator via a `(?=\.\.\.)` lookahead, so unquoted ids/values are caught.
+//   - assert/scroll verbs: grab the target up to ` is [not] visible`.
+//   - app/link/key verbs: the value is always quoted, so capture inside quotes.
 const PATTERNS: Pattern[] = [
   { command: "launchApp", re: /^Launch app "(.+?)"/ },
   { command: "stopApp", re: /^Stop app "(.+?)"/ },
-  { command: "tapOn", re: /^Tap on "(.+?)"/ },
-  { command: "longPressOn", re: /^Long press on "(.+?)"/ },
-  { command: "doubleTapOn", re: /^Double tap on "(.+?)"/ },
-  { command: "assertVisible", re: /^Assert that "(.+?)" is visible/ },
-  { command: "assertNotVisible", re: /^Assert that "(.+?)" is not visible/ },
-  { command: "inputText", re: /^Input text "(.+?)"/ },
+  { command: "doubleTapOn", re: /^Double tap on (.+?)(?=\.\.\.)/ },
+  { command: "longPressOn", re: /^Long press on (.+?)(?=\.\.\.)/ },
+  { command: "tapOn", re: /^Tap on (.+?)(?=\.\.\.)/ },
+  { command: "assertNotVisible", re: /^Assert that (.+?) is not visible/ },
+  { command: "assertVisible", re: /^Assert that (.+?) is visible/ },
+  { command: "inputText", re: /^Input text (.+?)(?=\.\.\.)/ },
   { command: "openLink", re: /^Open link "(.+?)"/ },
   // Maestro 1.x: `Scroll until "X" is visible`. Maestro 2.x: `Scrolling
   // DOWN until "X" is visible with speed 40, ...`. Both must match.
   {
     command: "scrollUntilVisible",
-    re: /^Scrolling (?:UP|DOWN|LEFT|RIGHT) until "(.+?)" is visible/,
+    re: /^Scrolling (?:UP|DOWN|LEFT|RIGHT) until (.+?) is visible/,
   },
-  { command: "scrollUntilVisible", re: /^Scroll until "(.+?)" is visible/ },
+  { command: "scrollUntilVisible", re: /^Scroll until (.+?) is visible/ },
   { command: "pressKey", re: /^Press key "(.+?)"/ },
   { command: "waitForAnimationToEnd", re: null, bareRe: /^Wait for animation to end/ },
   { command: "scroll", re: null, bareRe: /^Scroll/ },
@@ -46,6 +54,19 @@ const PATTERNS: Pattern[] = [
   { command: "takeScreenshot", re: null, bareRe: /^Take screenshot/ },
   { command: "clearState", re: null, bareRe: /^Clear state/ },
 ];
+
+// Normalize a captured selector/target to the bare value that the YAML AST
+// stores: a leading quoted segment → its contents (`"Welcome"` → `Welcome`); an
+// `id:`-prefixed segment → the id, up to the first comma (`id: foo, disabled` →
+// `foo`); otherwise the trimmed target itself (e.g. an unquoted inputText value).
+function argFromTarget(target: string): string | null {
+  const t = target.trim();
+  const quoted = /^"(.*?)"/.exec(t);
+  if (quoted) return quoted[1];
+  const id = /^id:\s*([^,]+)/.exec(t);
+  if (id) return id[1].trim();
+  return t.length > 0 ? t : null;
+}
 
 // Maestro reports terminal status as COMPLETED, FAILED, or WARNED (the
 // latter for steps marked `optional: true` that didn't find their target
@@ -74,7 +95,7 @@ export function parseLine(raw: string): StepEvent | null {
     if (p.re) {
       const m = p.re.exec(line);
       if (!m) continue;
-      arg = m[1];
+      arg = argFromTarget(m[1]);
       rest = line.slice(m[0].length);
     } else if (p.bareRe) {
       const m = p.bareRe.exec(line);

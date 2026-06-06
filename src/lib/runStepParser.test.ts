@@ -45,6 +45,41 @@ describe("parseLine", () => {
     });
   });
 
+  // Maestro's ElementSelector.description() renders a `text:` selector quoted
+  // (`"Welcome"`) but an `id:` selector unquoted (`id: welcomeMessage`). The
+  // parser must capture the id value for both `assertVisible` and `tapOn`, else
+  // id-based steps never get a status (gutter stays uncolored).
+  it("parses assertVisible with an id selector (unquoted)", () => {
+    expect(parseLine(`Assert that id: welcomeMessage is visible... COMPLETED`)).toEqual({
+      kind: "completed",
+      command: "assertVisible",
+      arg: "welcomeMessage",
+    });
+  });
+
+  it("parses assertNotVisible with an id selector", () => {
+    expect(parseLine(`Assert that id: spinner is not visible... COMPLETED`)).toMatchObject({
+      command: "assertNotVisible",
+      arg: "spinner",
+    });
+  });
+
+  it("parses tapOn with an id selector (unquoted)", () => {
+    expect(parseLine(`Tap on id: bellNotification-pressable... COMPLETED`)).toEqual({
+      kind: "completed",
+      command: "tapOn",
+      arg: "bellNotification-pressable",
+    });
+  });
+
+  it("parses inputText unquoted (Maestro description form)", () => {
+    expect(parseLine(`Input text Alice... COMPLETED`)).toEqual({
+      kind: "completed",
+      command: "inputText",
+      arg: "Alice",
+    });
+  });
+
   it("returns null for system lines", () => {
     expect(parseLine(`[runner started pid 21975 · /tmp/foo.yaml]`)).toBeNull();
     expect(parseLine(`Running on R3CX30GR07Y`)).toBeNull();
