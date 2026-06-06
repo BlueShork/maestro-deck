@@ -82,6 +82,53 @@ describe("runStore.steps", () => {
     expect(useRunStore.getState().steps).toEqual([]);
   });
 
+  describe("start lifecycle (optimistic 'starting' state)", () => {
+    beforeEach(() => {
+      useRunStore.setState({ running: false, starting: false, pid: null, exitCode: null });
+    });
+
+    it("setStarting flips to starting without a pid and clears logs", () => {
+      useRunStore.getState().appendLog("system", "stale");
+      useRunStore.getState().setStarting();
+      const s = useRunStore.getState();
+      expect(s.starting).toBe(true);
+      expect(s.running).toBe(false);
+      expect(s.pid).toBeNull();
+      expect(s.logs).toEqual([]);
+    });
+
+    it("setRunning resolves starting → running and keeps logs streamed in between", () => {
+      useRunStore.getState().setStarting();
+      useRunStore.getState().appendLog("stdout", "early line");
+      useRunStore.getState().setRunning(4242);
+      const s = useRunStore.getState();
+      expect(s.starting).toBe(false);
+      expect(s.running).toBe(true);
+      expect(s.pid).toBe(4242);
+      // setRunning must NOT clear logs, or early runner stdout is dropped.
+      expect(s.logs.map((l) => l.text)).toEqual(["early line"]);
+    });
+
+    it("startFailed reverts to idle", () => {
+      useRunStore.getState().setStarting();
+      useRunStore.getState().startFailed();
+      const s = useRunStore.getState();
+      expect(s.starting).toBe(false);
+      expect(s.running).toBe(false);
+      expect(s.pid).toBeNull();
+    });
+
+    it("setStopped clears both running and starting", () => {
+      useRunStore.getState().setRunning(7);
+      useRunStore.getState().setStopped(0);
+      const s = useRunStore.getState();
+      expect(s.running).toBe(false);
+      expect(s.starting).toBe(false);
+      expect(s.pid).toBeNull();
+      expect(s.exitCode).toBe(0);
+    });
+  });
+
   describe("runFlow heuristic (Maestro inlines subflow steps without a header)", () => {
     const stepsWithRunFlow = (): Step[] => [
       { index: 0, line: 1, endLine: 1, command: "launchApp", arg: "com.example" },

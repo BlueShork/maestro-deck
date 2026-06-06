@@ -64,6 +64,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const inspectLoading = useInspectorStore((s) => s.loading);
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const running = useRunStore((s) => s.running);
+  const starting = useRunStore((s) => s.starting);
   const fps = useStreamStore((s) => s.fps);
   const showFps = useSettingsStore((s) => s.showFps);
   const folderPath = useWorkspaceStore((s) => s.folderPath);
@@ -137,7 +138,12 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
           <Separator orientation="vertical" className="mx-1 h-5" />
 
-          {running ? (
+          {starting ? (
+            <Button size="sm" variant="destructive" disabled className="gap-1.5">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Starting…
+            </Button>
+          ) : running ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="sm" variant="destructive" onClick={onStop} className="gap-1.5">

@@ -47,6 +47,8 @@ export function MainView() {
   const initSteps = useRunStore((s) => s.initSteps);
   const resetSteps = useRunStore((s) => s.resetSteps);
   const setRunning = useRunStore((s) => s.setRunning);
+  const setStarting = useRunStore((s) => s.setStarting);
+  const startFailed = useRunStore((s) => s.startFailed);
   const runningPid = useRunStore((s) => s.pid);
 
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
@@ -77,8 +79,11 @@ export function MainView() {
   const mainBottomSize = 100 - mainTopSize;
 
   const onRun = useCallback(async () => {
+    const { running, starting } = useRunStore.getState();
+    if (running || starting) return;
     const { content, filePath } = useFlowStore.getState();
     let path = filePath;
+    setStarting();
     try {
       if (!path) {
         const dir = await tempDir();
@@ -93,13 +98,17 @@ export function MainView() {
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · ${path}]`);
     } catch (err) {
+      startFailed();
       toast.error("Run failed", err instanceof Error ? err.message : String(err));
     }
-  }, [setRunning, appendLog, initSteps, resetSteps]);
+  }, [setRunning, setStarting, startFailed, appendLog, initSteps, resetSteps]);
 
   const onRunAll = useCallback(async () => {
     const folder = useWorkspaceStore.getState().folderPath;
     if (!folder) return;
+    const { running, starting } = useRunStore.getState();
+    if (running || starting) return;
+    setStarting();
     try {
       // Persist any unsaved edits to the current file so they're part of the run.
       const { content, filePath, dirty } = useFlowStore.getState();
@@ -114,15 +123,19 @@ export function MainView() {
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
     } catch (err) {
+      startFailed();
       toast.error("Run all failed", err instanceof Error ? err.message : String(err));
     }
-  }, [setRunning, appendLog, initSteps, resetSteps]);
+  }, [setRunning, setStarting, startFailed, appendLog, initSteps, resetSteps]);
 
   const onRunFrom = useCallback(
     async (line: number) => {
       const { content } = useFlowStore.getState();
       const partial = buildPartialFlow(content, line);
       if (!partial) return;
+      const { running, starting } = useRunStore.getState();
+      if (running || starting) return;
+      setStarting();
       try {
         const dir = await tempDir();
         const tempPath = `${dir.replace(/\/$/, "")}/maestro-deck-flow.yaml`;
@@ -141,10 +154,11 @@ export function MainView() {
           `[runner started pid ${pid} · from line ${partial.firstStepOriginalLine}]`,
         );
       } catch (err) {
+        startFailed();
         toast.error("Run from here failed", err instanceof Error ? err.message : String(err));
       }
     },
-    [setRunning, appendLog, initSteps, resetSteps],
+    [setRunning, setStarting, startFailed, appendLog, initSteps, resetSteps],
   );
 
   const onStop = useCallback(async () => {

@@ -3,7 +3,7 @@
 
 //! Maestro runner subprocess orchestration.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
 
 use once_cell::sync::Lazy;
@@ -39,6 +39,11 @@ pub struct RunnerExit {
 /// completes (whether the runner exited on its own or was killed).
 static RUNNERS: Lazy<AsyncMutex<HashMap<u32, oneshot::Sender<()>>>> =
     Lazy::new(|| AsyncMutex::new(HashMap::new()));
+
+/// Maestro binaries confirmed to support `--driver-host-port`. Caches the
+/// (slow, JVM-booting) capability probe in `maestro_supports_driver_host_port`.
+static DRIVER_HOST_PORT_OK: Lazy<AsyncMutex<HashSet<String>>> =
+    Lazy::new(|| AsyncMutex::new(HashSet::new()));
 
 /// Resolves to the user's `maestro` install — see `crate::tool_paths` for
 /// the full priority chain (user override → env → common paths → shell).
@@ -329,7 +334,15 @@ pub async fn spawn_ios_runner(app: AppHandle, udid: &str, flow_path: &str) -> Ap
 /// support. `test --help` short-circuits to help, so nothing is executed and no
 /// port is bound.
 pub async fn maestro_supports_driver_host_port(bin: &str) -> bool {
-    Command::new(bin)
+    // Probing the flag boots the maestro JVM (~seconds), which stalls every
+    // physical-device run. The binary doesn't change mid-session, so cache a
+    // confirmed-good bin and skip the probe on subsequent runs. Only `true` is
+    // cached — a `false` is re-probed so installing the patched maestro is
+    // picked up without a restart.
+    if DRIVER_HOST_PORT_OK.lock().await.contains(bin) {
+        return true;
+    }
+    let ok = Command::new(bin)
         .no_window()
         .args(["--driver-host-port", "6001", "test", "--help"])
         .output()
@@ -342,7 +355,11 @@ pub async fn maestro_supports_driver_host_port(bin: &str) -> bool {
             );
             !text.contains("Unknown option") && !text.contains("Unmatched argument")
         })
-        .unwrap_or(false)
+        .unwrap_or(false);
+    if ok {
+        DRIVER_HOST_PORT_OK.lock().await.insert(bin.to_string());
+    }
+    ok
 }
 
 /// Spawn `maestro --driver-host-port <port> --device <udid> test <flow>` for a
