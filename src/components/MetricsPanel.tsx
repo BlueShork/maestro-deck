@@ -19,7 +19,7 @@ export function MetricsPanel() {
   const last = samples[samples.length - 1];
 
   return (
-    <section className="flex w-[280px] shrink-0 flex-col border-l border-border bg-muted/30">
+    <section className="flex h-full min-h-0 w-full flex-col border-l border-border bg-muted/30">
       <header className="flex items-center justify-between border-b border-border px-3 py-1.5">
         <div className="min-w-0 flex-1">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
