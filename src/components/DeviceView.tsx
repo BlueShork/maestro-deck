@@ -3,7 +3,7 @@
 
 import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
-import { Camera, House, Moon, Smartphone, Sun } from "lucide-react";
+import { Camera, House, Loader2, Moon, Smartphone, Sun } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -691,7 +691,13 @@ export function DeviceView() {
       onContextMenu={(e) => void onContextMenu(e)}
       onWheel={onWheel}
     >
-      {hasFrame ? null : <EmptyState connected={!!current} streamEnabled={streamEnabled} />}
+      {hasFrame ? null : (
+        <EmptyState
+          connected={!!current}
+          streamEnabled={streamEnabled}
+          iosPhysical={current?.platform === "ios" && current?.physical === true}
+        />
+      )}
 
       <canvas
         ref={canvasRef}
@@ -779,8 +785,21 @@ function formatTimestamp(d: Date): string {
   );
 }
 
-function EmptyState({ connected, streamEnabled }: { connected: boolean; streamEnabled: boolean }) {
+function EmptyState({
+  connected,
+  streamEnabled,
+  iosPhysical,
+}: {
+  connected: boolean;
+  streamEnabled: boolean;
+  iosPhysical: boolean;
+}) {
   const lightweight = connected && !streamEnabled;
+  // Physical iPhones build the on-device XCTest driver on first connect (~10 min),
+  // so a generic "Waiting for frames…" looks frozen. Show progress + reassurance.
+  if (iosPhysical && connected && !lightweight) {
+    return <IosPhysicalWaiting />;
+  }
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
       <Smartphone className="h-10 w-10 text-muted-foreground/60" />
@@ -797,6 +816,37 @@ function EmptyState({ connected, streamEnabled }: { connected: boolean; streamEn
           : connected
             ? "The stream will appear here once scrcpy pushes the first frame."
             : "Plug in an Android device with USB debugging enabled, then pick it in the sidebar."}
+      </div>
+    </div>
+  );
+}
+
+/// Physical-iPhone preview placeholder. The first connect builds the XCTest driver
+/// on the device (~10 min), so we show an animated spinner, a phase message, and a
+/// running elapsed timer to make clear it's progressing — not frozen.
+function IosPhysicalWaiting() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  // After ~25s the bridge is almost certainly in the xcodebuild phase.
+  const building = elapsed >= 25;
+  const mm = Math.floor(elapsed / 60);
+  const ss = String(elapsed % 60).padStart(2, "0");
+  return (
+    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+      <Loader2 className="h-10 w-10 animate-spin text-muted-foreground/70" />
+      <div className="text-sm font-medium">
+        {building ? "Building the test driver on your iPhone…" : "Connecting to your iPhone…"}
+      </div>
+      <div className="max-w-[18rem] text-xs text-muted-foreground">
+        {building
+          ? "First connect builds the XCTest driver on the device — this can take up to ~10 min. Keep the iPhone unlocked and plugged in; tap Trust if prompted."
+          : "Starting the device bridge…"}
+      </div>
+      <div className="font-mono text-xs text-muted-foreground/80">
+        Elapsed {mm}:{ss}
       </div>
     </div>
   );
