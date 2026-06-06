@@ -760,11 +760,13 @@ pub fn ios_device_bridge_installed() -> bool {
     crate::tool_paths::maestro_ios_device_installed()
 }
 
-/// Auto-install devicelab's `maestro-ios-device` bridge (Option A): download the
-/// release binary for this Mac's arch, mark it executable, run its `setup`
-/// (which fetches the XCTest runner + patched maestro jars into `~/.maestro`),
-/// and persist its path. Apache-2.0, so redistribution-by-fetch is fine. Only
-/// users who actually connect a physical iPhone ever trigger this.
+/// Auto-install the `maestro-ios-device` bridge (Option A): download the release
+/// binary for this Mac's arch, mark it executable, run its `setup` (which fetches
+/// the XCTest runner + patched maestro **2.5.1** jars into `~/.maestro`), and
+/// persist its path. We ship our own fork (BlueShork/maestro-ios-device) because
+/// upstream devicelab only patches maestro 2.0.9–2.1.0; ours adds 2.5.1. Apache-2.0,
+/// so redistribution-by-fetch is fine. Only users who actually connect a physical
+/// iPhone ever trigger this.
 #[tauri::command]
 pub async fn install_ios_device_bridge() -> AppResult<String> {
     use std::os::unix::fs::PermissionsExt;
@@ -782,7 +784,7 @@ pub async fn install_ios_device_bridge() -> AppResult<String> {
         }
     };
     let url = format!(
-        "https://github.com/devicelab-dev/maestro-ios-device/releases/latest/download/maestro-ios-device-darwin-{arch}"
+        "https://github.com/BlueShork/maestro-ios-device/releases/latest/download/maestro-ios-device-darwin-{arch}"
     );
     info!(%url, "downloading maestro-ios-device bridge");
 

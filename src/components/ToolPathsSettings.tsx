@@ -31,7 +31,7 @@ const TOOLS = [
     key: "maestro_ios_device" as const,
     label: "maestro-ios-device (physical iOS)",
     placeholder: "~/.maestro/bin/maestro-ios-device",
-    hint: "devicelab bridge that runs the XCTest driver on a real iPhone. Install via maestro-ios-device's setup.sh; needed only for physical iOS devices.",
+    hint: 'Bridge that runs the XCTest driver on a real iPhone (requires maestro 2.5.1). Use "Install automatically" below; needed only for physical iOS devices.',
   },
 ];
 
@@ -209,7 +209,8 @@ export function ToolPathsSettings() {
                   {installing ? "Installing…" : "Install automatically"}
                 </button>
                 <span className="text-[11px] text-muted-foreground">
-                  Downloads the devicelab bridge + XCTest runner (~once, needs network).
+                  Downloads the bridge + patched maestro 2.5.1 jars + XCTest runner (~once, needs
+                  network).
                 </span>
               </div>
             )}
