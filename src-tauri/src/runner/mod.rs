@@ -318,13 +318,20 @@ pub async fn spawn_ios_runner(app: AppHandle, udid: &str, flow_path: &str) -> Ap
     Ok(pid)
 }
 
-/// True if the resolved maestro exposes the `--driver-host-port` flag, i.e. it
-/// is the devicelab-patched maestro that can drive a physical device by talking
-/// to an already-running XCTest driver (the `maestro-ios-device` bridge).
+/// True if the resolved maestro accepts the `--driver-host-port` flag, i.e. it
+/// is the patched maestro that can drive a physical device by talking to an
+/// already-running XCTest driver (the `maestro-ios-device` bridge).
+///
+/// We can't just grep `maestro --help`: in patched maestro 2.5.1 the option is
+/// registered with `hidden = true`, so it never appears in help output. Instead
+/// we probe `maestro --driver-host-port <port> test --help` and treat the flag
+/// being accepted (no picocli "Unknown option" / "Unmatched argument") as
+/// support. `test --help` short-circuits to help, so nothing is executed and no
+/// port is bound.
 async fn maestro_supports_driver_host_port(bin: &str) -> bool {
     Command::new(bin)
         .no_window()
-        .arg("--help")
+        .args(["--driver-host-port", "6001", "test", "--help"])
         .output()
         .await
         .map(|o| {
@@ -333,7 +340,7 @@ async fn maestro_supports_driver_host_port(bin: &str) -> bool {
                 String::from_utf8_lossy(&o.stdout),
                 String::from_utf8_lossy(&o.stderr)
             );
-            text.contains("driver-host-port")
+            !text.contains("Unknown option") && !text.contains("Unmatched argument")
         })
         .unwrap_or(false)
 }
