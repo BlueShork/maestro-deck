@@ -426,8 +426,17 @@ impl IosDriverKeeper {
     }
 }
 
-/// Poll interval for the V1 screenshot preview (~3 fps). Live mirror is V2.
+/// Inter-frame delay for the simulator screenshot fallback (this poller is only
+/// the pre-framebuffer fallback on sims, so a gentle cadence is fine).
 const SCREENSHOT_INTERVAL_MS: u64 = 350;
+/// Physical devices have no framebuffer/SCK path — this poller IS their preview.
+/// The driver's `/screenshot` capture is itself ~200 ms (the device-side ceiling,
+/// ~5 fps), so we poll back-to-back and let the capture latency pace us instead of
+/// adding a fixed interval on top.
+const PHYSICAL_SCREENSHOT_INTERVAL_MS: u64 = 0;
+/// Back-off after a failed poll (e.g. device unplugged) so we don't spin and flood
+/// logs when there's nothing to capture.
+const SCREENSHOT_ERROR_BACKOFF_MS: u64 = 500;
 const IOS_FRAME_EVENT: &str = "ios_frame";
 
 #[derive(Debug, Clone, Serialize)]
@@ -493,16 +502,24 @@ pub fn spawn_screenshot_poller(
                         capture_simulator_screenshot(keeper.udid()).await
                     }
                 } => {
-                    match shot {
+                    let delay_ms = match shot {
                         Ok(data) => {
                             let payload = IosFramePayload { data, width: w, height: h };
                             if let Err(e) = app.emit(IOS_FRAME_EVENT, &payload) {
                                 warn!(error = %e, "failed to emit ios_frame");
                             }
+                            if physical {
+                                PHYSICAL_SCREENSHOT_INTERVAL_MS
+                            } else {
+                                SCREENSHOT_INTERVAL_MS
+                            }
                         }
-                        Err(e) => warn!(error = %e, "screenshot poll failed"),
-                    }
-                    sleep(std::time::Duration::from_millis(SCREENSHOT_INTERVAL_MS)).await;
+                        Err(e) => {
+                            warn!(error = %e, "screenshot poll failed");
+                            SCREENSHOT_ERROR_BACKOFF_MS
+                        }
+                    };
+                    sleep(std::time::Duration::from_millis(delay_ms)).await;
                 }
             }
         }
