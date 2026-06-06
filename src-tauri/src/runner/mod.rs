@@ -328,7 +328,7 @@ pub async fn spawn_ios_runner(app: AppHandle, udid: &str, flow_path: &str) -> Ap
 /// being accepted (no picocli "Unknown option" / "Unmatched argument") as
 /// support. `test --help` short-circuits to help, so nothing is executed and no
 /// port is bound.
-async fn maestro_supports_driver_host_port(bin: &str) -> bool {
+pub async fn maestro_supports_driver_host_port(bin: &str) -> bool {
     Command::new(bin)
         .no_window()
         .args(["--driver-host-port", "6001", "test", "--help"])

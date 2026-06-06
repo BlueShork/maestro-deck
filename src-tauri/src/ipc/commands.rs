@@ -943,6 +943,91 @@ pub fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult
     maestro_health::kill::kill_maestro_processes(&serial, report)
 }
 
+/// Extract the first `x.y.z` semver from arbitrary `maestro --version` output.
+fn parse_maestro_version(out: &str) -> Option<String> {
+    let bytes = out.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_digit() {
+            let start = i;
+            let mut dots = 0;
+            while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
+                if bytes[i] == b'.' {
+                    dots += 1;
+                }
+                i += 1;
+            }
+            let cand = &out[start..i];
+            if dots == 2
+                && cand
+                    .split('.')
+                    .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+            {
+                return Some(cand.to_string());
+            }
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
+/// Status of the physical-iOS prerequisites that can be auto-detected on this Mac.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IosPhysicalSetupStatus {
+    /// Full Xcode (not bare Command Line Tools) is selected.
+    pub xcode_installed: bool,
+    /// Parsed `maestro --version`, or None if maestro isn't resolvable.
+    pub maestro_version: Option<String>,
+    /// True iff `maestro_version == "2.5.1"`.
+    pub maestro_is_2_5_1: bool,
+    /// True iff the resolved maestro accepts `--driver-host-port` (patched).
+    pub maestro_patched: bool,
+}
+
+/// Report the auto-detectable physical-iOS prerequisites for the in-app checklist.
+#[tauri::command]
+pub async fn ios_physical_setup_status() -> AppResult<IosPhysicalSetupStatus> {
+    // Xcode: `xcode-select -p` resolves inside an .app (full Xcode), not /Library/.../CommandLineTools.
+    let xcode_installed = tokio::process::Command::new("xcode-select")
+        .arg("-p")
+        .output()
+        .await
+        .map(|o| {
+            o.status.success()
+                && String::from_utf8_lossy(&o.stdout).contains(".app/Contents/Developer")
+        })
+        .unwrap_or(false);
+
+    let bin = crate::tool_paths::maestro_bin();
+
+    let maestro_version = tokio::process::Command::new(&bin)
+        .arg("--version")
+        .output()
+        .await
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| {
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&o.stdout),
+                String::from_utf8_lossy(&o.stderr)
+            );
+            parse_maestro_version(&text)
+        });
+
+    let maestro_is_2_5_1 = maestro_version.as_deref() == Some("2.5.1");
+    let maestro_patched = crate::runner::maestro_supports_driver_host_port(&bin).await;
+
+    Ok(IosPhysicalSetupStatus {
+        xcode_installed,
+        maestro_version,
+        maestro_is_2_5_1,
+        maestro_patched,
+    })
+}
+
 impl serde::Serialize for HierarchyTree {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
@@ -950,5 +1035,28 @@ impl serde::Serialize for HierarchyTree {
         st.serialize_field("root", &self.root)?;
         st.serialize_field("xml_raw", &self.xml_raw)?;
         st.end()
+    }
+}
+
+#[cfg(test)]
+mod ios_setup_status_tests {
+    use super::parse_maestro_version;
+
+    #[test]
+    fn parses_plain_semver() {
+        assert_eq!(parse_maestro_version("2.5.1"), Some("2.5.1".to_string()));
+    }
+
+    #[test]
+    fn parses_semver_embedded_in_noise() {
+        assert_eq!(
+            parse_maestro_version("Maestro CLI 2.5.1\nsome banner"),
+            Some("2.5.1".to_string())
+        );
+    }
+
+    #[test]
+    fn returns_none_when_absent() {
+        assert_eq!(parse_maestro_version("no version here"), None);
     }
 }
