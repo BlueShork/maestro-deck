@@ -11,6 +11,7 @@ import {
   FolderClosed,
   FolderOpen,
   FolderPlus,
+  Pencil,
   RefreshCw,
   Trash2,
   X,
@@ -18,10 +19,23 @@ import {
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/ContextMenu";
 import { openFlowFile } from "@/lib/flow-io";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
-import { createFlowInDir, createFolderInDir, deleteFile } from "@/lib/workspace-ops";
+import {
+  createFlowInDir,
+  createFolderInDir,
+  deleteEntry,
+  deleteFile,
+  renameEntry,
+} from "@/lib/workspace-ops";
 import { useFlowStore } from "@/stores/flowStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -43,6 +57,8 @@ export function WorkspaceTree() {
   const [pendingNewDir, setPendingNewDir] = useState<string | null>(null);
   // Transient: which directory currently shows the inline "new folder" input.
   const [pendingNewFolderDir, setPendingNewFolderDir] = useState<string | null>(null);
+  // Transient: which entry's label is currently an inline rename input.
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
 
   const refresh = useCallback(
     async (path: string) => {
@@ -112,6 +128,19 @@ export function WorkspaceTree() {
   }, []);
 
   const cancelNewFolder = useCallback(() => setPendingNewFolderDir(null), []);
+
+  const startRename = useCallback((path: string) => {
+    setPendingNewDir(null);
+    setPendingNewFolderDir(null);
+    setRenamingPath(path);
+  }, []);
+
+  const commitRename = useCallback(async (path: string, kind: "file" | "dir", name: string) => {
+    setRenamingPath(null);
+    if (name.trim()) await renameEntry(path, kind, name);
+  }, []);
+
+  const cancelRename = useCallback(() => setRenamingPath(null), []);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -198,49 +227,67 @@ export function WorkspaceTree() {
               </span>
             ) : null}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto py-1">
-            {pendingNewDir === folderPath ? (
-              <NewItemInput
-                kind="file"
-                depth={0}
-                onCommit={(name) => void commitNewFile(folderPath, name)}
-                onCancel={cancelNewFile}
-              />
-            ) : null}
-            {pendingNewFolderDir === folderPath ? (
-              <NewItemInput
-                kind="folder"
-                depth={0}
-                onCommit={(name) => void commitNewFolder(folderPath, name)}
-                onCancel={cancelNewFolder}
-              />
-            ) : null}
-            {tree.children.length === 0 &&
-            pendingNewDir !== folderPath &&
-            pendingNewFolderDir !== folderPath ? (
-              <div className="px-3 py-2 text-[11px] text-muted-foreground">
-                No YAML files. Click the + icon above to create one.
-              </div>
-            ) : (
-              <ul className="flex flex-col">
-                {tree.children.map((node) => (
-                  <TreeItem
-                    key={node.path}
-                    node={node}
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div className="min-h-0 flex-1 overflow-y-auto py-1">
+                {pendingNewDir === folderPath ? (
+                  <NewItemInput
+                    kind="file"
                     depth={0}
-                    pendingNewDir={pendingNewDir}
-                    onStartNewFile={startNewFile}
-                    onCommitNewFile={(dir, name) => void commitNewFile(dir, name)}
-                    onCancelNewFile={cancelNewFile}
-                    pendingNewFolderDir={pendingNewFolderDir}
-                    onStartNewFolder={startNewFolder}
-                    onCommitNewFolder={(dir, name) => void commitNewFolder(dir, name)}
-                    onCancelNewFolder={cancelNewFolder}
+                    onCommit={(name) => void commitNewFile(folderPath, name)}
+                    onCancel={cancelNewFile}
                   />
-                ))}
-              </ul>
-            )}
-          </div>
+                ) : null}
+                {pendingNewFolderDir === folderPath ? (
+                  <NewItemInput
+                    kind="folder"
+                    depth={0}
+                    onCommit={(name) => void commitNewFolder(folderPath, name)}
+                    onCancel={cancelNewFolder}
+                  />
+                ) : null}
+                {tree.children.length === 0 &&
+                pendingNewDir !== folderPath &&
+                pendingNewFolderDir !== folderPath ? (
+                  <div className="px-3 py-2 text-[11px] text-muted-foreground">
+                    No YAML files. Right-click or use the + icon above to create one.
+                  </div>
+                ) : (
+                  <ul className="flex flex-col">
+                    {tree.children.map((node) => (
+                      <TreeItem
+                        key={node.path}
+                        node={node}
+                        depth={0}
+                        pendingNewDir={pendingNewDir}
+                        onStartNewFile={startNewFile}
+                        onCommitNewFile={(dir, name) => void commitNewFile(dir, name)}
+                        onCancelNewFile={cancelNewFile}
+                        pendingNewFolderDir={pendingNewFolderDir}
+                        onStartNewFolder={startNewFolder}
+                        onCommitNewFolder={(dir, name) => void commitNewFolder(dir, name)}
+                        onCancelNewFolder={cancelNewFolder}
+                        renamingPath={renamingPath}
+                        onStartRename={startRename}
+                        onCommitRename={(p, kind, name) => void commitRename(p, kind, name)}
+                        onCancelRename={cancelRename}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onSelect={() => startNewFile(folderPath)}>
+                <FilePlus className="h-3.5 w-3.5" />
+                New file
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => startNewFolder(folderPath)}>
+                <FolderPlus className="h-3.5 w-3.5" />
+                New folder
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         </>
       ) : (
         <div className="px-3 py-2 text-[11px] text-muted-foreground">Loading…</div>
@@ -273,6 +320,10 @@ interface TreeItemProps {
   onStartNewFolder: (dirPath: string) => void;
   onCommitNewFolder: (dir: string, name: string) => void;
   onCancelNewFolder: () => void;
+  renamingPath: string | null;
+  onStartRename: (path: string) => void;
+  onCommitRename: (path: string, kind: "file" | "dir", name: string) => void;
+  onCancelRename: () => void;
 }
 
 function TreeItem({
@@ -286,64 +337,106 @@ function TreeItem({
   onStartNewFolder,
   onCommitNewFolder,
   onCancelNewFolder,
+  renamingPath,
+  onStartRename,
+  onCommitRename,
+  onCancelRename,
 }: TreeItemProps) {
   const expanded = useWorkspaceStore((s) => s.expanded[node.path] ?? depth === 0);
   const toggle = useWorkspaceStore((s) => s.toggleExpanded);
   const activePath = useFlowStore((s) => s.filePath);
+  const isRenaming = renamingPath === node.path;
 
   if (node.kind === "dir") {
     const showNew = pendingNewDir === node.path;
     const showNewFolder = pendingNewFolderDir === node.path;
     return (
       <li>
-        <div
-          className="group relative flex items-center"
-          style={{ paddingLeft: `${depth * 12 + 6}px` }}
-        >
-          <button
-            type="button"
-            onClick={() => toggle(node.path)}
-            className="flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left text-xs text-foreground/90 transition-colors hover:bg-accent/40"
-          >
-            <ChevronRight
-              className={cn(
-                "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
-                expanded && "rotate-90",
-              )}
-            />
-            {expanded ? (
-              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-300/80" />
-            ) : (
-              <FolderClosed className="h-3.5 w-3.5 shrink-0 text-amber-500/80 dark:text-amber-300/60" />
-            )}
-            <span className="truncate">{node.name}</span>
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartNewFolder(node.path);
-            }}
-            aria-label={`New folder in ${node.name}`}
-            title="New folder here"
-            className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
-          >
-            <FolderPlus className="h-3 w-3" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartNewFile(node.path);
-            }}
-            aria-label={`New flow in ${node.name}`}
-            title="New flow here"
-            className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
-          >
-            <FilePlus className="h-3 w-3" />
-          </button>
-        </div>
-        {expanded ? (
+        {isRenaming ? (
+          <NewItemInput
+            kind="folder"
+            depth={depth}
+            initial={node.name}
+            onCommit={(name) => onCommitRename(node.path, "dir", name)}
+            onCancel={onCancelRename}
+          />
+        ) : (
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div
+                className="group relative flex items-center"
+                style={{ paddingLeft: `${depth * 12 + 6}px` }}
+                onContextMenu={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggle(node.path)}
+                  className="flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left text-xs text-foreground/90 transition-colors hover:bg-accent/40"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
+                      expanded && "rotate-90",
+                    )}
+                  />
+                  {expanded ? (
+                    <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-300/80" />
+                  ) : (
+                    <FolderClosed className="h-3.5 w-3.5 shrink-0 text-amber-500/80 dark:text-amber-300/60" />
+                  )}
+                  <span className="truncate">{node.name}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartNewFolder(node.path);
+                  }}
+                  aria-label={`New folder in ${node.name}`}
+                  title="New folder here"
+                  className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
+                >
+                  <FolderPlus className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartNewFile(node.path);
+                  }}
+                  aria-label={`New flow in ${node.name}`}
+                  title="New flow here"
+                  className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
+                >
+                  <FilePlus className="h-3 w-3" />
+                </button>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onSelect={() => onStartNewFile(node.path)}>
+                <FilePlus className="h-3.5 w-3.5" />
+                New file
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => onStartNewFolder(node.path)}>
+                <FolderPlus className="h-3.5 w-3.5" />
+                New folder
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => onStartRename(node.path)}>
+                <Pencil className="h-3.5 w-3.5" />
+                Rename
+              </ContextMenuItem>
+              <ContextMenuItem
+                onSelect={() => void deleteEntry(node.path, "dir")}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        )}
+        {expanded && !isRenaming ? (
           <>
             {showNew ? (
               <NewItemInput
@@ -376,6 +469,10 @@ function TreeItem({
                     onStartNewFolder={onStartNewFolder}
                     onCommitNewFolder={onCommitNewFolder}
                     onCancelNewFolder={onCancelNewFolder}
+                    renamingPath={renamingPath}
+                    onStartRename={onStartRename}
+                    onCommitRename={onCommitRename}
+                    onCancelRename={onCancelRename}
                   />
                 ))}
               </ul>
@@ -387,45 +484,76 @@ function TreeItem({
   }
 
   const isActive = activePath === node.path;
+  if (isRenaming) {
+    return (
+      <li>
+        <NewItemInput
+          kind="file"
+          depth={depth}
+          initial={node.name}
+          onCommit={(name) => onCommitRename(node.path, "file", name)}
+          onCancel={onCancelRename}
+        />
+      </li>
+    );
+  }
   return (
     <li>
-      <div
-        className={cn(
-          "group relative flex items-center transition-colors",
-          isActive ? "bg-primary/15" : "hover:bg-accent/40",
-        )}
-      >
-        <button
-          type="button"
-          onClick={() => void openFlowFile(node.path)}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs",
-            isActive ? "text-foreground" : "text-foreground/85",
-          )}
-          style={{ paddingLeft: `${depth * 12 + 22}px` }}
-          title={node.path}
-        >
-          <FileCode2
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
             className={cn(
-              "h-3.5 w-3.5 shrink-0",
-              isActive ? "text-primary" : "text-muted-foreground",
+              "group relative flex items-center transition-colors",
+              isActive ? "bg-primary/15" : "hover:bg-accent/40",
             )}
-          />
-          <span className="truncate">{node.name}</span>
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void deleteFile(node.path);
-          }}
-          aria-label={`Delete ${node.name}`}
-          title="Delete flow"
-          className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-destructive/15 hover:text-destructive group-hover:flex"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
+            onContextMenu={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => void openFlowFile(node.path)}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs",
+                isActive ? "text-foreground" : "text-foreground/85",
+              )}
+              style={{ paddingLeft: `${depth * 12 + 22}px` }}
+              title={node.path}
+            >
+              <FileCode2
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0",
+                  isActive ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+              <span className="truncate">{node.name}</span>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void deleteFile(node.path);
+              }}
+              aria-label={`Delete ${node.name}`}
+              title="Delete flow"
+              className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-destructive/15 hover:text-destructive group-hover:flex"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={() => onStartRename(node.path)}>
+            <Pencil className="h-3.5 w-3.5" />
+            Rename
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => void deleteEntry(node.path, "file")}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </li>
   );
 }
@@ -433,16 +561,29 @@ function TreeItem({
 function NewItemInput({
   kind,
   depth,
+  initial,
   onCommit,
   onCancel,
 }: {
   kind: "file" | "folder";
   depth: number;
+  /** Prefilled value for rename; when set, the base name (sans extension) is
+   *  selected on mount so the user can retype immediately. */
+  initial?: string;
   onCommit: (name: string) => void;
   onCancel: () => void;
 }) {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initial ?? "");
+  const inputRef = useRef<HTMLInputElement>(null);
   const done = useRef(false);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el || initial == null) return;
+    el.focus();
+    const dot = initial.lastIndexOf(".");
+    el.setSelectionRange(0, dot > 0 ? dot : initial.length);
+  }, [initial]);
 
   const commit = (name: string) => {
     if (done.current) return;
@@ -472,6 +613,7 @@ function NewItemInput({
     <div className="flex items-center gap-1.5" style={{ paddingLeft: `${depth * 12 + 22}px` }}>
       <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <input
+        ref={inputRef}
         autoFocus
         type="text"
         value={value}

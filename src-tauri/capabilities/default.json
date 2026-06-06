@@ -26,6 +26,7 @@
     "fs:allow-write-file",
     "fs:allow-mkdir",
     "fs:allow-remove",
+    "fs:allow-rename",
     "fs:allow-exists",
     {
       "identifier": "opener:allow-open-url",
