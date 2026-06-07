@@ -360,7 +360,7 @@ mod tests {
             extract_sse_data(b"data: {\"a\":1}\n\n").as_deref(),
             Some("{\"a\":1}")
         );
-        assert_eq!(extract_sse_data(b":comment\n").is_none(), true);
+        assert!(extract_sse_data(b":comment\n").is_none());
     }
 
     #[test]

@@ -268,8 +268,8 @@ mod real_main {
         let fmt = surface.pixelFormat();
         println!(
             "\nfirst surface: {w0}x{h0}  pixelFormat=0x{:08X} ('{}')",
-            fmt as u32,
-            fourcc(fmt as u32)
+            fmt,
+            fourcc(fmt)
         );
 
         // 10. Register a damage-rectangles callback to count frames.
@@ -449,8 +449,8 @@ mod real_main {
         println!("\n=== RESULT ===");
         println!(
             "surface: {w}x{h} px   pixelFormat=0x{:08X} ('{}')",
-            fmt as u32,
-            fourcc(fmt as u32)
+            fmt,
+            fourcc(fmt)
         );
         println!(
             "bytesPerRow: {bpr}   dense BGRA/frame: {dense_bytes} bytes ({} KB)",
