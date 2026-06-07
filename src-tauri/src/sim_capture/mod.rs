@@ -76,6 +76,15 @@ const DEFAULT_DEVELOPER_DIR: &str = "/Applications/Xcode.app/Contents/Developer"
 
 extern "C" {
     fn dlopen(path: *const libc::c_char, flags: libc::c_int) -> *mut c_void;
+
+    /// Raw IOSurface base-address accessor. Unlike `IOSurface::baseAddress()`
+    /// (and the crate's `IOSurfaceGetBaseAddress` wrapper), which return a
+    /// non-null `NonNull<c_void>` and **panic** when the surface has no
+    /// CPU-accessible backing, the C function returns a plain (nullable)
+    /// pointer — NULL for a surface whose pixels live only on the GPU. The
+    /// IOSurface framework is already linked (via `objc2-io-surface`), so this
+    /// symbol resolves. See `copy_downscaled`.
+    fn IOSurfaceGetBaseAddress(buffer: *const c_void) -> *mut c_void;
 }
 const RTLD_NOW: libc::c_int = 0x2;
 
@@ -266,7 +275,10 @@ fn attach(udid: &str) -> AppResult<Attached> {
     // SAFETY: `+sharedServiceContextForDeveloperDir:error:` takes an NSString and
     // an `id*` out-error (NOT `NSError**` directly — the binding is `id*`). We
     // pass a live NSString and a stack `id` slot, then inspect `err`.
-    let ctx: Retained<AnyObject> = unsafe {
+    // `Option<Retained<_>>` (NOT `Retained<_>`): a bare `Retained` return PANICS
+    // when the message yields nil, and with `panic = "abort"` that aborts the whole
+    // app from this capture thread. Treat nil as a recoverable error instead.
+    let ctx: Option<Retained<AnyObject>> = unsafe {
         msg_send![ctx_cls, sharedServiceContextForDeveloperDir: &*dev_dir_ns, error: &mut err]
     };
     if !err.is_null() {
@@ -275,11 +287,14 @@ fn attach(udid: &str) -> AppResult<Attached> {
             err_str(err)
         )));
     }
+    let ctx = ctx.ok_or_else(|| {
+        AppError::ScreenCaptureFailed("sharedServiceContextForDeveloperDir returned nil".into())
+    })?;
 
     // Default device set.
     let mut err2: *mut AnyObject = null_mut();
     // SAFETY: `-defaultDeviceSetWithError:` takes an `id*` out-error; same idiom.
-    let set: Retained<AnyObject> =
+    let set: Option<Retained<AnyObject>> =
         unsafe { msg_send![&*ctx, defaultDeviceSetWithError: &mut err2] };
     if !err2.is_null() {
         return Err(AppError::ScreenCaptureFailed(format!(
@@ -287,19 +302,29 @@ fn attach(udid: &str) -> AppResult<Attached> {
             err_str(err2)
         )));
     }
+    let set =
+        set.ok_or_else(|| AppError::ScreenCaptureFailed("defaultDeviceSet returned nil".into()))?;
 
     // Find the SimDevice by UDID (case-insensitive on UUIDString).
     // SAFETY: `-availableDevices` returns a live NSArray of SimDevice objects.
-    let devices: Retained<NSArray<AnyObject>> = unsafe { msg_send![&*set, availableDevices] };
+    let devices: Option<Retained<NSArray<AnyObject>>> =
+        unsafe { msg_send![&*set, availableDevices] };
+    let devices = devices
+        .ok_or_else(|| AppError::ScreenCaptureFailed("availableDevices returned nil".into()))?;
     let count = devices.count();
     let mut device: Option<Retained<AnyObject>> = None;
     for i in 0..count {
         let d = devices.objectAtIndex(i);
-        // SAFETY: `-UDID` returns an NSUUID; `-UUIDString` an NSString. Both live.
-        let s: Retained<NSString> = unsafe {
-            let u: Retained<AnyObject> = msg_send![&*d, UDID];
-            msg_send![&*u, UUIDString]
+        // SAFETY: `-UDID` returns an NSUUID; `-UUIDString` an NSString. A nil from
+        // either (a half-initialised device) → skip it rather than panic.
+        let s: Option<Retained<NSString>> = unsafe {
+            let u: Option<Retained<AnyObject>> = msg_send![&*d, UDID];
+            match u {
+                Some(u) => msg_send![&*u, UUIDString],
+                None => None,
+            }
         };
+        let Some(s) = s else { continue };
         if s.to_string().eq_ignore_ascii_case(udid) {
             device = Some(d);
             break;
@@ -320,10 +345,20 @@ fn attach(udid: &str) -> AppResult<Attached> {
         )));
     }
 
-    // device.io → ioPorts.
+    // device.io → ioPorts. Both `Option` (not bare `Retained`): a freshly-booted
+    // sim can briefly have no IO client / ioPorts, and a nil there would panic →
+    // abort. Surface it as a recoverable error so the caller can retry/fall back.
     // SAFETY: `-io` returns the device's IO client; `-ioPorts` a live NSArray.
-    let io: Retained<AnyObject> = unsafe { msg_send![&*device, io] };
-    let ports: Retained<NSArray<AnyObject>> = unsafe { msg_send![&*io, ioPorts] };
+    let io: Option<Retained<AnyObject>> = unsafe { msg_send![&*device, io] };
+    let io = io.ok_or_else(|| {
+        AppError::ScreenCaptureFailed(format!(
+            "simulator {udid} has no IO client (still booting?)"
+        ))
+    })?;
+    let ports: Option<Retained<NSArray<AnyObject>>> = unsafe { msg_send![&*io, ioPorts] };
+    let ports = ports.ok_or_else(|| {
+        AppError::ScreenCaptureFailed(format!("simulator {udid} exposed no ioPorts"))
+    })?;
     let nports = ports.count();
 
     // Pick the descriptor whose `framebufferSurface` is non-nil, preferring the
@@ -473,8 +508,17 @@ fn copy_downscaled(surface: &IOSurface, max_dim: u32) -> Option<Frame> {
         return None;
     }
 
-    let base = surface.baseAddress().as_ptr() as *const u8;
+    // Read the base address via the raw C accessor, NOT `surface.baseAddress()`:
+    // the latter returns `NonNull<c_void>` and PANICS when the surface has no
+    // CPU-accessible backing (a transient GPU-only state seen under sustained
+    // live capture). With `panic = "abort"` that panic aborts the whole app — the
+    // crash this guards against. A null base just means "skip this frame".
+    // SAFETY: `surface` is a live, locked IOSurface; its pointer is a valid
+    // IOSurfaceRef for `IOSurfaceGetBaseAddress`.
+    let base =
+        unsafe { IOSurfaceGetBaseAddress((surface as *const IOSurface).cast()) } as *const u8;
     if base.is_null() {
+        warn!("sim-capture: locked surface has a null base address (GPU-only frame); skipping");
         surface.unlockWithOptions_seed(opts, null_mut());
         return None;
     }
@@ -520,5 +564,83 @@ mod tests {
     #[test]
     fn err_str_handles_null() {
         assert_eq!(err_str(null_mut()), "(nil)");
+    }
+
+    /// Manual repro: attaches to the currently-booted simulator and prints the
+    /// result. Ignored by default (needs Xcode + a booted sim). Run with:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml attach_booted -- --ignored --nocapture
+    /// A clean `Ok` or `Err(...)` means no crash; a panic reproduces the bug.
+    #[test]
+    #[ignore]
+    fn attach_booted_does_not_panic() {
+        let out = std::process::Command::new("xcrun")
+            .args(["simctl", "list", "devices", "booted"])
+            .output()
+            .expect("run simctl");
+        let text = String::from_utf8_lossy(&out.stdout);
+        let udid = text
+            .lines()
+            .find(|l| l.contains("Booted"))
+            .and_then(|l| l.split('(').nth(1))
+            .and_then(|s| s.split(')').next())
+            .map(|s| s.trim().to_owned())
+            .expect("a booted simulator UDID");
+        eprintln!("attaching to booted sim {udid}");
+        let res = attach(&udid);
+        eprintln!("attach result: {:?}", res.as_ref().map(|_| "Ok(Attached)"));
+        // Whatever happens, attach must not panic — Ok or Err are both fine.
+    }
+
+    /// Manual repro of the FULL capture path (the `sim-capture-poll` thread):
+    /// `start()` → poll a few frames through `poll_loop`/`copy_downscaled`.
+    /// Run with:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_booted -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_booted_frames_does_not_panic() {
+        let out = std::process::Command::new("xcrun")
+            .args(["simctl", "list", "devices", "booted"])
+            .output()
+            .expect("run simctl");
+        let text = String::from_utf8_lossy(&out.stdout);
+        let udid = text
+            .lines()
+            .find(|l| l.contains("Booted"))
+            .and_then(|l| l.split('(').nth(1))
+            .and_then(|s| s.split(')').next())
+            .map(|s| s.trim().to_owned())
+            .expect("a booted simulator UDID");
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            // Mirror the SCK-upgrade churn: repeatedly start a capture, pull a few
+            // live frames, then tear it down (drops the descriptor/surface proxies
+            // on the poll thread) — the exact teardown the real app does when it
+            // swaps the headless IOSurface preview for ScreenCaptureKit.
+            // Mirror the real preview params (ios_session::preview SIM_FPS/MAX_DIM)
+            // and pull a few live frames through poll_loop/copy_downscaled.
+            let (session, mut rx) = SimCaptureSession::start(&udid, 60, 900)
+                .await
+                .expect("start capture");
+            for n in 0..10 {
+                match tokio::time::timeout(Duration::from_secs(2), rx.recv()).await {
+                    Ok(Some(f)) => {
+                        eprintln!(
+                            "frame {n}: {}x{} ({} bytes)",
+                            f.width,
+                            f.height,
+                            f.bgra.len()
+                        )
+                    }
+                    Ok(None) => break,
+                    Err(_) => eprintln!("frame {n}: timeout"),
+                }
+            }
+            session.stop().await;
+            eprintln!("done, no panic");
+        });
     }
 }
