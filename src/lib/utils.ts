@@ -10,6 +10,16 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Extract the `url:` value from a Maestro flow's YAML front-matter header. */
 export function flowUrl(yaml: string): string | undefined {
-  const m = yaml.match(/^\s*url:\s*["']?([^"'\n]+)["']?\s*$/m);
-  return m?.[1]?.trim();
+  // Capture the rest of the `url:` line, then strip surrounding quotes/space in
+  // code. Unambiguous (only `[ \t]` around the literal, `.*` can't cross lines),
+  // so there is no super-linear backtracking — unlike a single class that both
+  // matches the value and overlaps a trailing whitespace quantifier.
+  const m = /^[ \t]*url:[ \t]*(.*)$/m.exec(yaml);
+  if (!m) return undefined;
+  return (
+    m[1]
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .trim() || undefined
+  );
 }
