@@ -125,6 +125,7 @@ export function InspectActionMenu({ x, y, node, selector, onClose }: InspectActi
       onPointerMove={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}
       onContextMenu={(e) => {
         e.preventDefault();
