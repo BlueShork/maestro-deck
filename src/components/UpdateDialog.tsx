@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { Download, Loader2, RefreshCw } from "lucide-react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/Button";
 import {
@@ -13,6 +15,48 @@ import {
 } from "@/components/ui/Dialog";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { useUpdateStore } from "@/stores/updateStore";
+
+// Hoisted out of the component so the element factories aren't recreated on
+// every render (and each isn't flagged as a nested component definition).
+const NOTES_MARKDOWN_COMPONENTS: Components = {
+  h1: ({ children }) => (
+    <h1 className="mb-1.5 mt-3 text-sm font-semibold first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="mb-1.5 mt-3 text-sm font-semibold first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }) => <h3 className="mb-1 mt-2.5 text-xs font-medium first:mt-0">{children}</h3>,
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  ul: ({ children }) => (
+    <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0 marker:text-muted-foreground">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0 marker:text-muted-foreground">
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => <li className="pl-0.5">{children}</li>,
+  strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+  em: ({ children }) => <em className="italic">{children}</em>,
+  code: ({ children }) => (
+    <code className="rounded bg-muted/70 px-1 py-0.5 font-mono text-[0.85em] text-foreground">
+      {children}
+    </code>
+  ),
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="font-medium text-primary underline-offset-2 hover:underline"
+    >
+      {children}
+    </a>
+  ),
+  hr: () => <hr className="my-3 border-border/60" />,
+};
 
 export function UpdateDialog() {
   const phase = useUpdateStore((s) => s.phase);
@@ -64,9 +108,11 @@ export function UpdateDialog() {
           </p>
         ) : available?.notes ? (
           <ScrollArea className="max-h-72 rounded-md border border-border bg-muted/30 p-3">
-            <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground">
-              {available.notes}
-            </pre>
+            <div className="text-xs leading-relaxed text-foreground">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={NOTES_MARKDOWN_COMPONENTS}>
+                {available.notes}
+              </ReactMarkdown>
+            </div>
           </ScrollArea>
         ) : null}
 

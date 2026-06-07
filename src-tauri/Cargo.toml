@@ -1,6 +1,6 @@
 [package]
 name = "maestro-deck"
-version = "0.3.4"
+version = "0.4.0"
 description = "Source-available visual IDE for Maestro mobile tests"
 authors = ["Ethan Morisset <blueshork.dev@gmail.com>"]
 license = "BUSL-1.1"
@@ -85,10 +85,40 @@ prost = "0.13"
 # pubkey baked into tauri.conf.json, and installs it.
 tauri-plugin-updater = "2.0"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# ScreenCaptureKit window capture (smooth-video / iOS Simulator mirroring).
+# These crates are macOS-only; gated so non-mac builds don't pull them.
+# The objc2-core-media feature on objc2-screen-capture-kit is REQUIRED — without
+# it the SCStreamOutput delegate method (which takes a CMSampleBuffer) is not
+# generated. (There is no `objc2-core-video` feature on this crate; CVPixelBuffer
+# extraction uses the standalone objc2-core-video dep below.)
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-screen-capture-kit = { version = "0.3.2", features = ["SCStream", "SCShareableContent", "objc2-core-media", "objc2-core-foundation", "objc2-core-graphics"] }
+# The `objc2-core-video` feature is what gates `CMSampleBuffer::image_buffer()`.
+objc2-core-media = { version = "0.3.2", features = ["objc2-core-video"] }
+objc2-core-video = "0.3.2"
+objc2-core-graphics = { version = "0.3.2", features = ["CGWindow"] }
+objc2-core-foundation = "0.3"
+block2 = "0.6"
+dispatch2 = "0.3"
+# Headless iOS-Simulator framebuffer capture (`sim_capture`) via CoreSimulator /
+# SimulatorKit private APIs: reads the booted device's live display IOSurface.
+objc2-io-surface = "0.3.2"
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3.13"
 pretty_assertions = "1.4"
 mockall = "0.14"
+
+# macOS-only: the `sck_smoke` example bootstraps a shared NSApplication so the
+# process opens its WindowServer (CGS) connection before calling ScreenCaptureKit.
+# A bare CLI binary never does this, so SCShareableContent aborts with
+# `CGS_REQUIRE_INIT`. The real app runs inside Tauri's NSApplication, so this is
+# a test-harness-only need, hence a dev-dependency.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSResponder"] }
 
 [features]
 default = ["custom-protocol"]

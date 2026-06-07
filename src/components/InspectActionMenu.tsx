@@ -116,7 +116,21 @@ export function InspectActionMenu({ x, y, node, selector, onClose }: InspectActi
       role="menu"
       className="fixed z-50 w-58 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
       style={{ ...style, width: 232 }}
-      onContextMenu={(e) => e.preventDefault()}
+      // The menu floats over the device view, whose container drives the inspector
+      // (hover on pointer-move, tap on pointer-down, swipe on wheel). Because this
+      // menu is a React child of that container, its events bubble up the React tree
+      // and would re-trigger the inspector underneath. Stop them at the menu root so
+      // interacting with the menu never touches the device/inspector. Menu buttons sit
+      // deeper in the tree, so their handlers still fire before this.
+      onPointerMove={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      onWheel={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
       <div className="border-b border-border px-3 py-2">
         <div className="truncate text-[11px] font-medium">{nodeLabel(node)}</div>

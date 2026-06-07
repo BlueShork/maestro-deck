@@ -31,11 +31,15 @@ export interface StepRunState {
 
 interface RunState {
   running: boolean;
+  /** Optimistic state between the Run click and the runner PID coming back. */
+  starting: boolean;
   pid: number | null;
   exitCode: number | null;
   stopRequested: boolean;
   logs: LogLine[];
   steps: StepRunState[];
+  setStarting: () => void;
+  startFailed: () => void;
   setRunning: (pid: number) => void;
   requestStop: () => void;
   setStopped: (exitCode: number | null) => void;
@@ -50,14 +54,21 @@ let nextId = 1;
 
 export const useRunStore = create<RunState>((set) => ({
   running: false,
+  starting: false,
   pid: null,
   exitCode: null,
   stopRequested: false,
   logs: [],
   steps: [],
-  setRunning: (pid) => set({ running: true, pid, exitCode: null, stopRequested: false, logs: [] }),
+  // Posted immediately on the Run click so the toolbar reacts instantly,
+  // before the (potentially slow) backend round-trip returns the PID. Clears
+  // logs here — the earliest point — so early runner stdout isn't dropped.
+  setStarting: () => set({ starting: true, exitCode: null, stopRequested: false, logs: [] }),
+  startFailed: () => set({ starting: false }),
+  setRunning: (pid) =>
+    set({ running: true, starting: false, pid, exitCode: null, stopRequested: false }),
   requestStop: () => set({ stopRequested: true }),
-  setStopped: (exitCode) => set({ running: false, pid: null, exitCode }),
+  setStopped: (exitCode) => set({ running: false, starting: false, pid: null, exitCode }),
   appendLog: (stream, text) =>
     set((s) => {
       const entry = { id: nextId++, stream, text, timestamp: Date.now() };

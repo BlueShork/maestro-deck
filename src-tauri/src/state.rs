@@ -8,6 +8,7 @@ use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 use crate::device::Device;
 use crate::hierarchy::studio::StudioKeeper;
 use crate::hierarchy::HierarchyTree;
+use crate::ios_session::IosDriverKeeper;
 use crate::selector::SpatialIndex;
 
 #[derive(Default)]
@@ -29,4 +30,18 @@ pub struct AppState {
     // on the first fast-mode inspect request and torn down when the
     // device disconnects (see `commands::disconnect_device`).
     pub studio: AsyncMutex<Option<Arc<StudioKeeper>>>,
+
+    pub ios_driver: AsyncMutex<Option<Arc<IosDriverKeeper>>>,
+    pub ios_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+    #[cfg(target_os = "macos")]
+    pub ios_preview_session: AsyncMutex<Option<crate::ios_session::PreviewHandle>>,
+
+    pub web_driver: AsyncMutex<Option<Arc<crate::web_session::WebStudioKeeper>>>,
+    pub web_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+
+    /// Set once the user has confirmed quitting (or opted out of the prompt).
+    /// The window-close / app-exit handlers prevent the first quit to show the
+    /// confirmation dialog; `confirm_quit` flips this so the second exit — the
+    /// one it triggers after cleanup — is allowed through.
+    pub quit_confirmed: std::sync::atomic::AtomicBool,
 }

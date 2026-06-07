@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { useNavigate } from "react-router-dom";
 
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
@@ -53,16 +54,17 @@ interface ToolbarProps {
   onRun: () => void;
   onRunAll: () => void;
   onStop: () => void;
-  onOpenSettings: () => void;
 }
 
-export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProps) {
+export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
+  const navigate = useNavigate();
   const chatOpen = useChatStore((s) => s.isOpen);
   const toggleChat = useChatStore((s) => s.toggle);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const inspectLoading = useInspectorStore((s) => s.loading);
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const running = useRunStore((s) => s.running);
+  const starting = useRunStore((s) => s.starting);
   const fps = useStreamStore((s) => s.fps);
   const showFps = useSettingsStore((s) => s.showFps);
   const folderPath = useWorkspaceStore((s) => s.folderPath);
@@ -136,7 +138,12 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
 
           <Separator orientation="vertical" className="mx-1 h-5" />
 
-          {running ? (
+          {starting ? (
+            <Button size="sm" variant="destructive" disabled className="gap-1.5">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Starting…
+            </Button>
+          ) : running ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="sm" variant="destructive" onClick={onStop} className="gap-1.5">
@@ -243,7 +250,7 @@ export function Toolbar({ onRun, onRunAll, onStop, onOpenSettings }: ToolbarProp
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" variant="ghost" onClick={onOpenSettings}>
+              <Button size="icon" variant="ghost" onClick={() => navigate("/settings")}>
                 <Settings className="h-4 w-4" />
               </Button>
             </TooltipTrigger>

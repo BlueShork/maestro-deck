@@ -48,6 +48,18 @@ pub enum AppError {
     #[error("Performance metrics already running")]
     MetricsAlreadyRunning,
 
+    #[error("iOS tooling missing: {0}")]
+    IosToolMissing(String),
+
+    #[error("iOS command failed: {0}")]
+    IosCommandFailed(String),
+
+    #[error("iOS driver unreachable: {0}")]
+    IosDriverUnreachable(String),
+
+    #[error("screen capture failed: {0}")]
+    ScreenCaptureFailed(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 

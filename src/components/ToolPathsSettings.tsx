@@ -6,6 +6,7 @@ import { Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ipc, type ToolPathsView } from "@/lib/ipc";
+import { PhysicalIosSetup } from "@/components/settings/PhysicalIosSetup";
 
 const TOOLS = [
   {
@@ -20,14 +21,37 @@ const TOOLS = [
     placeholder: "~/.maestro/bin/maestro",
     hint: "Test runner — installed via the official curl script or Homebrew.",
   },
+  {
+    key: "iproxy" as const,
+    label: "iproxy (iOS)",
+    placeholder: "/opt/homebrew/bin/iproxy",
+    hint: "USB port-forwarder for physical iPhones — from libusbmuxd (`brew install libusbmuxd`).",
+  },
+  {
+    key: "maestro_ios_device" as const,
+    label: "maestro-ios-device (physical iOS)",
+    placeholder: "~/.maestro/bin/maestro-ios-device",
+    hint: 'Bridge that runs the XCTest driver on a real iPhone (requires maestro 2.5.1). Use "Install automatically" below; needed only for physical iOS devices.',
+  },
 ];
 
 export function ToolPathsSettings() {
   const [view, setView] = useState<ToolPathsView | null>(null);
-  const [draft, setDraft] = useState<{ adb: string; maestro: string }>({ adb: "", maestro: "" });
+  const [draft, setDraft] = useState<{
+    adb: string;
+    maestro: string;
+    iproxy: string;
+    maestro_ios_device: string;
+    appleTeamId: string;
+  }>({ adb: "", maestro: "", iproxy: "", maestro_ios_device: "", appleTeamId: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Physical-iOS bridge (devicelab) auto-install state.
+  const [bridgeInstalled, setBridgeInstalled] = useState<boolean | null>(null);
+  const [installing, setInstalling] = useState(false);
+  // Bump to force the physical-iOS setup checklist to re-fetch its status.
+  const [setupRefresh, setSetupRefresh] = useState(0);
 
   useEffect(() => {
     void refresh();
@@ -40,10 +64,32 @@ export function ToolPathsSettings() {
       setDraft({
         adb: v.overrides.adb ?? "",
         maestro: v.overrides.maestro ?? "",
+        iproxy: v.overrides.iproxy ?? "",
+        maestro_ios_device: v.overrides.maestro_ios_device ?? "",
+        appleTeamId: v.overrides.apple_team_id ?? "",
       });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+    try {
+      setBridgeInstalled(await ipc.iosDeviceBridgeInstalled());
+    } catch {
+      setBridgeInstalled(null);
+    }
+  }
+
+  async function handleInstallBridge() {
+    setInstalling(true);
+    setError(null);
+    try {
+      await ipc.installIosDeviceBridge();
+      await refresh();
+      setSetupRefresh((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setInstalling(false);
     }
   }
 
@@ -52,9 +98,16 @@ export function ToolPathsSettings() {
     setError(null);
     setSaved(false);
     try {
-      const v = await ipc.setToolPaths(draft.adb || null, draft.maestro || null);
+      const v = await ipc.setToolPaths(
+        draft.adb || null,
+        draft.maestro || null,
+        draft.iproxy || null,
+        draft.appleTeamId || null,
+        draft.maestro_ios_device || null,
+      );
       setView(v);
       setSaved(true);
+      setSetupRefresh((n) => n + 1);
       window.setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -63,7 +116,7 @@ export function ToolPathsSettings() {
     }
   }
 
-  async function handleBrowse(key: "adb" | "maestro") {
+  async function handleBrowse(key: "adb" | "maestro" | "iproxy" | "maestro_ios_device") {
     try {
       const picked = await openFileDialog({
         multiple: false,
@@ -80,10 +133,22 @@ export function ToolPathsSettings() {
 
   const dirty =
     view !== null &&
-    ((view.overrides.adb ?? "") !== draft.adb || (view.overrides.maestro ?? "") !== draft.maestro);
+    ((view.overrides.adb ?? "") !== draft.adb ||
+      (view.overrides.maestro ?? "") !== draft.maestro ||
+      (view.overrides.iproxy ?? "") !== draft.iproxy ||
+      (view.overrides.maestro_ios_device ?? "") !== draft.maestro_ios_device ||
+      (view.overrides.apple_team_id ?? "") !== draft.appleTeamId);
 
   return (
     <div className="flex flex-col gap-3">
+      <PhysicalIosSetup
+        bridgeInstalled={bridgeInstalled}
+        teamIdSet={draft.appleTeamId.trim() !== ""}
+        onInstall={() => void handleInstallBridge()}
+        installing={installing}
+        refreshKey={setupRefresh}
+      />
+
       <div>
         <span className="text-xs font-medium text-muted-foreground">Tool paths</span>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -133,9 +198,51 @@ export function ToolPathsSettings() {
                 {!overridden && resolved !== tool.key && " (auto-detected)"}
               </span>
             </p>
+            {tool.key === "maestro_ios_device" && bridgeInstalled === false && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={installing}
+                  onClick={() => void handleInstallBridge()}
+                  className="self-start rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  {installing ? "Installing…" : "Install automatically"}
+                </button>
+                <span className="text-[11px] text-muted-foreground">
+                  Downloads the bridge + patched maestro 2.5.1 jars + XCTest runner (~once, needs
+                  network).
+                </span>
+              </div>
+            )}
+            {tool.key === "maestro_ios_device" && bridgeInstalled === true && (
+              <span className="text-[11px] text-green-600">✓ Installed</span>
+            )}
           </div>
         );
       })}
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium" htmlFor="tool-apple-team-id">
+          Apple Team ID (iOS)
+        </label>
+        <input
+          id="tool-apple-team-id"
+          type="text"
+          value={draft.appleTeamId}
+          onChange={(e) => {
+            const value = e.target.value;
+            setDraft((d) => ({ ...d, appleTeamId: value }));
+          }}
+          placeholder="ABCDE12345"
+          spellCheck={false}
+          className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Used to code-sign the iOS test driver when launching it via{" "}
+          <code className="font-mono">maestro studio</code>. Found in your Apple Developer account
+          (Membership → Team ID). Leave empty if maestro is already configured with it.
+        </p>
+      </div>
 
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] text-muted-foreground">

@@ -4,6 +4,8 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { flowUrl } from "@/lib/utils";
+import { useFlowStore } from "@/stores/flowStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
@@ -50,6 +52,8 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   connect: async (serial) => {
     const device = get().devices.find((d) => d.serial === serial);
     const streamEnabled = useSettingsStore.getState().streamEnabled;
+    // Web targets start from the open flow's `url:` header (if any).
+    const url = device?.platform === "web" ? flowUrl(useFlowStore.getState().content) : undefined;
     set({
       connecting: true,
       pendingSerial: serial,
@@ -57,7 +61,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       error: null,
     });
     try {
-      await ipc.connectDevice(serial, streamEnabled);
+      await ipc.connectDevice(serial, streamEnabled, device?.platform ?? "android", url);
       set({
         current: device ?? null,
         connecting: false,

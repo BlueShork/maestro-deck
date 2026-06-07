@@ -3,7 +3,7 @@
 
 //! Maestro runner subprocess orchestration.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
 
 use once_cell::sync::Lazy;
@@ -39,6 +39,11 @@ pub struct RunnerExit {
 /// completes (whether the runner exited on its own or was killed).
 static RUNNERS: Lazy<AsyncMutex<HashMap<u32, oneshot::Sender<()>>>> =
     Lazy::new(|| AsyncMutex::new(HashMap::new()));
+
+/// Maestro binaries confirmed to support `--driver-host-port`. Caches the
+/// (slow, JVM-booting) capability probe in `maestro_supports_driver_host_port`.
+static DRIVER_HOST_PORT_OK: Lazy<AsyncMutex<HashSet<String>>> =
+    Lazy::new(|| AsyncMutex::new(HashSet::new()));
 
 /// Resolves to the user's `maestro` install — see `crate::tool_paths` for
 /// the full priority chain (user override → env → common paths → shell).
@@ -170,6 +175,272 @@ pub async fn spawn_runner(
         if let Some(hook) = on_exit_hook {
             hook(app_exit.clone());
         }
+        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
+    });
+
+    Ok(pid)
+}
+
+/// Spawn `maestro test <flow>` for the web platform — no `--udid`, since
+/// Maestro targets the browser via the flow's `url:` header, and no adb
+/// emulator-ghost preamble (irrelevant to web). Streams stdout/stderr and
+/// emits `runner:exit` exactly like [`spawn_runner`].
+pub async fn spawn_web_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
+    let bin = maestro_bin();
+    info!(bin = %bin, flow = %flow_path, "spawning maestro (web)");
+
+    let mut child = Command::new(&bin)
+        .no_window()
+        // `-p web` is a global flag and must precede the `test` subcommand.
+        .args(["-p", "web", "test"])
+        .arg(flow_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::RunnerNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+
+    let pid = child.id().ok_or_else(|| {
+        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
+    })?;
+
+    if let Some(stdout) = child.stdout.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stdout).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stdout", "{line}");
+                let _ = app.emit(EVT_STDOUT, &line);
+            }
+        });
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stderr", "{line}");
+                let _ = app.emit(EVT_STDERR, &line);
+            }
+        });
+    }
+
+    let (kill_tx, kill_rx) = oneshot::channel::<()>();
+    RUNNERS.lock().await.insert(pid, kill_tx);
+
+    let app_exit = app.clone();
+    tokio::spawn(async move {
+        let code = tokio::select! {
+            status = child.wait() => status.ok().and_then(|s| s.code()),
+            _ = kill_rx => {
+                if let Err(e) = child.kill().await {
+                    warn!(pid, error = %e, "child kill failed");
+                }
+                child.wait().await.ok().and_then(|s| s.code())
+            }
+        };
+        RUNNERS.lock().await.remove(&pid);
+        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
+    });
+
+    Ok(pid)
+}
+
+/// Spawn `maestro --udid <udid> test <flow>` for an iOS simulator. Like
+/// [`spawn_runner`] but without the adb emulator-ghost preamble (irrelevant to
+/// iOS). The caller stops the studio keeper first so `maestro test` can bring up
+/// its own XCTest driver on :22087 without contention. Streams stdout/stderr and
+/// emits `runner:exit` exactly like the other runners.
+pub async fn spawn_ios_runner(app: AppHandle, udid: &str, flow_path: &str) -> AppResult<u32> {
+    let bin = maestro_bin();
+    info!(bin = %bin, udid, flow = %flow_path, "spawning maestro (ios)");
+
+    let mut child = Command::new(&bin)
+        .no_window()
+        .args(["--udid", udid, "test"])
+        .arg(flow_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::RunnerNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+
+    let pid = child.id().ok_or_else(|| {
+        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
+    })?;
+
+    if let Some(stdout) = child.stdout.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stdout).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stdout", "{line}");
+                let _ = app.emit(EVT_STDOUT, &line);
+            }
+        });
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stderr", "{line}");
+                let _ = app.emit(EVT_STDERR, &line);
+            }
+        });
+    }
+
+    let (kill_tx, kill_rx) = oneshot::channel::<()>();
+    RUNNERS.lock().await.insert(pid, kill_tx);
+
+    let app_exit = app.clone();
+    tokio::spawn(async move {
+        let code = tokio::select! {
+            status = child.wait() => status.ok().and_then(|s| s.code()),
+            _ = kill_rx => {
+                if let Err(e) = child.kill().await {
+                    warn!(pid, error = %e, "child kill failed");
+                }
+                child.wait().await.ok().and_then(|s| s.code())
+            }
+        };
+        RUNNERS.lock().await.remove(&pid);
+        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
+    });
+
+    Ok(pid)
+}
+
+/// True if the resolved maestro accepts the `--driver-host-port` flag, i.e. it
+/// is the patched maestro that can drive a physical device by talking to an
+/// already-running XCTest driver (the `maestro-ios-device` bridge).
+///
+/// We can't just grep `maestro --help`: in patched maestro 2.5.1 the option is
+/// registered with `hidden = true`, so it never appears in help output. Instead
+/// we probe `maestro --driver-host-port <port> test --help` and treat the flag
+/// being accepted (no picocli "Unknown option" / "Unmatched argument") as
+/// support. `test --help` short-circuits to help, so nothing is executed and no
+/// port is bound.
+pub async fn maestro_supports_driver_host_port(bin: &str) -> bool {
+    // Probing the flag boots the maestro JVM (~seconds), which stalls every
+    // physical-device run. The binary doesn't change mid-session, so cache a
+    // confirmed-good bin and skip the probe on subsequent runs. Only `true` is
+    // cached — a `false` is re-probed so installing the patched maestro is
+    // picked up without a restart.
+    if DRIVER_HOST_PORT_OK.lock().await.contains(bin) {
+        return true;
+    }
+    let ok = Command::new(bin)
+        .no_window()
+        .args(["--driver-host-port", "6001", "test", "--help"])
+        .output()
+        .await
+        .map(|o| {
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&o.stdout),
+                String::from_utf8_lossy(&o.stderr)
+            );
+            !text.contains("Unknown option") && !text.contains("Unmatched argument")
+        })
+        .unwrap_or(false);
+    if ok {
+        DRIVER_HOST_PORT_OK.lock().await.insert(bin.to_string());
+    }
+    ok
+}
+
+/// Spawn `maestro --driver-host-port <port> --device <udid> test <flow>` for a
+/// physical iOS device. The run REUSES the `maestro-ios-device` bridge's
+/// already-running XCTest driver (forwarded on `port`) instead of bringing up
+/// its own — so the caller must keep the keeper alive. Requires the
+/// devicelab-patched maestro (stock maestro has no `--driver-host-port`); we
+/// preflight that flag and surface a clear setup error if it's missing.
+pub async fn spawn_ios_device_runner(
+    app: AppHandle,
+    udid: &str,
+    flow_path: &str,
+    port: u16,
+) -> AppResult<u32> {
+    let bin = maestro_bin();
+    if !maestro_supports_driver_host_port(&bin).await {
+        return Err(AppError::RunnerFailed(
+            "this maestro has no --driver-host-port flag — physical-device flow runs need \
+             devicelab's patched maestro (install maestro-ios-device via setup.sh)"
+                .into(),
+        ));
+    }
+    let port_str = port.to_string();
+    info!(bin = %bin, udid, port, flow = %flow_path, "spawning maestro (ios physical)");
+
+    let mut child = Command::new(&bin)
+        .no_window()
+        .args(["--driver-host-port", &port_str, "--device", udid, "test"])
+        .arg(flow_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::RunnerNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+
+    let pid = child.id().ok_or_else(|| {
+        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
+    })?;
+
+    if let Some(stdout) = child.stdout.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stdout).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stdout", "{line}");
+                let _ = app.emit(EVT_STDOUT, &line);
+            }
+        });
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let app = app.clone();
+        let mut reader = BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                debug!(target: "maestro::stderr", "{line}");
+                let _ = app.emit(EVT_STDERR, &line);
+            }
+        });
+    }
+
+    let (kill_tx, kill_rx) = oneshot::channel::<()>();
+    RUNNERS.lock().await.insert(pid, kill_tx);
+
+    let app_exit = app.clone();
+    tokio::spawn(async move {
+        let code = tokio::select! {
+            status = child.wait() => status.ok().and_then(|s| s.code()),
+            _ = kill_rx => {
+                if let Err(e) = child.kill().await {
+                    warn!(pid, error = %e, "child kill failed");
+                }
+                child.wait().await.ok().and_then(|s| s.code())
+            }
+        };
+        RUNNERS.lock().await.remove(&pid);
         let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
     });
 

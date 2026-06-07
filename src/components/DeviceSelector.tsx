@@ -1,7 +1,16 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Loader2, Plug, PlugZap, RefreshCw, Smartphone, Stethoscope } from "lucide-react";
+import {
+  Apple,
+  Globe,
+  Loader2,
+  Plug,
+  PlugZap,
+  RefreshCw,
+  Smartphone,
+  Stethoscope,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -10,7 +19,7 @@ import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { toast } from "@/stores/toastStore";
-import type { HealthReport } from "@/types";
+import type { Device, HealthReport } from "@/types";
 import { isHealthReportClean } from "@/types";
 
 export function DeviceSelector() {
@@ -26,6 +35,21 @@ export function DeviceSelector() {
     connect,
     disconnect,
   } = useDeviceStore();
+
+  // Booted iOS sims, physical iPhones, and all non-iOS devices render as normal
+  // rows; only SHUTDOWN iOS simulators go into the "Launch a simulator…" picker
+  // (there can be dozens). Physical devices have booted=false but must stay in
+  // the main list, hence the explicit `!d.physical` guard.
+  const isShutdownSim = (d: Device) => d.platform === "ios" && !d.booted && !d.physical;
+  const rows = devices.filter((d) => !isShutdownSim(d));
+  const shutdownSims = devices
+    .filter(isShutdownSim)
+    .sort(
+      (a, b) =>
+        a.model.localeCompare(b.model) ||
+        a.os_version.localeCompare(b.os_version, undefined, { numeric: true }),
+    );
+  const bootingSim = connecting && shutdownSims.some((d) => d.serial === pendingSerial);
 
   const [checkingSerial, setCheckingSerial] = useState<string | null>(null);
   const [report, setReport] = useState<HealthReport | null>(null);
@@ -76,16 +100,19 @@ export function DeviceSelector() {
 
       {!loading && devices.length === 0 && !error ? (
         <div className="rounded border border-dashed border-border p-2 text-[11px] text-muted-foreground">
-          No devices found. Plug in an Android device with USB debugging enabled.
+          No devices found. Plug in an Android device (USB debugging) or an iPhone (Developer Mode,
+          trusted).
         </div>
       ) : null}
 
       <ul className="flex flex-col gap-1">
-        {devices.map((d) => {
+        {rows.map((d) => {
           const active = current?.serial === d.serial;
           const isPending = pendingSerial === d.serial;
           const isConnecting = isPending && pendingAction === "connect";
           const isDisconnecting = isPending && pendingAction === "disconnect";
+          const DeviceIcon =
+            d.platform === "ios" ? Apple : d.platform === "web" ? Globe : Smartphone;
           return (
             <li key={d.serial}>
               <button
@@ -112,7 +139,7 @@ export function DeviceSelector() {
                 )}
               >
                 <div className="relative shrink-0">
-                  <Smartphone
+                  <DeviceIcon
                     className={cn(
                       "h-4 w-4",
                       isConnecting && "text-emerald-500/70",
@@ -152,11 +179,15 @@ export function DeviceSelector() {
                       ? "Connecting…"
                       : isDisconnecting
                         ? "Disconnecting…"
-                        : `${d.serial} · Android ${d.android_version}`}
+                        : d.platform === "web"
+                          ? "Chromium"
+                          : d.platform === "ios"
+                            ? `${d.serial} · iOS ${d.os_version} · ${d.physical ? "device" : "simulator"}`
+                            : `${d.serial} · Android ${d.os_version}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {active && !isPending && (
+                  {active && !isPending && d.platform === "android" && (
                     <span
                       role="button"
                       aria-label="Healthcheck device"
@@ -191,6 +222,39 @@ export function DeviceSelector() {
           );
         })}
       </ul>
+
+      {shutdownSims.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="sim-picker"
+            className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+          >
+            iOS Simulators
+          </label>
+          <select
+            id="sim-picker"
+            value=""
+            disabled={connecting}
+            onChange={(e) => {
+              const udid = e.target.value;
+              if (udid) void connect(udid);
+            }}
+            className="rounded border border-border bg-background px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="">{`Launch a simulator… (${shutdownSims.length})`}</option>
+            {shutdownSims.map((d) => (
+              <option key={d.serial} value={d.serial}>
+                {`${d.model} · iOS ${d.os_version}`}
+              </option>
+            ))}
+          </select>
+          {bootingSim ? (
+            <div className="text-[11px] text-muted-foreground">
+              Booting simulator &amp; starting driver… (can take a minute)
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {report && (
         <HealthcheckModal

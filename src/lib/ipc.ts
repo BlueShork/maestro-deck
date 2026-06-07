@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
@@ -11,6 +11,7 @@ import type {
   InputEvent,
   KillReport,
   MaestroAction,
+  Platform,
   RunnerExitPayload,
   Selector,
   UINode,
@@ -60,9 +61,13 @@ export const ipc = {
   ping: () => call<string>("ping"),
   appVersion: () => call<string>("app_version"),
   listDevices: () => call<Device[]>("list_devices"),
-  connectDevice: (serial: string, streamEnabled: boolean) =>
-    call<void>("connect_device", { serial, streamEnabled }),
+  connectDevice: (serial: string, streamEnabled: boolean, platform: Platform, url?: string) =>
+    call<void>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
   disconnectDevice: () => call<void>("disconnect_device"),
+  // Tear down all sessions and exit. Called once the user confirms the quit
+  // dialog (or has opted out of it). The app process exits, so this never
+  // resolves on success.
+  confirmQuit: () => call<void>("confirm_quit"),
   enterInspectMode: (fastMode: boolean) => call<HierarchyTree>("enter_inspect_mode", { fastMode }),
   queryElement: (x: number, y: number) => call<UINode | null>("query_element", { x, y }),
   suggestSelectors: (node: UINode) => call<Selector[]>("suggest_selectors", { node }),
@@ -71,6 +76,8 @@ export const ipc = {
     call<void>("send_input", { event, screenW, screenH }),
   setDarkMode: (enabled: boolean) => call<void>("set_dark_mode", { enabled }),
   getDarkMode: () => call<boolean>("get_dark_mode"),
+  // iOS-only: press the Home button to return to the home screen.
+  iosPressHome: () => call<void>("ios_press_home"),
   runFlow: (filePath: string) => call<number>("run_flow", { filePath }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
@@ -81,15 +88,51 @@ export const ipc = {
   checkDeviceHealth: (serial: string) => call<HealthReport>("check_device_health", { serial }),
   killMaestroProcesses: (serial: string, report: HealthReport) =>
     call<KillReport>("kill_maestro_processes", { serial, report }),
+  upgradeIosPreview: (channel: Channel<ArrayBuffer>) =>
+    call<boolean>("upgrade_ios_preview", { channel }),
+  // Physical iOS bridge (devicelab maestro-ios-device): check if installed, and
+  // one-click auto-install (downloads the binary + runs its `setup`).
+  iosDeviceBridgeInstalled: () => call<boolean>("ios_device_bridge_installed"),
+  installIosDeviceBridge: () => call<string>("install_ios_device_bridge"),
+  // Auto-detected physical-iOS prerequisites for the in-app setup checklist.
+  iosPhysicalSetupStatus: () => call<IosPhysicalSetupStatus>("ios_physical_setup_status"),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
-  setToolPaths: (adb: string | null, maestro: string | null) =>
-    call<ToolPathsView>("set_tool_paths", { adb, maestro }),
+  setToolPaths: (
+    adb: string | null,
+    maestro: string | null,
+    iproxy: string | null,
+    appleTeamId: string | null,
+    maestroIosDevice: string | null,
+  ) =>
+    call<ToolPathsView>("set_tool_paths", {
+      adb,
+      maestro,
+      iproxy,
+      appleTeamId,
+      maestroIosDevice,
+    }),
 };
 
+export interface IosPhysicalSetupStatus {
+  xcodeInstalled: boolean;
+  maestroVersion: string | null;
+  // serde `rename_all = "camelCase"` turns `maestro_is_2_5_1` into `maestroIs251`.
+  maestroIs251: boolean;
+  maestroPatched: boolean;
+}
+
 export interface ToolPathsView {
-  overrides: { adb: string | null; maestro: string | null };
+  overrides: {
+    adb: string | null;
+    maestro: string | null;
+    iproxy: string | null;
+    apple_team_id: string | null;
+    maestro_ios_device: string | null;
+  };
   resolved_adb: string;
   resolved_maestro: string;
+  resolved_iproxy: string;
+  resolved_maestro_ios_device: string;
 }
 
 export interface FrameEvent {
@@ -132,10 +175,38 @@ export const events = {
     listen<RunnerExitPayload>("runner:exit", (e) => handler(e.payload)),
   onDeviceDisconnected: (handler: () => void): Promise<UnlistenFn> =>
     listen<null>("device:disconnected", () => handler()),
+  // Emitted by the backend when the user tries to quit (window close or Cmd+Q);
+  // the backend holds the exit until the frontend calls `confirmQuit`.
+  onQuitRequested: (handler: () => void): Promise<UnlistenFn> =>
+    listen<null>("quit-requested", () => handler()),
   onMetricsSample: (handler: (p: MetricsSamplePayload) => void): Promise<UnlistenFn> =>
     listen<MetricsSamplePayload>("metrics:sample", (e) => handler(e.payload)),
   onMetricsTargetChanged: (handler: (p: TargetChangedPayload) => void): Promise<UnlistenFn> =>
     listen<TargetChangedPayload>("metrics:target_changed", (e) => handler(e.payload)),
   onMetricsStopped: (handler: (p: MetricsStoppedPayload) => void): Promise<UnlistenFn> =>
     listen<MetricsStoppedPayload>("metrics:stopped", (e) => handler(e.payload)),
+  onIosFrame: (
+    handler: (p: { data: Uint8Array; width: number; height: number }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ data: number[] | Uint8Array | ArrayBuffer; width: number; height: number }>(
+      "ios_frame",
+      (e) =>
+        handler({
+          data: toUint8Array(e.payload.data),
+          width: e.payload.width,
+          height: e.payload.height,
+        }),
+    ),
+  onWebFrame: (
+    handler: (p: { data: Uint8Array; width: number; height: number }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ data: number[] | Uint8Array | ArrayBuffer; width: number; height: number }>(
+      "web_frame",
+      (e) =>
+        handler({
+          data: toUint8Array(e.payload.data),
+          width: e.payload.width,
+          height: e.payload.height,
+        }),
+    ),
 };
