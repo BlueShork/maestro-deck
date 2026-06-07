@@ -769,8 +769,6 @@ pub fn ios_device_bridge_installed() -> bool {
 /// iPhone ever trigger this.
 #[tauri::command]
 pub async fn install_ios_device_bridge() -> AppResult<String> {
-    use std::os::unix::fs::PermissionsExt;
-
     if !cfg!(target_os = "macos") {
         return Err(AppError::Other("physical iOS support is macOS-only".into()));
     }
@@ -811,14 +809,21 @@ pub async fn install_ios_device_bridge() -> AppResult<String> {
     tokio::fs::write(&dest, &bytes)
         .await
         .map_err(AppError::Io)?;
-    let mut perm = tokio::fs::metadata(&dest)
-        .await
-        .map_err(AppError::Io)?
-        .permissions();
-    perm.set_mode(0o755);
-    tokio::fs::set_permissions(&dest, perm)
-        .await
-        .map_err(AppError::Io)?;
+    // chmod +x — Unix-only. This whole command returns early on non-macOS above,
+    // so the bridge is never installed off-Unix; the `cfg` just keeps the binary
+    // compiling on Windows (where `PermissionsExt`/`set_mode` don't exist).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perm = tokio::fs::metadata(&dest)
+            .await
+            .map_err(AppError::Io)?
+            .permissions();
+        perm.set_mode(0o755);
+        tokio::fs::set_permissions(&dest, perm)
+            .await
+            .map_err(AppError::Io)?;
+    }
 
     // `setup` fetches the prebuilt XCTest runner + patched maestro jars into
     // ~/.maestro. No device required for this step.
