@@ -1,3 +1,25 @@
+# What's New in v0.4.0
+
+## iOS support
+Maestro Deck now drives iPhones, not just Android:
+- **iOS Simulator preview** — pick a booted simulator (or launch one from the app) and see a live, low-latency screen mirror powered by ScreenCaptureKit. Tap, swipe, type, and press Home directly on the preview.
+- **Physical iPhone support** — connect a real device over USB and preview/inspect it through the `maestro-ios-device` bridge. A guided **Settings → Tools** checklist walks you through the one-time setup (Xcode, Maestro, on-device bridge) and can auto-install the bridge for you.
+- **Run flows on iOS** — execute your Maestro flows against the simulator while the live preview keeps streaming, with the gutter highlighting each step as it runs.
+- **Cross-platform selectors** — the inspector folds accessibility labels into text so the selectors you capture stay portable between Android and iOS.
+
+## Workspace & UI
+- **Right-click context menu** in the file tree, plus create-folder actions from the header and per-folder buttons. Empty directories now show up in the tree.
+- **Full-screen settings page** with instant back navigation.
+- **Confirm-before-quit** dialog that cleans up running sessions on exit.
+- Centered About panel with the app logo.
+
+## Fixes
+- Perf panel now fills the full height and width of its resizable pane.
+- Inspector action-menu clicks no longer leak through to the device view.
+- Run gutter correctly detects id-based and unquoted steps in the run output.
+
+---
+
 # What's New in v0.3.2
 
 ## Bug fixes

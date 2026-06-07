@@ -63,3 +63,6 @@ coverage/
 docs/superpowers/
 AUDIT.md
 AUDIT_SECU.md
+
+# Local release staging
+release-artifacts/
