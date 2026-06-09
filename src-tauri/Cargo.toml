@@ -36,8 +36,12 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 # `panic = "abort"` that aborts the whole app when Billy requests a token).
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 
-# HTTP for token exchange
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# HTTP for token exchange.
+# `rustls-tls-native-roots` (NOT plain `rustls-tls`): plain rustls-tls trusts
+# only the bundled Mozilla roots, so corporate TLS-inspection proxies (whose
+# MITM CA lives in the OS trust store) break every request — downloads and
+# Vertex token exchange fail on work machines while the browser works fine.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 base64 = "0.22"
 
 # Async runtime
