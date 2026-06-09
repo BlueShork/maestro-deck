@@ -248,6 +248,37 @@ fn studio_args(udid: &str) -> Vec<&str> {
     vec!["--device", udid, "studio", "--no-window"]
 }
 
+/// SIGKILL orphan `maestro … --device <udid> … studio` processes left behind
+/// by a crashed/SIGKILLed session (their `kill_on_drop` never ran). Scoped to
+/// this UDID so a legitimate Android studio keeper is never touched. Unix-only
+/// (`pgrep`/`kill`); simulators only exist on macOS anyway.
+async fn kill_orphan_studios_for(udid: &str) {
+    #[cfg(unix)]
+    {
+        let pattern = format!("maestro.*--device {udid}.*studio");
+        let Ok(output) = Command::new("pgrep").args(["-f", &pattern]).output().await else {
+            return;
+        };
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let Ok(pid) = line.trim().parse::<u32>() else {
+                continue;
+            };
+            warn!(
+                pid,
+                udid, "SIGKILL orphan maestro studio (stale iOS driver)"
+            );
+            let _ = Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output()
+                .await;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = udid;
+    }
+}
+
 /// Which kind of iOS target a keeper drives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IosTarget {
@@ -307,6 +338,16 @@ impl IosDriverKeeper {
     /// Boot the simulator and spawn `maestro studio` (installs/launches the XCTest
     /// runner on :22087).
     async fn spawn_simulator(udid: &str) -> AppResult<Arc<Self>> {
+        // After a crash / SIGKILL, `kill_on_drop` never fires and the studio
+        // JVM (which holds the XCTest driver on :22087) outlives the app.
+        // Stale instances then fight the fresh one for the driver, and the
+        // inspector hangs on a zombie runner for the whole readiness budget.
+        // Any studio targeting this UDID at spawn time is an orphan (the
+        // keeper for the current session is stopped before respawning), so
+        // cull them first — mirrors `hierarchy::studio::kill_orphan_studios`
+        // on the Android path.
+        kill_orphan_studios_for(udid).await;
+
         // Boot the sim (idempotent — `simctl boot` errors if already booted, ignored).
         let _ = Command::new("xcrun")
             .args(["simctl", "boot", udid])
