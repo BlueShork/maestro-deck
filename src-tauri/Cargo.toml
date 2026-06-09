@@ -30,8 +30,11 @@ tauri-plugin-process = "2.0"
 # Secret Service). Used to store BYOK API credentials.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
-# JWT signing for Vertex Oauth2
-jsonwebtoken = "10"
+# JWT signing for Vertex Oauth2.
+# `rust_crypto` is REQUIRED: since v10 the default features ship NO crypto
+# backend — RS256 signing then compiles fine but panic!s at runtime (and with
+# `panic = "abort"` that aborts the whole app when Billy requests a token).
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 
 # HTTP for token exchange
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
