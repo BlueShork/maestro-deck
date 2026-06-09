@@ -169,11 +169,18 @@ pub async fn upgrade_ios_preview(
         None => return Ok(false),
     };
 
-    // The connect flow warms the driver in the background; `device_info` (needed
-    // for the aspect-ratio crop) only exists once the driver is ready. Wait for
-    // it here. `wait_until_ready` is idempotent/concurrent-safe and returns
-    // `false` promptly if the session was torn down (e.g. user disconnected).
-    if !keeper.wait_until_ready().await {
+    // SIMULATOR ONLY: the connect flow warms the driver in the background;
+    // `device_info` (needed for the aspect-ratio crop) only exists once the
+    // driver is ready, so wait for it. `wait_until_ready` is idempotent /
+    // concurrent-safe and returns `false` promptly on teardown.
+    //
+    // PHYSICAL: the AVF USB mirror is completely driver-independent (its frame
+    // IS the pure device screen, dims come from the frame itself) — start it
+    // right away so the user sees the screen while the XCTest driver is still
+    // building on the device (~10 min on first connect). Waiting here used to
+    // time out (180 s readiness budget < build time) and leave the preview
+    // blank for the whole build.
+    if !keeper.is_physical() && !keeper.wait_until_ready().await {
         return Ok(false);
     }
 
