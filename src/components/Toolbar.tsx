@@ -56,6 +56,40 @@ interface ToolbarProps {
   onStop: () => void;
 }
 
+/** Isolated so the periodic fps updates (4 Hz while a device streams)
+ *  re-render only this tiny badge instead of the whole Toolbar. */
+function FpsBadge() {
+  const fps = useStreamStore((s) => s.fps);
+  const showFps = useSettingsStore((s) => s.showFps);
+  if (!showFps) return null;
+  return (
+    <span className="mr-2 rounded border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+      {fps} fps
+    </span>
+  );
+}
+
+/** Subscribes to its own panel's flag only, so toggling one panel
+ *  re-renders just this menu item — not the Toolbar. */
+function PanelMenuItem({ id, label }: { id: PanelId; label: string }) {
+  const visible = usePanelsStore((s) => s.visible[id]);
+  const togglePanel = usePanelsStore((s) => s.toggle);
+  return (
+    <DropdownMenuItem
+      onSelect={(e) => {
+        // Keep the menu open so users can toggle multiple
+        // panels in one pass.
+        e.preventDefault();
+        togglePanel(id);
+      }}
+      className="justify-between gap-6"
+    >
+      <span>{label}</span>
+      <Check className={cn("h-3.5 w-3.5", visible ? "opacity-100" : "opacity-0")} />
+    </DropdownMenuItem>
+  );
+}
+
 export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const navigate = useNavigate();
   const chatOpen = useChatStore((s) => s.isOpen);
@@ -65,11 +99,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const running = useRunStore((s) => s.running);
   const starting = useRunStore((s) => s.starting);
-  const fps = useStreamStore((s) => s.fps);
-  const showFps = useSettingsStore((s) => s.showFps);
   const folderPath = useWorkspaceStore((s) => s.folderPath);
-  const panels = usePanelsStore((s) => s.visible);
-  const togglePanel = usePanelsStore((s) => s.toggle);
   const showAllPanels = usePanelsStore((s) => s.showAll);
   const updatePhase = useUpdateStore((s) => s.phase);
   const checkUpdate = useUpdateStore((s) => s.check);
@@ -103,11 +133,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
         </div>
 
         <div className="flex items-center gap-1">
-          {showFps ? (
-            <span className="mr-2 rounded border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-              {fps} fps
-            </span>
-          ) : null}
+          <FpsBadge />
 
           <Tooltip>
             <TooltipTrigger asChild>
@@ -197,24 +223,9 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
             </Tooltip>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel>Panels</DropdownMenuLabel>
-              {VIEW_ENTRIES.map(({ id, label }) => {
-                const visible = panels[id];
-                return (
-                  <DropdownMenuItem
-                    key={id}
-                    onSelect={(e) => {
-                      // Keep the menu open so users can toggle multiple
-                      // panels in one pass.
-                      e.preventDefault();
-                      togglePanel(id);
-                    }}
-                    className="justify-between gap-6"
-                  >
-                    <span>{label}</span>
-                    <Check className={cn("h-3.5 w-3.5", visible ? "opacity-100" : "opacity-0")} />
-                  </DropdownMenuItem>
-                );
-              })}
+              {VIEW_ENTRIES.map(({ id, label }) => (
+                <PanelMenuItem key={id} id={id} label={label} />
+              ))}
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => showAllPanels()}>Show all</DropdownMenuItem>
             </DropdownMenuContent>
