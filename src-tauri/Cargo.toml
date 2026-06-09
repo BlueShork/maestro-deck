@@ -95,7 +95,14 @@ tauri-plugin-updater = "2.0"
 # it the SCStreamOutput delegate method (which takes a CMSampleBuffer) is not
 # generated. (There is no `objc2-core-video` feature on this crate; CVPixelBuffer
 # extraction uses the standalone objc2-core-video dep below.)
-objc2 = "0.6"
+# `catch-all` is REQUIRED: CoreSimulator's ROCK proxies (sim_capture) throw
+# ObjC exceptions when the XCTest runner churns the device IO state. Without
+# catch-all the exception unwinds raw into Rust and aborts the process
+# ("panic in a function that cannot unwind") — even objc2::exception::catch
+# can't intercept it reliably. catch-all wraps every msg_send in @try/@catch
+# at the C level and converts caught exceptions to ordinary Rust panics,
+# which sim_capture contains with catch_unwind on its poll thread.
+objc2 = { version = "0.6", features = ["catch-all"] }
 objc2-foundation = "0.3"
 objc2-screen-capture-kit = { version = "0.3.2", features = ["SCStream", "SCShareableContent", "objc2-core-media", "objc2-core-foundation", "objc2-core-graphics"] }
 # The `objc2-core-video` feature is what gates `CMSampleBuffer::image_buffer()`.

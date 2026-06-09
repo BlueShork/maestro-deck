@@ -130,17 +130,34 @@ impl SimCaptureSession {
         let handle = std::thread::Builder::new()
             .name("sim-capture-poll".into())
             .spawn(move || {
-                let attached = match attach(&thread_udid) {
-                    Ok(a) => {
-                        let _ = ready_tx.send(Ok(()));
-                        a
-                    }
-                    Err(e) => {
-                        let _ = ready_tx.send(Err(e));
-                        return;
-                    }
-                };
-                poll_loop(attached, tx, thread_stop, fps, max_dim);
+                // Backstop: objc2's `catch-all` feature converts ObjC
+                // exceptions from CoreSimulator's ROCK proxies into ordinary
+                // Rust panics; contain them here so a flaky proxy only kills
+                // the preview (frames stop, receiver closes), never the app.
+                let attached =
+                    match std::panic::catch_unwind(AssertUnwindSafe(|| attach(&thread_udid))) {
+                        Ok(Ok(a)) => {
+                            let _ = ready_tx.send(Ok(()));
+                            a
+                        }
+                        Ok(Err(e)) => {
+                            let _ = ready_tx.send(Err(e));
+                            return;
+                        }
+                        Err(_) => {
+                            let _ = ready_tx.send(Err(AppError::ScreenCaptureFailed(
+                                "CoreSimulator threw while attaching to the framebuffer".into(),
+                            )));
+                            return;
+                        }
+                    };
+                if std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    poll_loop(attached, tx, thread_stop, fps, max_dim);
+                }))
+                .is_err()
+                {
+                    warn!("sim-capture poll loop stopped by an ObjC exception (panic contained)");
+                }
             })
             .map_err(|e| {
                 AppError::ScreenCaptureFailed(format!("spawn sim-capture poll thread: {e}"))
@@ -248,17 +265,26 @@ fn developer_dir() -> String {
         .unwrap_or_else(|| DEFAULT_DEVELOPER_DIR.to_owned())
 }
 
+/// Run a fragile ObjC call best-effort. objc2's `catch-all` feature converts
+/// any thrown ObjC exception into a Rust panic at the `msg_send!` call site
+/// (e.g. `-[ROCKImmutableProxy displayClass]: unrecognized selector` once the
+/// XCTest runner has touched the device IO), so a plain `catch_unwind`
+/// uniformly contains both ObjC exceptions and Rust panics as `None`.
+fn guarded<T>(f: impl FnOnce() -> T) -> Option<T> {
+    std::panic::catch_unwind(AssertUnwindSafe(f)).ok()
+}
+
 /// Render an `id*` error (NSError or any object) to a String for logging.
 fn err_str(err: *mut AnyObject) -> String {
     if err.is_null() {
         return "(nil)".into();
     }
     let ep = AssertUnwindSafe(err);
-    objc2::exception::catch(move || unsafe {
+    guarded(move || unsafe {
         let s: Retained<NSString> = msg_send![&*{ *ep }, localizedDescription];
         s.to_string()
     })
-    .unwrap_or_else(|_| "(no localizedDescription)".into())
+    .unwrap_or_else(|| "(no localizedDescription)".into())
 }
 
 /// Resolve the booted simulator by `udid` and attach to its display IOSurface.
@@ -363,30 +389,32 @@ fn attach(udid: &str) -> AppResult<Attached> {
 
     // Pick the descriptor whose `framebufferSurface` is non-nil, preferring the
     // main display (`state.displayClass == 0`). Fragile cross-proxy sends are
-    // wrapped in `objc2::exception::catch` with raw pointers (Retained isn't
-    // UnwindSafe) — the probe's exact technique.
+    // wrapped in `guarded` with raw pointers (Retained isn't UnwindSafe) —
+    // `catch-all` turns their ObjC exceptions into catchable Rust panics.
     let mut chosen: Option<(Retained<AnyObject>, Retained<IOSurface>, u16)> = None;
 
     for i in 0..nports {
         let port = ports.objectAtIndex(i);
         let port_ptr = AssertUnwindSafe(Retained::as_ptr(&port));
-        // SAFETY: `-descriptor` may throw across the ROCK proxy; caught. The port
-        // outlives the catch (held by `ports`).
-        let descriptor: Result<*mut AnyObject, _> =
-            objc2::exception::catch(move || unsafe { msg_send![&*{ *port_ptr }, descriptor] });
+        // SAFETY: `-descriptor` may throw across the ROCK proxy; contained. The
+        // port outlives the call (held by `ports`).
+        let descriptor: Option<*mut AnyObject> =
+            guarded(move || unsafe { msg_send![&*{ *port_ptr }, descriptor] });
         let descriptor: Retained<AnyObject> = match descriptor {
             // SAFETY: `-descriptor` returns an autoreleased object; +1 retain it.
-            Ok(d) if !d.is_null() => match unsafe { Retained::retain(d) } {
+            Some(d) if !d.is_null() => match unsafe { Retained::retain(d) } {
                 Some(r) => r,
                 None => continue,
             },
             _ => continue,
         };
 
-        // displayClass (best-effort; the proxy may not respond).
+        // displayClass (best-effort; the proxy may not respond — once the
+        // XCTest runner is attached this is a ROCKImmutableProxy that throws
+        // `unrecognized selector` here).
         let dptr = AssertUnwindSafe(Retained::as_ptr(&descriptor));
-        // SAFETY: `-state` then `-displayClass` may throw across the proxy; caught.
-        let display_class: u16 = objc2::exception::catch(move || unsafe {
+        // SAFETY: `-state` then `-displayClass` may throw across the proxy; contained.
+        let display_class: u16 = guarded(move || unsafe {
             let st: *mut AnyObject = msg_send![&*{ *dptr }, state];
             msg_send![&*st, displayClass]
         })
@@ -394,19 +422,17 @@ fn attach(udid: &str) -> AppResult<Attached> {
 
         // framebufferSurface, falling back to ioSurface.
         let dptr_f = AssertUnwindSafe(Retained::as_ptr(&descriptor));
-        // SAFETY: `-framebufferSurface` may throw / return nil; caught.
-        let fb: Result<*mut AnyObject, _> = objc2::exception::catch(move || unsafe {
-            msg_send![&*{ *dptr_f }, framebufferSurface]
-        });
+        // SAFETY: `-framebufferSurface` may throw / return nil; contained.
+        let fb: Option<*mut AnyObject> =
+            guarded(move || unsafe { msg_send![&*{ *dptr_f }, framebufferSurface] });
         let raw: *mut AnyObject = fb
-            .ok()
             .filter(|p: &*mut AnyObject| !p.is_null())
             .or_else(|| {
                 let dptr2 = AssertUnwindSafe(Retained::as_ptr(&descriptor));
-                // SAFETY: `-ioSurface` fallback; may throw / return nil; caught.
-                let io: Result<*mut AnyObject, _> =
-                    objc2::exception::catch(move || unsafe { msg_send![&*{ *dptr2 }, ioSurface] });
-                io.ok().filter(|p: &*mut AnyObject| !p.is_null())
+                // SAFETY: `-ioSurface` fallback; may throw / return nil; contained.
+                let io: Option<*mut AnyObject> =
+                    guarded(move || unsafe { msg_send![&*{ *dptr2 }, ioSurface] });
+                io.filter(|p: &*mut AnyObject| !p.is_null())
             })
             .unwrap_or(null_mut());
 
