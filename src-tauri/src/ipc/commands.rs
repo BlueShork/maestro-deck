@@ -479,7 +479,17 @@ pub async fn enter_inspect_mode(
                 "the iOS simulator driver is still starting — try again in a moment".into(),
             ));
         }
-        let json = keeper.http().view_hierarchy().await?;
+        // One transient "unreachable" right after a keeper respawn is common
+        // (the bridge just rebound its port); the driver answers on the
+        // immediate retry — don't make the user click Inspect twice.
+        let json = match keeper.http().view_hierarchy().await {
+            Ok(j) => j,
+            Err(AppError::IosDriverUnreachable(_)) => {
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                keeper.http().view_hierarchy().await?
+            }
+            Err(e) => return Err(e),
+        };
         let screen = keeper
             .device_info()
             .map(|d| (d.width_points as i32, d.height_points as i32));
