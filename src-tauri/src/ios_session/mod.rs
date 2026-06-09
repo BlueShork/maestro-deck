@@ -302,7 +302,14 @@ pub struct IosDriverKeeper {
     /// `maestro-ios-device` (physical).
     driver_child: AsyncMutex<Option<Child>>,
     target: IosTarget,
+    /// Last time a `/status` probe succeeded (see [`Self::is_healthy`]).
+    health_checked: parking_lot::Mutex<Option<std::time::Instant>>,
 }
+
+/// How long a successful `/status` probe vouches for the on-device runner
+/// before `is_healthy` re-verifies. Keeps the per-command overhead at one
+/// cheap local HTTP GET every few seconds instead of one per tap.
+const HEALTH_TTL: Duration = Duration::from_secs(5);
 
 impl IosDriverKeeper {
     pub fn udid(&self) -> &str {
@@ -322,6 +329,34 @@ impl IosDriverKeeper {
     /// True once the driver has served real data at least once (cached). Cheap, no I/O.
     pub fn is_ready(&self) -> bool {
         self.device_info.read().is_some()
+    }
+
+    /// True while the ON-DEVICE runner still answers `/status`. The bridge
+    /// process (`maestro studio`) can outlive the XCTest runner it launched —
+    /// the JVM stays up while nothing listens on :22087 anymore, so a keeper
+    /// that only checks `is_process_alive` becomes a permanent zombie (every
+    /// tap / Home press fails with "driver unreachable" forever). A warming
+    /// keeper (not ready yet) is considered healthy — `wait_until_ready`
+    /// owns that phase. Successful probes are cached for [`HEALTH_TTL`].
+    pub async fn is_healthy(&self) -> bool {
+        if !self.is_ready() {
+            return true;
+        }
+        if let Some(t) = *self.health_checked.lock() {
+            if t.elapsed() < HEALTH_TTL {
+                return true;
+            }
+        }
+        if self.http.status().await {
+            *self.health_checked.lock() = Some(std::time::Instant::now());
+            true
+        } else {
+            warn!(
+                udid = %self.udid,
+                "iOS driver stopped answering /status (runner died?) — recycling keeper"
+            );
+            false
+        }
     }
 
     /// Start the right keeper for the target. Returns IMMEDIATELY — does NOT
@@ -374,6 +409,7 @@ impl IosDriverKeeper {
             device_info: parking_lot::RwLock::new(None),
             driver_child: AsyncMutex::new(Some(studio)),
             target: IosTarget::Simulator,
+            health_checked: parking_lot::Mutex::new(None),
         }))
     }
 
@@ -410,6 +446,7 @@ impl IosDriverKeeper {
             device_info: parking_lot::RwLock::new(None),
             driver_child: AsyncMutex::new(Some(bridge)),
             target: IosTarget::Physical,
+            health_checked: parking_lot::Mutex::new(None),
         }))
     }
 

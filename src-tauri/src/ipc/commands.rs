@@ -552,10 +552,12 @@ async fn ensure_ios_keeper(
     let mut slot = state.ios_driver.lock().await;
     // Reuse the keeper for the same device while its bridge process
     // (`maestro studio` / `maestro-ios-device`) is still running — even if the
-    // driver isn't *ready* yet (it may be warming). Only respawn for a different
-    // device or a dead process.
+    // driver isn't *ready* yet (it may be warming). Respawn for a different
+    // device, a dead process, OR a zombie bridge whose on-device runner died
+    // (JVM alive, nothing listening on :22087 — `is_healthy` probes /status
+    // with a short TTL so taps/Home self-heal instead of failing forever).
     let reuse = match slot.as_ref() {
-        Some(k) => k.udid() == udid && k.is_process_alive().await,
+        Some(k) => k.udid() == udid && k.is_process_alive().await && k.is_healthy().await,
         None => false,
     };
     if !reuse {
