@@ -3,6 +3,8 @@
 
 //! Maestro Deck — source-available visual IDE for Maestro mobile tests.
 
+#[cfg(target_os = "macos")]
+pub mod avf_capture;
 pub mod credentials;
 pub mod device;
 mod env_shim;

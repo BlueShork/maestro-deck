@@ -46,19 +46,34 @@ const SIM_FPS: u32 = 30;
 /// native resolution anyway, so the visual difference is negligible.
 const SIM_MAX_DIM: u32 = 700;
 
-/// Live preview handle. Holds the headless [`SimCaptureSession`] and the abort
-/// sender for the frame-draining task.
-///
-/// [`crate::sim_capture::SimCaptureSession`]
+/// The native capture source behind a live preview: CoreSimulator framebuffer
+/// for simulators, AVFoundation USB screen capture for physical iPhones. Both
+/// stream the same [`crate::ios_capture::Frame`]s and share stop semantics.
+enum CaptureSource {
+    Sim(crate::sim_capture::SimCaptureSession),
+    Avf(crate::avf_capture::AvfCaptureSession),
+}
+
+impl CaptureSource {
+    async fn stop(&self) {
+        match self {
+            CaptureSource::Sim(s) => s.stop().await,
+            CaptureSource::Avf(s) => s.stop().await,
+        }
+    }
+}
+
+/// Live preview handle. Holds the native capture source and the abort sender
+/// for the frame-draining task.
 ///
 /// Call [`PreviewHandle::teardown`]`.await` for a clean shutdown: it aborts the
 /// drain task **and** stops the capture session. Dropping the handle without
-/// `teardown` fires the abort signal (via `Drop`); `SimCaptureSession`'s own
-/// `Drop` then joins its poll thread and releases the surface/device refs.
+/// `teardown` fires the abort signal (via `Drop`); the capture session's own
+/// `Drop` then joins its thread and releases its native refs.
 pub struct PreviewHandle {
     // `Option` so `teardown` can move the session out to stop it; `Drop` (which
     // can't move fields) then finds `None`.
-    session: Option<crate::sim_capture::SimCaptureSession>,
+    session: Option<CaptureSource>,
     abort: Option<oneshot::Sender<()>>,
 }
 
@@ -70,8 +85,8 @@ impl PreviewHandle {
         }
         if let Some(session) = self.session.take() {
             session.stop().await;
-            // Dropping `session` here joins its poll thread and releases the
-            // surface/device refs (clean teardown).
+            // Dropping `session` here joins its capture thread and releases
+            // its native refs (clean teardown).
         }
     }
 }
@@ -100,10 +115,19 @@ pub async fn spawn_ios_preview(
     device_name: String,
     channel: Channel<InvokeResponseBody>,
 ) -> AppResult<PreviewHandle> {
-    // Headless attach to the booted simulator's display IOSurface. The returned
-    // session + receiver are `Send`, so no `spawn_blocking` bridge is needed.
-    let (session, mut rx) =
-        crate::sim_capture::SimCaptureSession::start(keeper.udid(), SIM_FPS, SIM_MAX_DIM).await?;
+    // Pick the native source for the target: headless CoreSimulator framebuffer
+    // for simulators, QuickTime-style USB screen capture (~27 fps) for physical
+    // iPhones. Both return `Send` session + receiver pairs.
+    let (session, mut rx) = if keeper.is_physical() {
+        let (s, rx) =
+            crate::avf_capture::AvfCaptureSession::start(keeper.udid(), SIM_MAX_DIM).await?;
+        (CaptureSource::Avf(s), rx)
+    } else {
+        let (s, rx) =
+            crate::sim_capture::SimCaptureSession::start(keeper.udid(), SIM_FPS, SIM_MAX_DIM)
+                .await?;
+        (CaptureSource::Sim(s), rx)
+    };
 
     // Drain task runs on the MAIN runtime (only touches Send values).
     let (abort_tx, mut abort_rx) = oneshot::channel::<()>();

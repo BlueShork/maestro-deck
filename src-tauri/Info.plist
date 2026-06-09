@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required for the physical-iPhone live preview: macOS exposes a
+	     USB-connected iPhone's SCREEN as a capture device (the QuickTime
+	     mirroring mechanism), which is gated behind the camera permission.
+	     Without this key, TCC kills the app the moment AVFoundation is
+	     touched. No actual camera images are ever accessed. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Maestro Deck mirrors the screen of a USB-connected iPhone for the live device preview. macOS exposes the device screen as a capture device, which requires camera access. The phone's camera itself is never used.</string>
+</dict>
+</plist>

@@ -30,7 +30,7 @@ fn main() {
     use block2::RcBlock;
     use objc2::rc::Retained;
     use objc2::runtime::ProtocolObject;
-    use objc2::{define_class, msg_send, AllocAnyThread, DefinedClass};
+    use objc2::{define_class, msg_send, AllocAnyThread};
     use objc2_av_foundation as avf;
     use objc2_av_foundation::AVCaptureVideoDataOutputSampleBufferDelegate;
     use objc2_core_media::CMSampleBuffer;
@@ -75,9 +75,9 @@ fn main() {
 
     // Helper: pump the main runloop so CMIO/AVF device-arrival events deliver.
     let pump = |secs: f64| {
-        let rl = unsafe { NSRunLoop::currentRunLoop() };
-        let until = unsafe { NSDate::dateWithTimeIntervalSinceNow(secs) };
-        unsafe { rl.runUntilDate(&until) };
+        let rl = NSRunLoop::currentRunLoop();
+        let until = NSDate::dateWithTimeIntervalSinceNow(secs);
+        rl.runUntilDate(&until);
     };
 
     // ---- 2. Camera permission (TCC) ----------------------------------------
@@ -153,8 +153,8 @@ fn main() {
             ) {
                 FRAMES.fetch_add(1, Ordering::Relaxed);
                 if let Some(img) = unsafe { sample.image_buffer() } {
-                    let w = unsafe { objc2_core_video::CVPixelBufferGetWidth(&img) };
-                    let h = unsafe { objc2_core_video::CVPixelBufferGetHeight(&img) };
+                    let w = objc2_core_video::CVPixelBufferGetWidth(&img);
+                    let h = objc2_core_video::CVPixelBufferGetHeight(&img);
                     LAST_W.store(w, Ordering::Relaxed);
                     LAST_H.store(h, Ordering::Relaxed);
                 }
