@@ -37,9 +37,14 @@ use crate::ios_capture::crop_and_convert;
 use crate::ios_session::IosDriverKeeper;
 
 /// Capture frame rate (Hz) requested from the simulator framebuffer poller.
-const SIM_FPS: u32 = 60;
-/// Longer-side cap (px) for downscaled frames — matches the smoke test.
-const SIM_MAX_DIM: u32 = 900;
+/// 30 (not 60): each frame crosses the Tauri IPC channel as raw RGBA, and at
+/// 60 Hz the webview main thread spends so long receiving frames that typing
+/// in the editor lags. 30 Hz halves that cost and stays visually smooth.
+const SIM_FPS: u32 = 30;
+/// Longer-side cap (px) for downscaled frames. 700 keeps a frame under ~1 MB
+/// of raw RGBA (vs ~1.5 MB at 900) — the preview canvas renders well below
+/// native resolution anyway, so the visual difference is negligible.
+const SIM_MAX_DIM: u32 = 700;
 
 /// Live preview handle. Holds the headless [`SimCaptureSession`] and the abort
 /// sender for the frame-draining task.

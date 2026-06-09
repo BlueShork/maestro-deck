@@ -265,10 +265,10 @@ function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled
       const view = new DataView(buf);
       const w = view.getUint32(0, true);
       const h = view.getUint32(4, true);
-      const rawRgba = new Uint8ClampedArray(buf, 8);
-      if (rawRgba.length !== w * h * 4) return; // guard against a malformed frame
-      // Copy into a plain ArrayBuffer-backed clamped array so ImageData accepts it.
-      const rgba = new Uint8ClampedArray(rawRgba);
+      const rgba = new Uint8ClampedArray(buf, 8);
+      if (rgba.length !== w * h * 4) return; // guard against a malformed frame
+      // No copy: ImageData accepts an offset view over a plain ArrayBuffer,
+      // and each channel message arrives in its own buffer (no aliasing).
       pendingRef.current = { w, h, rgba };
       if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
     };

@@ -622,7 +622,7 @@ mod tests {
             // swaps the headless IOSurface preview for ScreenCaptureKit.
             // Mirror the real preview params (ios_session::preview SIM_FPS/MAX_DIM)
             // and pull a few live frames through poll_loop/copy_downscaled.
-            let (session, mut rx) = SimCaptureSession::start(&udid, 60, 900)
+            let (session, mut rx) = SimCaptureSession::start(&udid, 30, 700)
                 .await
                 .expect("start capture");
             for n in 0..10 {
