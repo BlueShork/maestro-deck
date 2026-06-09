@@ -298,7 +298,9 @@ const WEB_FRAME_EVENT: &str = "web_frame";
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebFramePayload {
-    pub data: Vec<u8>,
+    /// PNG bytes, **base64-encoded** — see `IosFramePayload::data` for why
+    /// (raw `Vec<u8>` serializes as a JSON number array and chokes the webview).
+    pub data: String,
     pub width: u32,
     pub height: u32,
 }
@@ -321,7 +323,12 @@ pub fn spawn_screenshot_poller(
                     match screen {
                         Ok(s) => match keeper.http().screenshot_png(&s.screenshot).await {
                             Ok(data) => {
-                                let payload = WebFramePayload { data, width: s.width, height: s.height };
+                                use base64::Engine as _;
+                                let payload = WebFramePayload {
+                                    data: base64::engine::general_purpose::STANDARD.encode(&data),
+                                    width: s.width,
+                                    height: s.height,
+                                };
                                 if let Err(e) = app.emit(WEB_FRAME_EVENT, &payload) {
                                     warn!(error = %e, "failed to emit web_frame");
                                 }

@@ -508,10 +508,12 @@ impl IosDriverKeeper {
 /// the pre-framebuffer fallback on sims, so a gentle cadence is fine).
 const SCREENSHOT_INTERVAL_MS: u64 = 350;
 /// Physical devices have no framebuffer/SCK path — this poller IS their preview.
-/// The driver's `/screenshot` capture is itself ~200 ms (the device-side ceiling,
-/// ~5 fps), so we poll back-to-back and let the capture latency pace us instead of
-/// adding a fixed interval on top.
-const PHYSICAL_SCREENSHOT_INTERVAL_MS: u64 = 0;
+/// The driver's `/screenshot` capture is itself ~200 ms, but polling back-to-back
+/// (0 ms) saturated the webview: each multi-MB PNG crosses the event bridge and
+/// must be decoded on the main thread, and with no breathing room between frames
+/// the UI became unusable the moment a physical device connected. 150 ms keeps
+/// ~3 fps while leaving the main thread idle time between frames.
+const PHYSICAL_SCREENSHOT_INTERVAL_MS: u64 = 150;
 /// Back-off after a failed poll (e.g. device unplugged) so we don't spin and flood
 /// logs when there's nothing to capture.
 const SCREENSHOT_ERROR_BACKOFF_MS: u64 = 500;
@@ -520,8 +522,13 @@ const IOS_FRAME_EVENT: &str = "ios_frame";
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IosFramePayload {
-    /// PNG bytes from `GET /screenshot` (native pixels).
-    pub data: Vec<u8>,
+    /// PNG bytes from `GET /screenshot` (native pixels), **base64-encoded**.
+    /// Tauri events serialize payloads as JSON, where a `Vec<u8>` becomes an
+    /// array of numbers — a multi-MB PNG turns into 4-15 MB of JSON parsed
+    /// token-by-token on the webview main thread, freezing the whole UI
+    /// (observed with physical devices). Base64 is one string token, ~4x
+    /// smaller and parsed orders of magnitude faster.
+    pub data: String,
     pub width: u32,
     pub height: u32,
 }
@@ -582,7 +589,12 @@ pub fn spawn_screenshot_poller(
                 } => {
                     let delay_ms = match shot {
                         Ok(data) => {
-                            let payload = IosFramePayload { data, width: w, height: h };
+                            use base64::Engine as _;
+                            let payload = IosFramePayload {
+                                data: base64::engine::general_purpose::STANDARD.encode(&data),
+                                width: w,
+                                height: h,
+                            };
                             if let Err(e) = app.emit(IOS_FRAME_EVENT, &payload) {
                                 warn!(error = %e, "failed to emit ios_frame");
                             }

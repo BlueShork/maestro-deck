@@ -150,7 +150,16 @@ interface RawFrameEvent {
   data: number[] | Uint8Array | ArrayBuffer;
 }
 
-function toUint8Array(d: number[] | Uint8Array | ArrayBuffer): Uint8Array {
+function toUint8Array(d: number[] | Uint8Array | ArrayBuffer | string): Uint8Array {
+  // Base64 string: the backend encodes PNG frames this way because a raw
+  // Vec<u8> serializes as a JSON number array (multi-MB of tokens per frame,
+  // freezing the main thread while parsing).
+  if (typeof d === "string") {
+    const bin = atob(d);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
   if (d instanceof Uint8Array) return d;
   if (d instanceof ArrayBuffer) return new Uint8Array(d);
   return Uint8Array.from(d);
@@ -188,7 +197,7 @@ export const events = {
   onIosFrame: (
     handler: (p: { data: Uint8Array; width: number; height: number }) => void,
   ): Promise<UnlistenFn> =>
-    listen<{ data: number[] | Uint8Array | ArrayBuffer; width: number; height: number }>(
+    listen<{ data: number[] | Uint8Array | ArrayBuffer | string; width: number; height: number }>(
       "ios_frame",
       (e) =>
         handler({
@@ -200,7 +209,7 @@ export const events = {
   onWebFrame: (
     handler: (p: { data: Uint8Array; width: number; height: number }) => void,
   ): Promise<UnlistenFn> =>
-    listen<{ data: number[] | Uint8Array | ArrayBuffer; width: number; height: number }>(
+    listen<{ data: number[] | Uint8Array | ArrayBuffer | string; width: number; height: number }>(
       "web_frame",
       (e) =>
         handler({
