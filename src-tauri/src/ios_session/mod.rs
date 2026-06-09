@@ -297,6 +297,37 @@ async fn kill_orphan_studios_for(udid: &str) {
     }
 }
 
+/// SIGKILL orphan `maestro-ios-device … --device <udid>` bridges left behind by
+/// a crashed/SIGKILLed session. Leftover bridges keep their 600x ports bound,
+/// pushing every fresh bridge onto a different port than the one our HTTP
+/// client polls (`PHYSICAL_BRIDGE_PORT`). Scoped to this UDID.
+async fn kill_orphan_bridges_for(udid: &str) {
+    #[cfg(unix)]
+    {
+        let pattern = format!("maestro-ios-device.*--device {udid}");
+        let Ok(output) = Command::new("pgrep").args(["-f", &pattern]).output().await else {
+            return;
+        };
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let Ok(pid) = line.trim().parse::<u32>() else {
+                continue;
+            };
+            warn!(
+                pid,
+                udid, "SIGKILL orphan maestro-ios-device bridge (stale port holder)"
+            );
+            let _ = Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output()
+                .await;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = udid;
+    }
+}
+
 /// Which kind of iOS target a keeper drives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IosTarget {
@@ -441,6 +472,14 @@ impl IosDriverKeeper {
                 "Set your Apple Team ID in Settings to drive a physical iOS device".into(),
             )
         })?;
+        // Same zombie problem as simulator studios: after a crash/SIGKILL the
+        // bridge outlives the app AND keeps its port. Each leftover instance
+        // holds 600x, so a fresh bridge binds the NEXT free port (observed: 9
+        // orphans on 6001-6009) while our HTTP client polls PHYSICAL_BRIDGE_PORT
+        // forever — taps/inspect dead even though a bridge says "Ready". Any
+        // bridge for this UDID at spawn time is an orphan (the keeper is
+        // stopped before respawning) — cull them so we always get 6001.
+        kill_orphan_bridges_for(udid).await;
         let bin = crate::tool_paths::maestro_ios_device_bin();
         let bridge = Command::new(&bin)
             .args(["--team-id", &team, "--device", udid])
