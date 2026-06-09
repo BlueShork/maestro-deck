@@ -133,6 +133,18 @@ mockall = "0.14"
 # a test-harness-only need, hence a dev-dependency.
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSResponder"] }
+# `avf_probe` example: QuickTime-style USB screen capture of a physical iPhone
+# (CoreMediaIO DAL device + AVFoundation capture session). Probe-only for now;
+# promote to a main dependency when the high-fps physical preview ships.
+objc2-av-foundation = { version = "0.3", features = [
+    "AVCaptureDevice",
+    "AVCaptureSession",
+    "AVCaptureInput",
+    "AVCaptureOutputBase",
+    "AVCaptureVideoDataOutput",
+    "AVMediaFormat",
+    "objc2-core-media",
+] }
 
 [features]
 default = ["custom-protocol"]
