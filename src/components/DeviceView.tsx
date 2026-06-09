@@ -196,8 +196,12 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
       try {
         // Copy the exact view region into a fresh buffer: robust if `data`
         // is ever a subarray, and yields a concrete-buffer typed array that
-        // satisfies BlobPart without an `as` cast.
-        const blob = new Blob([new Uint8Array(payload.data)], { type: "image/png" });
+        // satisfies BlobPart without an `as` cast. Physical-device frames are
+        // JPEG (0xFFD8 magic), simulator/web frames are PNG — type accordingly.
+        const isJpeg = payload.data[0] === 0xff && payload.data[1] === 0xd8;
+        const blob = new Blob([new Uint8Array(payload.data)], {
+          type: isJpeg ? "image/jpeg" : "image/png",
+        });
         const bmp = await createImageBitmap(blob);
         if (cancelled) {
           bmp.close();

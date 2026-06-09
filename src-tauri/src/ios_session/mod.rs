@@ -164,9 +164,27 @@ impl IosHttpClient {
     }
 
     pub async fn screenshot(&self) -> AppResult<Vec<u8>> {
+        self.screenshot_inner(false).await
+    }
+
+    /// JPEG (quality 0.5) instead of PNG. The runner's `jpegData` encode is
+    /// ~5-10x faster than `pngRepresentation` on-device — the capture encode
+    /// is the physical preview's fps ceiling — and the transfer is ~10x
+    /// smaller. Use for the live preview; keep PNG for anything needing
+    /// lossless pixels.
+    pub async fn screenshot_compressed(&self) -> AppResult<Vec<u8>> {
+        self.screenshot_inner(true).await
+    }
+
+    async fn screenshot_inner(&self, compressed: bool) -> AppResult<Vec<u8>> {
+        let url = if compressed {
+            format!("{}?compressed=true", self.url("screenshot"))
+        } else {
+            self.url("screenshot")
+        };
         let resp = self
             .client
-            .get(self.url("screenshot"))
+            .get(url)
             .send()
             .await
             .map_err(|e| AppError::IosDriverUnreachable(format!("screenshot: {e}")))?;
@@ -508,12 +526,16 @@ impl IosDriverKeeper {
 /// the pre-framebuffer fallback on sims, so a gentle cadence is fine).
 const SCREENSHOT_INTERVAL_MS: u64 = 350;
 /// Physical devices have no framebuffer/SCK path — this poller IS their preview.
-/// The driver's `/screenshot` capture is itself ~200 ms, but polling back-to-back
-/// (0 ms) saturated the webview: each multi-MB PNG crosses the event bridge and
-/// must be decoded on the main thread, and with no breathing room between frames
-/// the UI became unusable the moment a physical device connected. 150 ms keeps
-/// ~3 fps while leaving the main thread idle time between frames.
-const PHYSICAL_SCREENSHOT_INTERVAL_MS: u64 = 150;
+/// Per-lane pause between completed frames. Don't set to 0: polling back-to-back
+/// once saturated the webview main thread and froze the whole UI the moment a
+/// physical device connected. Frames are now JPEG (~10x smaller than PNG) and
+/// pipelined across [`PHYSICAL_PIPELINE_DEPTH`] lanes, so 50 ms per lane yields
+/// roughly 8-12 fps while keeping the main thread responsive.
+const PHYSICAL_SCREENSHOT_INTERVAL_MS: u64 = 50;
+/// Concurrent `/screenshot` lanes for physical devices. The on-device capture +
+/// JPEG encode dominates the round-trip, so two lanes overlap capture with
+/// transfer (~2x fps). More lanes mostly just queue on the device.
+const PHYSICAL_PIPELINE_DEPTH: u32 = 2;
 /// Back-off after a failed poll (e.g. device unplugged) so we don't spin and flood
 /// logs when there's nothing to capture.
 const SCREENSHOT_ERROR_BACKOFF_MS: u64 = 500;
@@ -571,8 +593,25 @@ pub fn spawn_screenshot_poller(
             .map(|d| (d.width_pixels, d.height_pixels))
             .unwrap_or((0, 0));
         // Physical devices: the simulator `simctl` path doesn't apply — pull
-        // frames from the driver's HTTP `/screenshot` instead.
-        let physical = keeper.is_physical();
+        // frames from the driver's HTTP `/screenshot` (pipelined, JPEG).
+        if keeper.is_physical() {
+            let workers: Vec<_> = (0..PHYSICAL_PIPELINE_DEPTH)
+                .map(|_| {
+                    tokio::spawn(physical_screenshot_worker(
+                        app.clone(),
+                        keeper.clone(),
+                        w,
+                        h,
+                    ))
+                })
+                .collect();
+            let _ = (&mut abort_rx).await;
+            info!("iOS screenshot poller aborted");
+            for wk in workers {
+                wk.abort();
+            }
+            return;
+        }
         loop {
             tokio::select! {
                 biased;
@@ -580,29 +619,11 @@ pub fn spawn_screenshot_poller(
                     info!("iOS screenshot poller aborted");
                     return;
                 }
-                shot = async {
-                    if physical {
-                        keeper.http().screenshot().await
-                    } else {
-                        capture_simulator_screenshot(keeper.udid()).await
-                    }
-                } => {
+                shot = capture_simulator_screenshot(keeper.udid()) => {
                     let delay_ms = match shot {
                         Ok(data) => {
-                            use base64::Engine as _;
-                            let payload = IosFramePayload {
-                                data: base64::engine::general_purpose::STANDARD.encode(&data),
-                                width: w,
-                                height: h,
-                            };
-                            if let Err(e) = app.emit(IOS_FRAME_EVENT, &payload) {
-                                warn!(error = %e, "failed to emit ios_frame");
-                            }
-                            if physical {
-                                PHYSICAL_SCREENSHOT_INTERVAL_MS
-                            } else {
-                                SCREENSHOT_INTERVAL_MS
-                            }
+                            emit_ios_frame(&app, data, w, h);
+                            SCREENSHOT_INTERVAL_MS
                         }
                         Err(e) => {
                             warn!(error = %e, "screenshot poll failed");
@@ -615,6 +636,53 @@ pub fn spawn_screenshot_poller(
         }
     });
     abort_tx
+}
+
+fn emit_ios_frame(app: &AppHandle, data: Vec<u8>, w: u32, h: u32) {
+    use base64::Engine as _;
+    let payload = IosFramePayload {
+        data: base64::engine::general_purpose::STANDARD.encode(&data),
+        width: w,
+        height: h,
+    };
+    if let Err(e) = app.emit(IOS_FRAME_EVENT, &payload) {
+        warn!(error = %e, "failed to emit ios_frame");
+    }
+}
+
+/// One lane of the physical-device screenshot pipeline. The on-device capture
+/// (`XCUIScreen.screenshot` + JPEG encode) dominates the period, so running
+/// [`PHYSICAL_PIPELINE_DEPTH`] of these concurrently overlaps capture with
+/// transfer and roughly multiplies the frame rate. A shared monotonically
+/// increasing ticket + a "newest emitted" watermark drop frames that finish
+/// out of order so the preview never steps backwards.
+async fn physical_screenshot_worker(app: AppHandle, keeper: Arc<IosDriverKeeper>, w: u32, h: u32) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static TICKET: AtomicU64 = AtomicU64::new(0);
+    static NEWEST: AtomicU64 = AtomicU64::new(0);
+
+    loop {
+        let seq = TICKET.fetch_add(1, Ordering::Relaxed) + 1;
+        match keeper.http().screenshot_compressed().await {
+            Ok(data) => {
+                // Emit only if no newer frame has already been emitted.
+                if NEWEST.fetch_max(seq, Ordering::Relaxed) <= seq {
+                    emit_ios_frame(&app, data, w, h);
+                }
+                sleep(std::time::Duration::from_millis(
+                    PHYSICAL_SCREENSHOT_INTERVAL_MS,
+                ))
+                .await;
+            }
+            Err(e) => {
+                warn!(error = %e, "physical screenshot poll failed");
+                sleep(std::time::Duration::from_millis(
+                    SCREENSHOT_ERROR_BACKOFF_MS,
+                ))
+                .await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
