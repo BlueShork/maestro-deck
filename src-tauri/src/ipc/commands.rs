@@ -853,9 +853,24 @@ pub async fn install_ios_device_bridge() -> AppResult<String> {
         .await
         .map_err(|e| AppError::Other(format!("maestro-ios-device setup: {e}")))?;
     if !out.status.success() {
+        // The Go bridge prints its failure reason to STDOUT (its `fatal` uses
+        // fmt.Printf), so stderr alone is usually empty — surface both, keeping
+        // the tail where the actual "❌ Setup failed: …" line lands.
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let detail: String = stdout
+            .lines()
+            .chain(stderr.lines())
+            .filter(|l| !l.trim().is_empty())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .take(4)
+            .rev()
+            .collect::<Vec<_>>()
+            .join(" | ");
         return Err(AppError::Other(format!(
-            "maestro-ios-device setup failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
+            "maestro-ios-device setup failed: {detail}"
         )));
     }
 
