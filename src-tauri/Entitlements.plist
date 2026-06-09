@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The app is signed with the hardened runtime (required for
+	     notarization). Under it, camera-class device access additionally
+	     requires this entitlement — without it AVFoundation silently lists
+	     ZERO capture devices and never even shows the TCC prompt, which
+	     breaks the physical-iPhone screen mirror (macOS exposes the USB
+	     device screen as a camera-class device; the phone camera itself is
+	     never used — see NSCameraUsageDescription in Info.plist). -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
+</dict>
+</plist>

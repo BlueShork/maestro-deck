@@ -37,7 +37,7 @@
     "macOS": {
       "signingIdentity": "Developer ID Application: Ethan Morisset (VJL93TUP2X)",
       "providerShortName": "VJL93TUP2X",
-      "entitlements": null
+      "entitlements": "./Entitlements.plist"
     },
     "icon": [
       "icons/32x32.png",
