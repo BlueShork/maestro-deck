@@ -131,7 +131,15 @@ hwdecode = []
 devtools = ["tauri/devtools"]
 
 [profile.release]
-panic = "abort"
+# panic = "unwind" (the default) is REQUIRED, do not switch to "abort":
+# - sim_capture's safety net is objc2::exception::catch, which needs ObjC
+#   exceptions to unwind through Rust frames to reach its @catch. With
+#   panic = "abort" every Rust frame is compiled non-unwindable, so a
+#   CoreSimulator proxy exception aborts the WHOLE app before the catch
+#   fires (production crash: SIGABRT on the sim-capture-poll thread the
+#   moment the XCTest runner churned the simulator's IO state).
+# - It also turns any stray panic anywhere into a full app crash instead
+#   of a dead thread/task.
 codegen-units = 1
 lto = true
 opt-level = 3

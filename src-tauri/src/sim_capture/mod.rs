@@ -555,6 +555,22 @@ fn copy_downscaled(surface: &IOSurface, max_dim: u32) -> Option<Frame> {
 mod tests {
     use super::*;
 
+    /// UDID of the currently-booted simulator (panics if none — these are
+    /// manual, ignored tests that require one).
+    fn booted_udid() -> String {
+        let out = std::process::Command::new("xcrun")
+            .args(["simctl", "list", "devices", "booted"])
+            .output()
+            .expect("run simctl");
+        let text = String::from_utf8_lossy(&out.stdout);
+        text.lines()
+            .find(|l| l.contains("Booted"))
+            .and_then(|l| l.split('(').nth(1))
+            .and_then(|s| s.split(')').next())
+            .map(|s| s.trim().to_owned())
+            .expect("a booted simulator UDID")
+    }
+
     #[test]
     fn developer_dir_is_nonempty() {
         // Resolves via xcode-select or the default; always a usable path.
@@ -573,18 +589,7 @@ mod tests {
     #[test]
     #[ignore]
     fn attach_booted_does_not_panic() {
-        let out = std::process::Command::new("xcrun")
-            .args(["simctl", "list", "devices", "booted"])
-            .output()
-            .expect("run simctl");
-        let text = String::from_utf8_lossy(&out.stdout);
-        let udid = text
-            .lines()
-            .find(|l| l.contains("Booted"))
-            .and_then(|l| l.split('(').nth(1))
-            .and_then(|s| s.split(')').next())
-            .map(|s| s.trim().to_owned())
-            .expect("a booted simulator UDID");
+        let udid = booted_udid();
         eprintln!("attaching to booted sim {udid}");
         let res = attach(&udid);
         eprintln!("attach result: {:?}", res.as_ref().map(|_| "Ok(Attached)"));
@@ -598,18 +603,7 @@ mod tests {
     #[test]
     #[ignore]
     fn capture_booted_frames_does_not_panic() {
-        let out = std::process::Command::new("xcrun")
-            .args(["simctl", "list", "devices", "booted"])
-            .output()
-            .expect("run simctl");
-        let text = String::from_utf8_lossy(&out.stdout);
-        let udid = text
-            .lines()
-            .find(|l| l.contains("Booted"))
-            .and_then(|l| l.split('(').nth(1))
-            .and_then(|s| s.split(')').next())
-            .map(|s| s.trim().to_owned())
-            .expect("a booted simulator UDID");
+        let udid = booted_udid();
 
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -641,6 +635,239 @@ mod tests {
             }
             session.stop().await;
             eprintln!("done, no panic");
+        });
+    }
+
+    /// Repro of the production crash: capture while the simulator's screen
+    /// CHANGES HEAVILY (app launch / churn), which can make CoreSimulator
+    /// replace or invalidate the display IOSurface mid-capture. The poll
+    /// thread must survive (frames may stop — that's fine), never abort.
+    /// Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_during_screen_churn -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_during_screen_churn_does_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            let (session, mut rx) = SimCaptureSession::start(&udid, 30, 700)
+                .await
+                .expect("start capture");
+
+            // Churn the screen while capturing: bounce between apps so the
+            // compositor animates and the framebuffer is heavily rewritten
+            // (closest scriptable stand-in for tapping the screen).
+            let churn_udid = udid.clone();
+            let churn = tokio::spawn(async move {
+                for app in ["com.apple.Preferences", "com.apple.mobilesafari"] {
+                    let _ = tokio::process::Command::new("xcrun")
+                        .args(["simctl", "launch", &churn_udid, app])
+                        .output()
+                        .await;
+                    tokio::time::sleep(Duration::from_millis(1200)).await;
+                }
+            });
+
+            let mut got = 0u32;
+            for n in 0..30 {
+                match tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
+                    Ok(Some(f)) => {
+                        got += 1;
+                        eprintln!("frame {n}: {}x{}", f.width, f.height);
+                    }
+                    Ok(None) => {
+                        eprintln!("channel closed at {n}");
+                        break;
+                    }
+                    Err(_) => {}
+                }
+            }
+            let _ = churn.await;
+            session.stop().await;
+            eprintln!("done, no panic ({got} frames through churn)");
+        });
+    }
+
+    /// Repro of the production crash: repeated attach → capture → teardown
+    /// cycles against the same booted sim (the app does this on every
+    /// start_stream / inspect re-entry). A second attach hits CoreSimulator
+    /// state left by the first session; any ObjC exception there must surface
+    /// as Err, never abort. Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_restart_cycles -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_restart_cycles_do_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            for cycle in 0..5 {
+                eprintln!("--- cycle {cycle}: attach");
+                let (session, mut rx) = match SimCaptureSession::start(&udid, 30, 700).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("cycle {cycle}: start -> Err({e}) (acceptable, no abort)");
+                        continue;
+                    }
+                };
+                match tokio::time::timeout(Duration::from_secs(2), rx.recv()).await {
+                    Ok(Some(f)) => eprintln!("cycle {cycle}: frame {}x{}", f.width, f.height),
+                    Ok(None) => eprintln!("cycle {cycle}: channel closed"),
+                    Err(_) => eprintln!("cycle {cycle}: frame timeout"),
+                }
+                session.stop().await;
+                drop(session);
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+            eprintln!("done, no panic across restart cycles");
+        });
+    }
+
+    /// Full end-to-end repro of the production crash: spawn the real
+    /// `maestro studio` driver, capture the framebuffer, then inject touches
+    /// through the XCTest runner mid-capture — exactly what happens when the
+    /// user clicks the device view in the app. Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_with_touch -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_with_touch_injection_does_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            let keeper = crate::ios_session::IosDriverKeeper::spawn(&udid, false)
+                .await
+                .expect("spawn driver keeper");
+            assert!(keeper.wait_until_ready().await, "driver never became ready");
+            eprintln!("driver ready");
+
+            let (session, mut rx) = SimCaptureSession::start(&udid, 30, 700)
+                .await
+                .expect("start capture");
+
+            for n in 0..8 {
+                let r = keeper.http().touch(200.0, 400.0, 0.05).await;
+                eprintln!("touch {n}: {:?}", r.as_ref().map(|_| "ok"));
+                match tokio::time::timeout(Duration::from_millis(700), rx.recv()).await {
+                    Ok(Some(f)) => eprintln!("  frame {}x{}", f.width, f.height),
+                    Ok(None) => {
+                        eprintln!("  channel closed");
+                        break;
+                    }
+                    Err(_) => eprintln!("  frame timeout"),
+                }
+            }
+
+            session.stop().await;
+            keeper.stop().await;
+            eprintln!("done, no panic with touch injection");
+        });
+    }
+
+    /// Repro of the production crash: capture while `simctl io screenshot`
+    /// runs concurrently (the app's screenshot poller does this every 350 ms
+    /// alongside the native preview). Each simctl invocation attaches its own
+    /// CoreSimulator IO client to the same device, churning the IO state our
+    /// poll thread holds proxies into. Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_with_simctl -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_with_simctl_screenshots_does_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            let (session, mut rx) = SimCaptureSession::start(&udid, 30, 700)
+                .await
+                .expect("start capture");
+
+            let shot_udid = udid.clone();
+            let shots = tokio::spawn(async move {
+                for i in 0..12 {
+                    let tmp = std::env::temp_dir().join(format!("simcap-test-{i}.png"));
+                    let _ = tokio::process::Command::new("xcrun")
+                        .args([
+                            "simctl",
+                            "io",
+                            &shot_udid,
+                            "screenshot",
+                            tmp.to_str().unwrap(),
+                        ])
+                        .output()
+                        .await;
+                    let _ = tokio::fs::remove_file(&tmp).await;
+                    tokio::time::sleep(Duration::from_millis(350)).await;
+                }
+            });
+
+            let mut got = 0u32;
+            for _ in 0..20 {
+                match tokio::time::timeout(Duration::from_millis(400), rx.recv()).await {
+                    Ok(Some(_)) => got += 1,
+                    Ok(None) => break,
+                    Err(_) => {}
+                }
+            }
+            let _ = shots.await;
+            session.stop().await;
+            eprintln!("done, no panic with concurrent simctl screenshots ({got} frames)");
+        });
+    }
+
+    /// Repro of the production crash: CONCURRENT double-attach. The app's
+    /// `upgrade_ios_preview` spawns a new capture session BEFORE tearing down
+    /// the old one (commands.rs takes the old handle only after the new spawn
+    /// succeeds), so two poll threads briefly hold live CoreSimulator proxies
+    /// to the same device. Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_double_attach -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_concurrent_double_attach_does_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            for round in 0..4 {
+                eprintln!("--- round {round}");
+                let (a, mut rx_a) = SimCaptureSession::start(&udid, 30, 700)
+                    .await
+                    .expect("start A");
+                // Let A's poll thread run.
+                let _ = tokio::time::timeout(Duration::from_millis(300), rx_a.recv()).await;
+
+                // Second attach while A is still live (the upgrade re-entry).
+                let b = SimCaptureSession::start(&udid, 30, 700).await;
+                match &b {
+                    Ok(_) => eprintln!("round {round}: B attached while A live"),
+                    Err(e) => eprintln!("round {round}: B -> Err({e}) (acceptable)"),
+                }
+
+                // Now tear down A (what upgrade_ios_preview does to `old`),
+                // then keep pulling B for a moment.
+                a.stop().await;
+                drop(a);
+                if let Ok((b, mut rx_b)) = b {
+                    let _ = tokio::time::timeout(Duration::from_millis(400), rx_b.recv()).await;
+                    b.stop().await;
+                }
+            }
+            eprintln!("done, no panic across concurrent double-attach rounds");
         });
     }
 }
