@@ -257,7 +257,7 @@ impl AvfCaptureSession {
                 let setup = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     capture_thread_setup(&udid, max_dim, tx)
                 }));
-                let session = match setup {
+                let live = match setup {
                     Ok(Ok(s)) => {
                         let _ = ready_tx.send(Ok(()));
                         s
@@ -275,15 +275,16 @@ impl AvfCaptureSession {
                 };
 
                 // Park until stopped; the delegate streams frames from AVF's
-                // own dispatch queue meanwhile.
+                // own dispatch queue meanwhile. `live` keeps the delegate (and
+                // its frame Sender) alive — see `LiveCapture`.
                 while !thread_stop.load(Ordering::Relaxed) {
                     std::thread::sleep(Duration::from_millis(100));
                 }
                 let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-                    session.stopRunning();
+                    live.session.stopRunning();
                 }));
                 debug!("avf-capture thread exiting; session released");
-                drop(session);
+                drop(live);
             })
             .map_err(|e| AppError::ScreenCaptureFailed(format!("spawn avf-capture thread: {e}")))?;
 
@@ -326,14 +327,23 @@ impl Drop for AvfCaptureSession {
     }
 }
 
+/// Everything the capture thread must keep alive while frames flow. The
+/// session retains its inputs/outputs, BUT `setSampleBufferDelegate:queue:`
+/// does NOT retain the delegate — dropping our `Retained` deallocates it,
+/// which drops the frame `Sender` and instantly closes the channel (observed
+/// as "preview frame channel closed" right after attach). Hold it here.
+struct LiveCapture {
+    session: Retained<avf::AVCaptureSession>,
+    _delegate: Retained<FrameDelegate>,
+}
+
 /// Runs ON the capture thread: permission, device discovery, session build.
-/// Returns the running `AVCaptureSession` (kept alive by the thread). The
-/// delegate/input/output are retained by the session itself.
+/// Returns the running session + the objects it does not retain itself.
 fn capture_thread_setup(
     udid: &str,
     max_dim: u32,
     tx: mpsc::Sender<Frame>,
-) -> AppResult<Retained<avf::AVCaptureSession>> {
+) -> AppResult<LiveCapture> {
     allow_screen_capture_devices();
 
     // Pump this thread's runloop briefly — CMIO publishes DAL devices via
@@ -460,6 +470,9 @@ fn capture_thread_setup(
         session.commitConfiguration();
         session.startRunning();
 
-        Ok(session)
+        Ok(LiveCapture {
+            session,
+            _delegate: delegate,
+        })
     }
 }
