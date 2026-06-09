@@ -54,8 +54,11 @@ use crate::ios_capture::Frame;
 const FRAME_CHANNEL_CAPACITY: usize = 4;
 
 /// How long to wait for the iPhone's muxed DAL device to appear after the
-/// CMIO opt-in (publication is asynchronous, typically < 2 s).
-const DEVICE_DISCOVERY_BUDGET: Duration = Duration::from_secs(10);
+/// CMIO opt-in. Publication is asynchronous — typically < 2 s, but observed
+/// taking 10 s+ when the device was still re-registering after a previous
+/// capture session died, so give it real headroom (the caller retries on
+/// failure anyway).
+const DEVICE_DISCOVERY_BUDGET: Duration = Duration::from_secs(20);
 
 /// How long to wait for the user to answer the one-time camera TCC prompt.
 const PERMISSION_BUDGET: Duration = Duration::from_secs(60);

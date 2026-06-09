@@ -277,8 +277,20 @@ function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled
       if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
     };
 
-    // Fire-and-forget: false just means we stay on the screenshot path.
-    void ipc.upgradeIosPreview(channel).catch(() => {});
+    // Retry a few times: the physical-iPhone DAL device can take 10 s+ to
+    // (re)appear after plugging in or after a previous session died, and a
+    // single failed attempt used to strand the preview on the screenshot
+    // poller forever. `false`/errors just mean "not available yet".
+    void (async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        try {
+          if (await ipc.upgradeIosPreview(channel)) return;
+        } catch {
+          // Backend unavailable for this platform/state — retry below.
+        }
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    })();
 
     return () => {
       cancelled = true;
