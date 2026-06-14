@@ -44,7 +44,10 @@ interface RunState {
   requestStop: () => void;
   setStopped: (exitCode: number | null) => void;
   appendLog: (stream: LogStream, text: string) => void;
-  clearLogs: () => void;
+  /** Clears the visible console — both the technical `logs` and the Simple
+   *  view's `steps`, plus the run-result badge — so "Clear" empties whichever
+   *  mode is active rather than just the (often hidden) log buffer. */
+  clearConsole: () => void;
   initSteps: (steps: Step[]) => void;
   applyEvent: (e: StepEvent) => void;
   resetSteps: () => void;
@@ -76,7 +79,7 @@ export const useRunStore = create<RunState>((set) => ({
       if (s.logs.length < MAX) return { logs: [...s.logs, entry] };
       return { logs: [...s.logs.slice(s.logs.length - MAX + 1), entry] };
     }),
-  clearLogs: () => set({ logs: [] }),
+  clearConsole: () => set({ logs: [], steps: [], exitCode: null, stopRequested: false }),
   initSteps: (steps) =>
     set({
       steps: steps.map((s) => ({
