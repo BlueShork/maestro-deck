@@ -499,6 +499,15 @@ async fn teardown_web(state: &AppState) {
     }
 }
 
+/// Clears an `AtomicBool` when dropped, so a flag set across an async function
+/// with multiple early returns is always reset on the way out.
+struct AtomicFlagGuard<'a>(&'a std::sync::atomic::AtomicBool);
+impl Drop for AtomicFlagGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 #[tauri::command]
 pub async fn enter_inspect_mode(
     fast_mode: bool,
@@ -511,6 +520,13 @@ pub async fn enter_inspect_mode(
         .clone()
         .ok_or(AppError::NoDevice)?;
     if device.platform == crate::device::Platform::Ios {
+        // Hold the bridge for the dump: pause the physical screenshot mirror so
+        // its /screenshot flood doesn't starve /status + /hierarchy on the
+        // single :22087 forward. Reset on every return via the drop guard.
+        state
+            .ios_inspect_active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let _inspect_guard = AtomicFlagGuard(&state.ios_inspect_active);
         let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
         if !keeper.wait_until_ready().await {
             return Err(AppError::IosDriverUnreachable(

@@ -33,6 +33,11 @@ pub struct AppState {
 
     pub ios_driver: AsyncMutex<Option<Arc<IosDriverKeeper>>>,
     pub ios_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+    /// True while a hierarchy dump (inspect) is holding the iOS driver bridge.
+    /// The physical-device screenshot mirror polls `/screenshot` on the single
+    /// :22087 forward every 50 ms; left running during a dump it starves
+    /// `/status` + `/hierarchy` and inspect hangs. The poller pauses while set.
+    pub ios_inspect_active: std::sync::atomic::AtomicBool,
     /// True while a `maestro test` run is in flight on an iOS **simulator**.
     /// The simulator driver (`maestro studio` on :22087) and `maestro test`
     /// can't coexist, so the run stops the keeper first — this flag then blocks

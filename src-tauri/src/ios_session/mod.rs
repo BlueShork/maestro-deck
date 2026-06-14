@@ -699,10 +699,25 @@ fn emit_ios_frame(app: &AppHandle, data: Vec<u8>, w: u32, h: u32) {
 /// out of order so the preview never steps backwards.
 async fn physical_screenshot_worker(app: AppHandle, keeper: Arc<IosDriverKeeper>, w: u32, h: u32) {
     use std::sync::atomic::{AtomicU64, Ordering};
+    use tauri::Manager;
     static TICKET: AtomicU64 = AtomicU64::new(0);
     static NEWEST: AtomicU64 = AtomicU64::new(0);
 
     loop {
+        // Yield the single :22087 forward to an in-progress hierarchy dump —
+        // otherwise the /screenshot flood starves /status + /hierarchy and
+        // inspect hangs. Don't poll while inspect holds the bridge.
+        if app
+            .state::<crate::state::AppState>()
+            .ios_inspect_active
+            .load(Ordering::Relaxed)
+        {
+            sleep(std::time::Duration::from_millis(
+                PHYSICAL_SCREENSHOT_INTERVAL_MS,
+            ))
+            .await;
+            continue;
+        }
         let seq = TICKET.fetch_add(1, Ordering::Relaxed) + 1;
         match keeper.http().screenshot_compressed().await {
             Ok(data) => {
