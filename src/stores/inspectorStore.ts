@@ -158,8 +158,14 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
         autoRefreshTimer = null;
       }
       treeUpdatedAt = null;
+      // An in-flight dump's `.then` early-returns once `enabled` is false and
+      // never clears `loading`; reset it (and the dump guard) here so disabling
+      // — including on a device switch — always lands back in a clean state
+      // instead of a stuck spinner.
+      dumpInFlight = false;
       set({
         enabled: false,
+        loading: false,
         tree: null,
         hovered: null,
         selected: null,
