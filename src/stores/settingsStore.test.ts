@@ -46,6 +46,8 @@ describe("settingsStore defaults", () => {
     expect(s.fastHierarchyEnabled).toBe(false);
     expect(s.autoSaveEnabled).toBe(true);
     expect(s.consoleMode).toBe("simple");
+    // Web support is beta — the target stays hidden until opted in.
+    expect(s.webBrowserEnabled).toBe(false);
   });
 });
 
@@ -81,6 +83,13 @@ describe("settingsStore setters", () => {
     expect(after.perfMonitoringEnabled).toBe(true);
     expect(after.fastHierarchyEnabled).toBe(true);
     expect(after.autoSaveEnabled).toBe(false);
+  });
+
+  it("setWebBrowserEnabled toggles the flag", () => {
+    useSettingsStore.getState().setWebBrowserEnabled(true);
+    expect(useSettingsStore.getState().webBrowserEnabled).toBe(true);
+    useSettingsStore.getState().setWebBrowserEnabled(false);
+    expect(useSettingsStore.getState().webBrowserEnabled).toBe(false);
   });
 
   it("setConsoleMode accepts simple and technical", () => {

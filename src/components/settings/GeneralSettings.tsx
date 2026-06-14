@@ -22,6 +22,8 @@ export function GeneralSettings() {
   const setAutoSaveEnabled = useSettingsStore((s) => s.setAutoSaveEnabled);
   const autoCheckUpdatesEnabled = useSettingsStore((s) => s.autoCheckUpdatesEnabled);
   const setAutoCheckUpdatesEnabled = useSettingsStore((s) => s.setAutoCheckUpdatesEnabled);
+  const webBrowserEnabled = useSettingsStore((s) => s.webBrowserEnabled);
+  const setWebBrowserEnabled = useSettingsStore((s) => s.setWebBrowserEnabled);
   const confirmBeforeQuit = useSettingsStore((s) => s.confirmBeforeQuit);
   const setConfirmBeforeQuit = useSettingsStore((s) => s.setConfirmBeforeQuit);
 
@@ -68,6 +70,13 @@ export function GeneralSettings() {
         description="Silently checks GitHub releases and prompts you when a new version is available."
         checked={autoCheckUpdatesEnabled}
         onCheckedChange={setAutoCheckUpdatesEnabled}
+      />
+
+      <ToggleRow
+        label="Web Browser target (beta)"
+        description="Shows the Web Browser (Chromium) device in the device list. Web support is beta and still unstable — off by default."
+        checked={webBrowserEnabled}
+        onCheckedChange={setWebBrowserEnabled}
       />
 
       <ToggleRow
