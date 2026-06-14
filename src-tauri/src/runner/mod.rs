@@ -317,6 +317,14 @@ pub async fn spawn_ios_runner(app: AppHandle, udid: &str, flow_path: &str) -> Ap
             }
         };
         RUNNERS.lock().await.remove(&pid);
+        // Run finished — let inspect/tap re-warm the simulator keeper again.
+        {
+            use tauri::Manager;
+            app_exit
+                .state::<crate::state::AppState>()
+                .ios_sim_run_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
         let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
     });
 

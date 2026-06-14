@@ -33,6 +33,12 @@ pub struct AppState {
 
     pub ios_driver: AsyncMutex<Option<Arc<IosDriverKeeper>>>,
     pub ios_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+    /// True while a `maestro test` run is in flight on an iOS **simulator**.
+    /// The simulator driver (`maestro studio` on :22087) and `maestro test`
+    /// can't coexist, so the run stops the keeper first — this flag then blocks
+    /// `ensure_ios_keeper` from re-warming a competing keeper (inspector dumps,
+    /// taps) until the run exits, which would otherwise deadlock both on :22087.
+    pub ios_sim_run_active: std::sync::atomic::AtomicBool,
     #[cfg(target_os = "macos")]
     pub ios_preview_session: AsyncMutex<Option<crate::ios_session::PreviewHandle>>,
 

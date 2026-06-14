@@ -578,6 +578,20 @@ async fn ensure_ios_keeper(
         None => false,
     };
     if !reuse {
+        // A simulator run owns the :22087 driver exclusively. Re-warming a
+        // keeper now (e.g. an inspector auto-dump or a tap) would spawn a
+        // second `maestro studio` that fights `maestro test` for the driver —
+        // and both hang forever. Refuse until the run clears the flag.
+        if !physical
+            && state
+                .ios_sim_run_active
+                .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(AppError::IosDriverUnreachable(
+                "a test is running on the simulator — inspect and tap are paused until it finishes"
+                    .into(),
+            ));
+        }
         if let Some(existing) = slot.take() {
             existing.stop().await;
         }
@@ -924,7 +938,19 @@ pub async fn run_flow(
         if let Some(keeper) = state.ios_driver.lock().await.take() {
             keeper.stop().await;
         }
-        return runner::spawn_ios_runner(app, &device.serial, &file_path).await;
+        // Mark the run active so inspector dumps / taps can't re-warm a
+        // competing keeper while `maestro test` owns :22087. Cleared by the
+        // runner's exit task (or here if the spawn itself fails).
+        state
+            .ios_sim_run_active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let spawned = runner::spawn_ios_runner(app, &device.serial, &file_path).await;
+        if spawned.is_err() {
+            state
+                .ios_sim_run_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+        return spawned;
     }
 
     let serial = device.serial.clone();

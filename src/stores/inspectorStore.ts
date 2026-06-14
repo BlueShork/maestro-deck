@@ -4,6 +4,7 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import type { HierarchyTree, Selector, UINode } from "@/types";
@@ -14,6 +15,14 @@ import type { HierarchyTree, Selector, UINode } from "@/types";
  * so swapping the toggle in Settings takes effect on the next dump.
  */
 const fastMode = () => useSettingsStore.getState().fastHierarchyEnabled;
+
+// A `maestro test` run owns the iOS simulator driver exclusively; an inspect
+// dump mid-run would spawn a competing `maestro studio` and deadlock both on
+// :22087 (the run then never starts). Pause dumps while a run is in flight.
+const runInFlight = () => {
+  const s = useRunStore.getState();
+  return s.running || s.starting;
+};
 
 // Debounce window for post-tap auto-refresh. Short enough that single
 // taps feel responsive (dump wall-time is ~1 s anyway, 300 ms here sits
@@ -69,6 +78,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
   // previous tree (stale bounds → overlay pinned to wrong spot).
   const runBackgroundDump = (): void => {
     if (!get().enabled) return;
+    if (runInFlight()) return;
     if (dumpInFlight) return;
     dumpInFlight = true;
     set({ loading: true });
