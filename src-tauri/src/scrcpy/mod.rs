@@ -20,11 +20,11 @@ use crate::process_ext::CommandExtNoWindow;
 
 pub mod stream;
 
-pub const SCRCPY_VERSION: &str = "3.3.1";
+pub const SCRCPY_VERSION: &str = "3.3.4";
 pub const DEFAULT_PORT: u16 = 27183;
 pub const DEVICE_JAR_PATH: &str = "/data/local/tmp/scrcpy-server.jar";
 pub const SOCKET_NAME: &str = "scrcpy";
-pub const JAR_FILENAME: &str = "scrcpy-server-v3.3.1.jar";
+pub const JAR_FILENAME: &str = "scrcpy-server-v3.3.4.jar";
 
 /// Generate a fresh 8-hex-char SCID for a new session.
 pub fn random_scid() -> String {
