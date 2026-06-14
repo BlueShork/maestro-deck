@@ -26,6 +26,12 @@ interface SettingsState {
   fastHierarchyEnabled: boolean;
   autoSaveEnabled: boolean;
   autoCheckUpdatesEnabled: boolean;
+  /**
+   * Surfaces the synthetic "Web Browser (Chromium)" target in the device
+   * list. Web support is beta and still unstable, so it's off by default —
+   * users opt in explicitly from Settings.
+   */
+  webBrowserEnabled: boolean;
   /** Show a confirmation dialog before quitting the app. Users can opt out
    * from the dialog itself ("don't ask again") or re-enable it in Settings. */
   confirmBeforeQuit: boolean;
@@ -38,6 +44,7 @@ interface SettingsState {
   setFastHierarchyEnabled: (v: boolean) => void;
   setAutoSaveEnabled: (v: boolean) => void;
   setAutoCheckUpdatesEnabled: (v: boolean) => void;
+  setWebBrowserEnabled: (v: boolean) => void;
   setConfirmBeforeQuit: (v: boolean) => void;
   setConsoleMode: (m: ConsoleMode) => void;
 }
@@ -53,6 +60,7 @@ export const useSettingsStore = create<SettingsState>()(
       fastHierarchyEnabled: false,
       autoSaveEnabled: true,
       autoCheckUpdatesEnabled: true,
+      webBrowserEnabled: false,
       confirmBeforeQuit: true,
       consoleMode: "simple",
       setInspectKey: (inspectKey) => set({ inspectKey }),
@@ -63,6 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
       setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
       setAutoCheckUpdatesEnabled: (autoCheckUpdatesEnabled) => set({ autoCheckUpdatesEnabled }),
+      setWebBrowserEnabled: (webBrowserEnabled) => set({ webBrowserEnabled }),
       setConfirmBeforeQuit: (confirmBeforeQuit) => set({ confirmBeforeQuit }),
       setConsoleMode: (consoleMode) => set({ consoleMode }),
     }),
@@ -77,6 +86,7 @@ export const useSettingsStore = create<SettingsState>()(
         fastHierarchyEnabled: s.fastHierarchyEnabled,
         autoSaveEnabled: s.autoSaveEnabled,
         autoCheckUpdatesEnabled: s.autoCheckUpdatesEnabled,
+        webBrowserEnabled: s.webBrowserEnabled,
         confirmBeforeQuit: s.confirmBeforeQuit,
         consoleMode: s.consoleMode,
       }),

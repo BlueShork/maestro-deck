@@ -82,6 +82,20 @@ describe("runStore.steps", () => {
     expect(useRunStore.getState().steps).toEqual([]);
   });
 
+  it("clearConsole empties BOTH logs and steps (Simple view reads steps)", () => {
+    useRunStore.getState().initSteps(mkSteps());
+    useRunStore.getState().appendLog("stdout", "hello");
+    useRunStore.setState({ exitCode: 1, stopRequested: true });
+
+    useRunStore.getState().clearConsole();
+
+    const s = useRunStore.getState();
+    expect(s.logs).toEqual([]);
+    expect(s.steps).toEqual([]);
+    expect(s.exitCode).toBeNull();
+    expect(s.stopRequested).toBe(false);
+  });
+
   describe("start lifecycle (optimistic 'starting' state)", () => {
     beforeEach(() => {
       useRunStore.setState({ running: false, starting: false, pid: null, exitCode: null });

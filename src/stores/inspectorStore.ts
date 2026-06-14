@@ -4,6 +4,8 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { useDeviceStore } from "@/stores/deviceStore";
+import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import type { HierarchyTree, Selector, UINode } from "@/types";
@@ -14,6 +16,14 @@ import type { HierarchyTree, Selector, UINode } from "@/types";
  * so swapping the toggle in Settings takes effect on the next dump.
  */
 const fastMode = () => useSettingsStore.getState().fastHierarchyEnabled;
+
+// A `maestro test` run owns the iOS simulator driver exclusively; an inspect
+// dump mid-run would spawn a competing `maestro studio` and deadlock both on
+// :22087 (the run then never starts). Pause dumps while a run is in flight.
+const runInFlight = () => {
+  const s = useRunStore.getState();
+  return s.running || s.starting;
+};
 
 // Debounce window for post-tap auto-refresh. Short enough that single
 // taps feel responsive (dump wall-time is ~1 s anyway, 300 ms here sits
@@ -69,6 +79,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
   // previous tree (stale bounds → overlay pinned to wrong spot).
   const runBackgroundDump = (): void => {
     if (!get().enabled) return;
+    if (runInFlight()) return;
     if (dumpInFlight) return;
     dumpInFlight = true;
     set({ loading: true });
@@ -119,8 +130,16 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       // Persistent snackbar while the dump runs — stays visible for the
       // entire duration (dump can take 500–2000 ms depending on the
       // device and Maestro driver state) and is dismissed only when the
-      // backend returns a result.
-      const toastId = toast.loading("Dumping hierarchy…");
+      // backend returns a result. On a cold iOS simulator the very first
+      // inspect blocks on the XCTest driver cold-start (~1–2 min), so say so
+      // instead of a silent "Dumping…" that reads as a freeze.
+      const device = useDeviceStore.getState().current;
+      const coldIosSim = device?.platform === "ios" && !device.physical;
+      const toastId = toast.loading(
+        coldIosSim
+          ? "Starting iOS simulator driver… first inspect can take ~1–2 min"
+          : "Dumping hierarchy…",
+      );
       try {
         const tree = await ipc.enterInspectMode(fastMode());
         treeUpdatedAt = Date.now();
@@ -139,8 +158,14 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
         autoRefreshTimer = null;
       }
       treeUpdatedAt = null;
+      // An in-flight dump's `.then` early-returns once `enabled` is false and
+      // never clears `loading`; reset it (and the dump guard) here so disabling
+      // — including on a device switch — always lands back in a clean state
+      // instead of a stuck spinner.
+      dumpInFlight = false;
       set({
         enabled: false,
+        loading: false,
         tree: null,
         hovered: null,
         selected: null,

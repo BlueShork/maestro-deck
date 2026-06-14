@@ -1,6 +1,6 @@
 [package]
 name = "maestro-deck"
-version = "0.4.0"
+version = "0.5.5"
 description = "Source-available visual IDE for Maestro mobile tests"
 authors = ["Ethan Morisset <blueshork.dev@gmail.com>"]
 license = "BUSL-1.1"
@@ -30,11 +30,18 @@ tauri-plugin-process = "2.0"
 # Secret Service). Used to store BYOK API credentials.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
-# JWT signing for Vertex Oauth2
-jsonwebtoken = "10"
+# JWT signing for Vertex Oauth2.
+# `rust_crypto` is REQUIRED: since v10 the default features ship NO crypto
+# backend — RS256 signing then compiles fine but panic!s at runtime (and with
+# `panic = "abort"` that aborts the whole app when Billy requests a token).
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 
-# HTTP for token exchange
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# HTTP for token exchange.
+# `rustls-tls-native-roots` (NOT plain `rustls-tls`): plain rustls-tls trusts
+# only the bundled Mozilla roots, so corporate TLS-inspection proxies (whose
+# MITM CA lives in the OS trust store) break every request — downloads and
+# Vertex token exchange fail on work machines while the browser works fine.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 base64 = "0.22"
 
 # Async runtime
@@ -92,7 +99,14 @@ tauri-plugin-updater = "2.0"
 # it the SCStreamOutput delegate method (which takes a CMSampleBuffer) is not
 # generated. (There is no `objc2-core-video` feature on this crate; CVPixelBuffer
 # extraction uses the standalone objc2-core-video dep below.)
-objc2 = "0.6"
+# `catch-all` is REQUIRED: CoreSimulator's ROCK proxies (sim_capture) throw
+# ObjC exceptions when the XCTest runner churns the device IO state. Without
+# catch-all the exception unwinds raw into Rust and aborts the process
+# ("panic in a function that cannot unwind") — even objc2::exception::catch
+# can't intercept it reliably. catch-all wraps every msg_send in @try/@catch
+# at the C level and converts caught exceptions to ordinary Rust panics,
+# which sim_capture contains with catch_unwind on its poll thread.
+objc2 = { version = "0.6", features = ["catch-all"] }
 objc2-foundation = "0.3"
 objc2-screen-capture-kit = { version = "0.3.2", features = ["SCStream", "SCShareableContent", "objc2-core-media", "objc2-core-foundation", "objc2-core-graphics"] }
 # The `objc2-core-video` feature is what gates `CMSampleBuffer::image_buffer()`.
@@ -106,6 +120,19 @@ dispatch2 = "0.3"
 # SimulatorKit private APIs: reads the booted device's live display IOSurface.
 objc2-io-surface = "0.3.2"
 libc = "0.2"
+# Physical-iPhone live preview (`avf_capture`): QuickTime-style USB screen
+# capture — CoreMediaIO's AllowScreenCaptureDevices opt-in exposes the plugged
+# device's screen as an AVFoundation "muxed" capture device (~27 fps BGRA).
+# Requires the camera TCC permission (NSCameraUsageDescription in Info.plist).
+objc2-av-foundation = { version = "0.3", features = [
+    "AVCaptureDevice",
+    "AVCaptureSession",
+    "AVCaptureInput",
+    "AVCaptureOutputBase",
+    "AVCaptureVideoDataOutput",
+    "AVMediaFormat",
+    "objc2-core-media",
+] }
 
 [dev-dependencies]
 tempfile = "3.13"
@@ -128,7 +155,15 @@ hwdecode = []
 devtools = ["tauri/devtools"]
 
 [profile.release]
-panic = "abort"
+# panic = "unwind" (the default) is REQUIRED, do not switch to "abort":
+# - sim_capture's safety net is objc2::exception::catch, which needs ObjC
+#   exceptions to unwind through Rust frames to reach its @catch. With
+#   panic = "abort" every Rust frame is compiled non-unwindable, so a
+#   CoreSimulator proxy exception aborts the WHOLE app before the catch
+#   fires (production crash: SIGABRT on the sim-capture-poll thread the
+#   moment the XCTest runner churned the simulator's IO state).
+# - It also turns any stray panic anywhere into a full app crash instead
+#   of a dead thread/task.
 codegen-units = 1
 lto = true
 opt-level = 3

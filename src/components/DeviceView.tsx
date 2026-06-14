@@ -196,8 +196,12 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
       try {
         // Copy the exact view region into a fresh buffer: robust if `data`
         // is ever a subarray, and yields a concrete-buffer typed array that
-        // satisfies BlobPart without an `as` cast.
-        const blob = new Blob([new Uint8Array(payload.data)], { type: "image/png" });
+        // satisfies BlobPart without an `as` cast. Physical-device frames are
+        // JPEG (0xFFD8 magic), simulator/web frames are PNG — type accordingly.
+        const isJpeg = payload.data[0] === 0xff && payload.data[1] === 0xd8;
+        const blob = new Blob([new Uint8Array(payload.data)], {
+          type: isJpeg ? "image/jpeg" : "image/png",
+        });
         const bmp = await createImageBitmap(blob);
         if (cancelled) {
           bmp.close();
@@ -265,16 +269,28 @@ function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled
       const view = new DataView(buf);
       const w = view.getUint32(0, true);
       const h = view.getUint32(4, true);
-      const rawRgba = new Uint8ClampedArray(buf, 8);
-      if (rawRgba.length !== w * h * 4) return; // guard against a malformed frame
-      // Copy into a plain ArrayBuffer-backed clamped array so ImageData accepts it.
-      const rgba = new Uint8ClampedArray(rawRgba);
+      const rgba = new Uint8ClampedArray(buf, 8);
+      if (rgba.length !== w * h * 4) return; // guard against a malformed frame
+      // No copy: ImageData accepts an offset view over a plain ArrayBuffer,
+      // and each channel message arrives in its own buffer (no aliasing).
       pendingRef.current = { w, h, rgba };
       if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
     };
 
-    // Fire-and-forget: false just means we stay on the screenshot path.
-    void ipc.upgradeIosPreview(channel).catch(() => {});
+    // Retry a few times: the physical-iPhone DAL device can take 10 s+ to
+    // (re)appear after plugging in or after a previous session died, and a
+    // single failed attempt used to strand the preview on the screenshot
+    // poller forever. `false`/errors just mean "not available yet".
+    void (async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        try {
+          if (await ipc.upgradeIosPreview(channel)) return;
+        } catch {
+          // Backend unavailable for this platform/state — retry below.
+        }
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    })();
 
     return () => {
       cancelled = true;

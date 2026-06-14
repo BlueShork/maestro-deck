@@ -26,6 +26,19 @@ export function SettingsSection({
   );
 }
 
+/** A labelled cluster of related rows inside a SettingsSection. Gives long
+ *  sections a scannable structure without the visual weight of a full section. */
+export function SettingsSubgroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
 /** A boolean setting: label + description on the left, a Switch on the right. */
 export function ToggleRow({
   label,

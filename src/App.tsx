@@ -16,6 +16,7 @@ import { setShortcutsSuppressed } from "@/lib/keyboard";
 import { parseLine as parseRunLine } from "@/lib/runStepParser";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { useDeviceStore } from "@/stores/deviceStore";
+import { useInspectorStore } from "@/stores/inspectorStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -102,6 +103,15 @@ export default function App() {
         );
     }
   }, [streamEnabled]);
+
+  // Reset inspect mode whenever the connected device changes (switch, connect,
+  // or disconnect). The inspector state is global, not per-device — without
+  // this, switching devices leaves a stale tree and can strand `loading` on a
+  // dump that targeted the previous device.
+  const currentSerial = useDeviceStore((s) => s.current?.serial ?? null);
+  useEffect(() => {
+    useInspectorStore.getState().disable();
+  }, [currentSerial]);
 
   const appendSample = useMetricsStore((s) => s.appendSample);
   const onTargetChanged = useMetricsStore((s) => s.onTargetChanged);

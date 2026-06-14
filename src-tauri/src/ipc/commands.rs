@@ -68,6 +68,15 @@ pub async fn connect_device(
     state: State<'_, AppState>,
 ) -> AppResult<()> {
     use crate::device::Platform;
+    // A previous disconnect may have left a simulator keeper warm for fast
+    // reconnect. If we're now connecting something that isn't an iOS device,
+    // retire it — it still holds :22087 and a JVM. (iOS→iOS reuse or
+    // replacement is handled by `ensure_ios_keeper` keyed on the udid.)
+    if !matches!(platform, Platform::Ios) {
+        if let Some(keeper) = state.ios_driver.lock().await.take() {
+            keeper.stop().await;
+        }
+    }
     match platform {
         Platform::Android => {
             let device = adb::get_device_info(&serial)?;
@@ -146,14 +155,16 @@ pub async fn connect_device(
 /// headless-framebuffer stream. Called by the frontend once an iOS device is
 /// connected with streaming. Waits for the background-warmed driver to become
 /// ready (the crop needs `device_info` for the aspect-ratio crop) before
-/// attempting the upgrade. Returns `true` if the native preview took over
-/// (screenshot poller aborted), `false` if it was unavailable and the
-/// screenshot poller keeps running. Never errors in a way that blanks the
-/// screen.
+/// attempting the upgrade. Returns `true` if the native preview started,
+/// `false` if it was unavailable and the screenshot poller keeps running. The
+/// screenshot poller is retired only once the native preview paints its first
+/// frame, so a capture that attaches but stays mute (e.g. AVF on some devices)
+/// never blanks the screen. Never errors in a way that blanks the screen.
 #[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn upgrade_ios_preview(
     channel: Channel<InvokeResponseBody>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<bool> {
     let device = state
@@ -169,17 +180,24 @@ pub async fn upgrade_ios_preview(
         None => return Ok(false),
     };
 
-    // The connect flow warms the driver in the background; `device_info` (needed
-    // for the aspect-ratio crop) only exists once the driver is ready. Wait for
-    // it here. `wait_until_ready` is idempotent/concurrent-safe and returns
-    // `false` promptly if the session was torn down (e.g. user disconnected).
-    if !keeper.wait_until_ready().await {
+    // SIMULATOR ONLY: the connect flow warms the driver in the background;
+    // `device_info` (needed for the aspect-ratio crop) only exists once the
+    // driver is ready, so wait for it. `wait_until_ready` is idempotent /
+    // concurrent-safe and returns `false` promptly on teardown.
+    //
+    // PHYSICAL: the AVF USB mirror is completely driver-independent (its frame
+    // IS the pure device screen, dims come from the frame itself) — start it
+    // right away so the user sees the screen while the XCTest driver is still
+    // building on the device (~10 min on first connect). Waiting here used to
+    // time out (180 s readiness budget < build time) and leave the preview
+    // blank for the whole build.
+    if !keeper.is_physical() && !keeper.wait_until_ready().await {
         return Ok(false);
     }
 
     match crate::ios_session::spawn_ios_preview(keeper.clone(), device.model.clone(), channel).await
     {
-        Ok(handle) => {
+        Ok((handle, first_frame_rx)) => {
             // Guard: the user may have disconnected or switched devices during
             // the readiness wait / preview start. If so, don't install a stale
             // session (which would leak); tear it down immediately.
@@ -194,14 +212,29 @@ pub async fn upgrade_ios_preview(
                 return Ok(false);
             }
 
-            if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
-                let _ = abort.send(());
-            }
             if let Some(old) = state.ios_preview_session.lock().await.take() {
                 old.teardown().await;
             }
             *state.ios_preview_session.lock().await = Some(handle);
-            info!("iOS preview upgraded to headless framebuffer");
+
+            // Retire the screenshot poller only once the native preview paints
+            // its first frame — NOT just because the capture attached. If the
+            // capture stays mute (mute AVF on some devices), `first_frame_rx`
+            // resolves Err when the preview task ends, the poller is left
+            // running, and the screen keeps mirroring via `/screenshot`.
+            let app = app.clone();
+            tokio::spawn(async move {
+                use tauri::Manager;
+                if first_frame_rx.await.is_ok() {
+                    let st = app.state::<AppState>();
+                    let abort = st.ios_screenshot_abort.lock().await.take();
+                    if let Some(abort) = abort {
+                        let _ = abort.send(());
+                        info!("native preview painted first frame — retired screenshot poller");
+                    }
+                }
+            });
+            info!("iOS preview started; screenshot poller stays until first native frame");
             Ok(true)
         }
         Err(e) => {
@@ -335,7 +368,8 @@ async fn setup_scrcpy(serial: &str, app: AppHandle, state: &AppState) {
 
 #[tauri::command]
 pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
-    teardown_all_sessions(state.inner()).await;
+    // Keep a simulator's studio warm so reconnecting the same sim is fast.
+    teardown_all_sessions(state.inner(), true).await;
     Ok(())
 }
 
@@ -344,7 +378,7 @@ pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
 /// driver / browser. Shared by `disconnect_device` and the quit handler so a
 /// fast Cmd+Q doesn't leave orphaned studio / chromedriver / Chrome / iproxy
 /// processes behind.
-pub async fn teardown_all_sessions(state: &AppState) {
+pub async fn teardown_all_sessions(state: &AppState, keep_ios_sim_warm: bool) {
     let (serial, platform) = {
         let g = state.connected_device.read();
         (
@@ -365,7 +399,7 @@ pub async fn teardown_all_sessions(state: &AppState) {
     }
 
     match platform {
-        Some(crate::device::Platform::Ios) => teardown_ios(state).await,
+        Some(crate::device::Platform::Ios) => teardown_ios(state, keep_ios_sim_warm).await,
         Some(crate::device::Platform::Android) => {
             if let Some(serial) = serial {
                 teardown_scrcpy(&serial, state).await;
@@ -385,7 +419,8 @@ pub async fn confirm_quit(app: AppHandle, state: State<'_, AppState>) -> AppResu
     state
         .quit_confirmed
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    teardown_all_sessions(state.inner()).await;
+    // Quitting — stop everything, including any warm simulator keeper.
+    teardown_all_sessions(state.inner(), false).await;
     app.exit(0);
     Ok(())
 }
@@ -408,7 +443,13 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
 
 /// Tear down the iOS session: stop the screenshot poller, the native preview
 /// stream (if active), and the keeper (kills `maestro studio` + `iproxy`).
-async fn teardown_ios(state: &AppState) {
+/// `keep_sim_warm`: on a plain disconnect we leave a **simulator** keeper's
+/// `maestro studio` running so reconnecting the same booted sim reuses the
+/// already-installed XCTest driver (seconds instead of the ~1-2 min cold
+/// start). The keeper is retired later by `ensure_ios_keeper` (different
+/// device) or by `connect_device` (switching to a non-iOS target). On quit we
+/// pass `false` so nothing is orphaned. Physical bridges are never kept warm.
+async fn teardown_ios(state: &AppState, keep_sim_warm: bool) {
     if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
         let _ = abort.send(());
     }
@@ -416,8 +457,12 @@ async fn teardown_ios(state: &AppState) {
     if let Some(handle) = state.ios_preview_session.lock().await.take() {
         handle.teardown().await;
     }
-    if let Some(keeper) = state.ios_driver.lock().await.take() {
-        keeper.stop().await;
+    let mut slot = state.ios_driver.lock().await;
+    let keep = keep_sim_warm && slot.as_ref().is_some_and(|k| !k.is_physical());
+    if !keep {
+        if let Some(keeper) = slot.take() {
+            keeper.stop().await;
+        }
     }
 }
 
@@ -454,6 +499,15 @@ async fn teardown_web(state: &AppState) {
     }
 }
 
+/// Clears an `AtomicBool` when dropped, so a flag set across an async function
+/// with multiple early returns is always reset on the way out.
+struct AtomicFlagGuard<'a>(&'a std::sync::atomic::AtomicBool);
+impl Drop for AtomicFlagGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 #[tauri::command]
 pub async fn enter_inspect_mode(
     fast_mode: bool,
@@ -466,13 +520,32 @@ pub async fn enter_inspect_mode(
         .clone()
         .ok_or(AppError::NoDevice)?;
     if device.platform == crate::device::Platform::Ios {
+        // Hold the bridge for the dump: pause the physical screenshot mirror so
+        // its /screenshot flood doesn't starve /status + /hierarchy on the
+        // single :22087 forward. Reset on every return via the drop guard.
+        state
+            .ios_inspect_active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let _inspect_guard = AtomicFlagGuard(&state.ios_inspect_active);
         let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
         if !keeper.wait_until_ready().await {
             return Err(AppError::IosDriverUnreachable(
-                "the iOS simulator driver is still starting — try again in a moment".into(),
+                "the iOS simulator driver didn't start in time — it can take 1–2 min on a cold \
+                 simulator. Try Inspect again; if it keeps failing, erase/reboot the simulator."
+                    .into(),
             ));
         }
-        let json = keeper.http().view_hierarchy().await?;
+        // One transient "unreachable" right after a keeper respawn is common
+        // (the bridge just rebound its port); the driver answers on the
+        // immediate retry — don't make the user click Inspect twice.
+        let json = match keeper.http().view_hierarchy().await {
+            Ok(j) => j,
+            Err(AppError::IosDriverUnreachable(_)) => {
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                keeper.http().view_hierarchy().await?
+            }
+            Err(e) => return Err(e),
+        };
         let screen = keeper
             .device_info()
             .map(|d| (d.width_points as i32, d.height_points as i32));
@@ -552,13 +625,29 @@ async fn ensure_ios_keeper(
     let mut slot = state.ios_driver.lock().await;
     // Reuse the keeper for the same device while its bridge process
     // (`maestro studio` / `maestro-ios-device`) is still running — even if the
-    // driver isn't *ready* yet (it may be warming). Only respawn for a different
-    // device or a dead process.
+    // driver isn't *ready* yet (it may be warming). Respawn for a different
+    // device, a dead process, OR a zombie bridge whose on-device runner died
+    // (JVM alive, nothing listening on :22087 — `is_healthy` probes /status
+    // with a short TTL so taps/Home self-heal instead of failing forever).
     let reuse = match slot.as_ref() {
-        Some(k) => k.udid() == udid && k.is_process_alive().await,
+        Some(k) => k.udid() == udid && k.is_process_alive().await && k.is_healthy().await,
         None => false,
     };
     if !reuse {
+        // A simulator run owns the :22087 driver exclusively. Re-warming a
+        // keeper now (e.g. an inspector auto-dump or a tap) would spawn a
+        // second `maestro studio` that fights `maestro test` for the driver —
+        // and both hang forever. Refuse until the run clears the flag.
+        if !physical
+            && state
+                .ios_sim_run_active
+                .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(AppError::IosDriverUnreachable(
+                "a test is running on the simulator — inspect and tap are paused until it finishes"
+                    .into(),
+            ));
+        }
         if let Some(existing) = slot.take() {
             existing.stop().await;
         }
@@ -834,9 +923,24 @@ pub async fn install_ios_device_bridge() -> AppResult<String> {
         .await
         .map_err(|e| AppError::Other(format!("maestro-ios-device setup: {e}")))?;
     if !out.status.success() {
+        // The Go bridge prints its failure reason to STDOUT (its `fatal` uses
+        // fmt.Printf), so stderr alone is usually empty — surface both, keeping
+        // the tail where the actual "❌ Setup failed: …" line lands.
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let detail: String = stdout
+            .lines()
+            .chain(stderr.lines())
+            .filter(|l| !l.trim().is_empty())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .take(4)
+            .rev()
+            .collect::<Vec<_>>()
+            .join(" | ");
         return Err(AppError::Other(format!(
-            "maestro-ios-device setup failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
+            "maestro-ios-device setup failed: {detail}"
         )));
     }
 
@@ -890,7 +994,19 @@ pub async fn run_flow(
         if let Some(keeper) = state.ios_driver.lock().await.take() {
             keeper.stop().await;
         }
-        return runner::spawn_ios_runner(app, &device.serial, &file_path).await;
+        // Mark the run active so inspector dumps / taps can't re-warm a
+        // competing keeper while `maestro test` owns :22087. Cleared by the
+        // runner's exit task (or here if the spawn itself fails).
+        state
+            .ios_sim_run_active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let spawned = runner::spawn_ios_runner(app, &device.serial, &file_path).await;
+        if spawned.is_err() {
+            state
+                .ios_sim_run_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+        return spawned;
     }
 
     let serial = device.serial.clone();

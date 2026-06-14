@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { Sparkles } from "lucide-react";
-import { isValidElement, type ReactNode } from "react";
+import { isValidElement, memo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -34,7 +34,10 @@ function extractCodeFromPre(children: ReactNode): { language: string | null; cod
   return { language, code };
 }
 
-export function ChatMessage({ message }: { message: ChatMessageT }) {
+/** Memoized: during streaming the chat store replaces only the message being
+ *  appended to, so every other message keeps its object identity and skips the
+ *  (expensive) ReactMarkdown re-render entirely. */
+export const ChatMessage = memo(function ChatMessage({ message }: { message: ChatMessageT }) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -161,4 +164,4 @@ export function ChatMessage({ message }: { message: ChatMessageT }) {
       </div>
     </div>
   );
-}
+});

@@ -130,17 +130,34 @@ impl SimCaptureSession {
         let handle = std::thread::Builder::new()
             .name("sim-capture-poll".into())
             .spawn(move || {
-                let attached = match attach(&thread_udid) {
-                    Ok(a) => {
-                        let _ = ready_tx.send(Ok(()));
-                        a
-                    }
-                    Err(e) => {
-                        let _ = ready_tx.send(Err(e));
-                        return;
-                    }
-                };
-                poll_loop(attached, tx, thread_stop, fps, max_dim);
+                // Backstop: objc2's `catch-all` feature converts ObjC
+                // exceptions from CoreSimulator's ROCK proxies into ordinary
+                // Rust panics; contain them here so a flaky proxy only kills
+                // the preview (frames stop, receiver closes), never the app.
+                let attached =
+                    match std::panic::catch_unwind(AssertUnwindSafe(|| attach(&thread_udid))) {
+                        Ok(Ok(a)) => {
+                            let _ = ready_tx.send(Ok(()));
+                            a
+                        }
+                        Ok(Err(e)) => {
+                            let _ = ready_tx.send(Err(e));
+                            return;
+                        }
+                        Err(_) => {
+                            let _ = ready_tx.send(Err(AppError::ScreenCaptureFailed(
+                                "CoreSimulator threw while attaching to the framebuffer".into(),
+                            )));
+                            return;
+                        }
+                    };
+                if std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    poll_loop(attached, tx, thread_stop, fps, max_dim);
+                }))
+                .is_err()
+                {
+                    warn!("sim-capture poll loop stopped by an ObjC exception (panic contained)");
+                }
             })
             .map_err(|e| {
                 AppError::ScreenCaptureFailed(format!("spawn sim-capture poll thread: {e}"))
@@ -248,17 +265,26 @@ fn developer_dir() -> String {
         .unwrap_or_else(|| DEFAULT_DEVELOPER_DIR.to_owned())
 }
 
+/// Run a fragile ObjC call best-effort. objc2's `catch-all` feature converts
+/// any thrown ObjC exception into a Rust panic at the `msg_send!` call site
+/// (e.g. `-[ROCKImmutableProxy displayClass]: unrecognized selector` once the
+/// XCTest runner has touched the device IO), so a plain `catch_unwind`
+/// uniformly contains both ObjC exceptions and Rust panics as `None`.
+fn guarded<T>(f: impl FnOnce() -> T) -> Option<T> {
+    std::panic::catch_unwind(AssertUnwindSafe(f)).ok()
+}
+
 /// Render an `id*` error (NSError or any object) to a String for logging.
 fn err_str(err: *mut AnyObject) -> String {
     if err.is_null() {
         return "(nil)".into();
     }
     let ep = AssertUnwindSafe(err);
-    objc2::exception::catch(move || unsafe {
+    guarded(move || unsafe {
         let s: Retained<NSString> = msg_send![&*{ *ep }, localizedDescription];
         s.to_string()
     })
-    .unwrap_or_else(|_| "(no localizedDescription)".into())
+    .unwrap_or_else(|| "(no localizedDescription)".into())
 }
 
 /// Resolve the booted simulator by `udid` and attach to its display IOSurface.
@@ -363,30 +389,32 @@ fn attach(udid: &str) -> AppResult<Attached> {
 
     // Pick the descriptor whose `framebufferSurface` is non-nil, preferring the
     // main display (`state.displayClass == 0`). Fragile cross-proxy sends are
-    // wrapped in `objc2::exception::catch` with raw pointers (Retained isn't
-    // UnwindSafe) — the probe's exact technique.
+    // wrapped in `guarded` with raw pointers (Retained isn't UnwindSafe) —
+    // `catch-all` turns their ObjC exceptions into catchable Rust panics.
     let mut chosen: Option<(Retained<AnyObject>, Retained<IOSurface>, u16)> = None;
 
     for i in 0..nports {
         let port = ports.objectAtIndex(i);
         let port_ptr = AssertUnwindSafe(Retained::as_ptr(&port));
-        // SAFETY: `-descriptor` may throw across the ROCK proxy; caught. The port
-        // outlives the catch (held by `ports`).
-        let descriptor: Result<*mut AnyObject, _> =
-            objc2::exception::catch(move || unsafe { msg_send![&*{ *port_ptr }, descriptor] });
+        // SAFETY: `-descriptor` may throw across the ROCK proxy; contained. The
+        // port outlives the call (held by `ports`).
+        let descriptor: Option<*mut AnyObject> =
+            guarded(move || unsafe { msg_send![&*{ *port_ptr }, descriptor] });
         let descriptor: Retained<AnyObject> = match descriptor {
             // SAFETY: `-descriptor` returns an autoreleased object; +1 retain it.
-            Ok(d) if !d.is_null() => match unsafe { Retained::retain(d) } {
+            Some(d) if !d.is_null() => match unsafe { Retained::retain(d) } {
                 Some(r) => r,
                 None => continue,
             },
             _ => continue,
         };
 
-        // displayClass (best-effort; the proxy may not respond).
+        // displayClass (best-effort; the proxy may not respond — once the
+        // XCTest runner is attached this is a ROCKImmutableProxy that throws
+        // `unrecognized selector` here).
         let dptr = AssertUnwindSafe(Retained::as_ptr(&descriptor));
-        // SAFETY: `-state` then `-displayClass` may throw across the proxy; caught.
-        let display_class: u16 = objc2::exception::catch(move || unsafe {
+        // SAFETY: `-state` then `-displayClass` may throw across the proxy; contained.
+        let display_class: u16 = guarded(move || unsafe {
             let st: *mut AnyObject = msg_send![&*{ *dptr }, state];
             msg_send![&*st, displayClass]
         })
@@ -394,19 +422,17 @@ fn attach(udid: &str) -> AppResult<Attached> {
 
         // framebufferSurface, falling back to ioSurface.
         let dptr_f = AssertUnwindSafe(Retained::as_ptr(&descriptor));
-        // SAFETY: `-framebufferSurface` may throw / return nil; caught.
-        let fb: Result<*mut AnyObject, _> = objc2::exception::catch(move || unsafe {
-            msg_send![&*{ *dptr_f }, framebufferSurface]
-        });
+        // SAFETY: `-framebufferSurface` may throw / return nil; contained.
+        let fb: Option<*mut AnyObject> =
+            guarded(move || unsafe { msg_send![&*{ *dptr_f }, framebufferSurface] });
         let raw: *mut AnyObject = fb
-            .ok()
             .filter(|p: &*mut AnyObject| !p.is_null())
             .or_else(|| {
                 let dptr2 = AssertUnwindSafe(Retained::as_ptr(&descriptor));
-                // SAFETY: `-ioSurface` fallback; may throw / return nil; caught.
-                let io: Result<*mut AnyObject, _> =
-                    objc2::exception::catch(move || unsafe { msg_send![&*{ *dptr2 }, ioSurface] });
-                io.ok().filter(|p: &*mut AnyObject| !p.is_null())
+                // SAFETY: `-ioSurface` fallback; may throw / return nil; contained.
+                let io: Option<*mut AnyObject> =
+                    guarded(move || unsafe { msg_send![&*{ *dptr2 }, ioSurface] });
+                io.filter(|p: &*mut AnyObject| !p.is_null())
             })
             .unwrap_or(null_mut());
 
@@ -555,6 +581,22 @@ fn copy_downscaled(surface: &IOSurface, max_dim: u32) -> Option<Frame> {
 mod tests {
     use super::*;
 
+    /// UDID of the currently-booted simulator (panics if none — these are
+    /// manual, ignored tests that require one).
+    fn booted_udid() -> String {
+        let out = std::process::Command::new("xcrun")
+            .args(["simctl", "list", "devices", "booted"])
+            .output()
+            .expect("run simctl");
+        let text = String::from_utf8_lossy(&out.stdout);
+        text.lines()
+            .find(|l| l.contains("Booted"))
+            .and_then(|l| l.split('(').nth(1))
+            .and_then(|s| s.split(')').next())
+            .map(|s| s.trim().to_owned())
+            .expect("a booted simulator UDID")
+    }
+
     #[test]
     fn developer_dir_is_nonempty() {
         // Resolves via xcode-select or the default; always a usable path.
@@ -573,18 +615,7 @@ mod tests {
     #[test]
     #[ignore]
     fn attach_booted_does_not_panic() {
-        let out = std::process::Command::new("xcrun")
-            .args(["simctl", "list", "devices", "booted"])
-            .output()
-            .expect("run simctl");
-        let text = String::from_utf8_lossy(&out.stdout);
-        let udid = text
-            .lines()
-            .find(|l| l.contains("Booted"))
-            .and_then(|l| l.split('(').nth(1))
-            .and_then(|s| s.split(')').next())
-            .map(|s| s.trim().to_owned())
-            .expect("a booted simulator UDID");
+        let udid = booted_udid();
         eprintln!("attaching to booted sim {udid}");
         let res = attach(&udid);
         eprintln!("attach result: {:?}", res.as_ref().map(|_| "Ok(Attached)"));
@@ -598,18 +629,7 @@ mod tests {
     #[test]
     #[ignore]
     fn capture_booted_frames_does_not_panic() {
-        let out = std::process::Command::new("xcrun")
-            .args(["simctl", "list", "devices", "booted"])
-            .output()
-            .expect("run simctl");
-        let text = String::from_utf8_lossy(&out.stdout);
-        let udid = text
-            .lines()
-            .find(|l| l.contains("Booted"))
-            .and_then(|l| l.split('(').nth(1))
-            .and_then(|s| s.split(')').next())
-            .map(|s| s.trim().to_owned())
-            .expect("a booted simulator UDID");
+        let udid = booted_udid();
 
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -622,7 +642,7 @@ mod tests {
             // swaps the headless IOSurface preview for ScreenCaptureKit.
             // Mirror the real preview params (ios_session::preview SIM_FPS/MAX_DIM)
             // and pull a few live frames through poll_loop/copy_downscaled.
-            let (session, mut rx) = SimCaptureSession::start(&udid, 60, 900)
+            let (session, mut rx) = SimCaptureSession::start(&udid, 30, 700)
                 .await
                 .expect("start capture");
             for n in 0..10 {
@@ -641,6 +661,239 @@ mod tests {
             }
             session.stop().await;
             eprintln!("done, no panic");
+        });
+    }
+
+    /// Repro of the production crash: capture while the simulator's screen
+    /// CHANGES HEAVILY (app launch / churn), which can make CoreSimulator
+    /// replace or invalidate the display IOSurface mid-capture. The poll
+    /// thread must survive (frames may stop — that's fine), never abort.
+    /// Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_during_screen_churn -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_during_screen_churn_does_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            let (session, mut rx) = SimCaptureSession::start(&udid, 30, 700)
+                .await
+                .expect("start capture");
+
+            // Churn the screen while capturing: bounce between apps so the
+            // compositor animates and the framebuffer is heavily rewritten
+            // (closest scriptable stand-in for tapping the screen).
+            let churn_udid = udid.clone();
+            let churn = tokio::spawn(async move {
+                for app in ["com.apple.Preferences", "com.apple.mobilesafari"] {
+                    let _ = tokio::process::Command::new("xcrun")
+                        .args(["simctl", "launch", &churn_udid, app])
+                        .output()
+                        .await;
+                    tokio::time::sleep(Duration::from_millis(1200)).await;
+                }
+            });
+
+            let mut got = 0u32;
+            for n in 0..30 {
+                match tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
+                    Ok(Some(f)) => {
+                        got += 1;
+                        eprintln!("frame {n}: {}x{}", f.width, f.height);
+                    }
+                    Ok(None) => {
+                        eprintln!("channel closed at {n}");
+                        break;
+                    }
+                    Err(_) => {}
+                }
+            }
+            let _ = churn.await;
+            session.stop().await;
+            eprintln!("done, no panic ({got} frames through churn)");
+        });
+    }
+
+    /// Repro of the production crash: repeated attach → capture → teardown
+    /// cycles against the same booted sim (the app does this on every
+    /// start_stream / inspect re-entry). A second attach hits CoreSimulator
+    /// state left by the first session; any ObjC exception there must surface
+    /// as Err, never abort. Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_restart_cycles -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_restart_cycles_do_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            for cycle in 0..5 {
+                eprintln!("--- cycle {cycle}: attach");
+                let (session, mut rx) = match SimCaptureSession::start(&udid, 30, 700).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("cycle {cycle}: start -> Err({e}) (acceptable, no abort)");
+                        continue;
+                    }
+                };
+                match tokio::time::timeout(Duration::from_secs(2), rx.recv()).await {
+                    Ok(Some(f)) => eprintln!("cycle {cycle}: frame {}x{}", f.width, f.height),
+                    Ok(None) => eprintln!("cycle {cycle}: channel closed"),
+                    Err(_) => eprintln!("cycle {cycle}: frame timeout"),
+                }
+                session.stop().await;
+                drop(session);
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+            eprintln!("done, no panic across restart cycles");
+        });
+    }
+
+    /// Full end-to-end repro of the production crash: spawn the real
+    /// `maestro studio` driver, capture the framebuffer, then inject touches
+    /// through the XCTest runner mid-capture — exactly what happens when the
+    /// user clicks the device view in the app. Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_with_touch -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_with_touch_injection_does_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            let keeper = crate::ios_session::IosDriverKeeper::spawn(&udid, false)
+                .await
+                .expect("spawn driver keeper");
+            assert!(keeper.wait_until_ready().await, "driver never became ready");
+            eprintln!("driver ready");
+
+            let (session, mut rx) = SimCaptureSession::start(&udid, 30, 700)
+                .await
+                .expect("start capture");
+
+            for n in 0..8 {
+                let r = keeper.http().touch(200.0, 400.0, 0.05).await;
+                eprintln!("touch {n}: {:?}", r.as_ref().map(|_| "ok"));
+                match tokio::time::timeout(Duration::from_millis(700), rx.recv()).await {
+                    Ok(Some(f)) => eprintln!("  frame {}x{}", f.width, f.height),
+                    Ok(None) => {
+                        eprintln!("  channel closed");
+                        break;
+                    }
+                    Err(_) => eprintln!("  frame timeout"),
+                }
+            }
+
+            session.stop().await;
+            keeper.stop().await;
+            eprintln!("done, no panic with touch injection");
+        });
+    }
+
+    /// Repro of the production crash: capture while `simctl io screenshot`
+    /// runs concurrently (the app's screenshot poller does this every 350 ms
+    /// alongside the native preview). Each simctl invocation attaches its own
+    /// CoreSimulator IO client to the same device, churning the IO state our
+    /// poll thread holds proxies into. Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_with_simctl -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_with_simctl_screenshots_does_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            let (session, mut rx) = SimCaptureSession::start(&udid, 30, 700)
+                .await
+                .expect("start capture");
+
+            let shot_udid = udid.clone();
+            let shots = tokio::spawn(async move {
+                for i in 0..12 {
+                    let tmp = std::env::temp_dir().join(format!("simcap-test-{i}.png"));
+                    let _ = tokio::process::Command::new("xcrun")
+                        .args([
+                            "simctl",
+                            "io",
+                            &shot_udid,
+                            "screenshot",
+                            tmp.to_str().unwrap(),
+                        ])
+                        .output()
+                        .await;
+                    let _ = tokio::fs::remove_file(&tmp).await;
+                    tokio::time::sleep(Duration::from_millis(350)).await;
+                }
+            });
+
+            let mut got = 0u32;
+            for _ in 0..20 {
+                match tokio::time::timeout(Duration::from_millis(400), rx.recv()).await {
+                    Ok(Some(_)) => got += 1,
+                    Ok(None) => break,
+                    Err(_) => {}
+                }
+            }
+            let _ = shots.await;
+            session.stop().await;
+            eprintln!("done, no panic with concurrent simctl screenshots ({got} frames)");
+        });
+    }
+
+    /// Repro of the production crash: CONCURRENT double-attach. The app's
+    /// `upgrade_ios_preview` spawns a new capture session BEFORE tearing down
+    /// the old one (commands.rs takes the old handle only after the new spawn
+    /// succeeds), so two poll threads briefly hold live CoreSimulator proxies
+    /// to the same device. Run with a booted sim:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml capture_double_attach -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn capture_concurrent_double_attach_does_not_panic() {
+        let udid = booted_udid();
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            for round in 0..4 {
+                eprintln!("--- round {round}");
+                let (a, mut rx_a) = SimCaptureSession::start(&udid, 30, 700)
+                    .await
+                    .expect("start A");
+                // Let A's poll thread run.
+                let _ = tokio::time::timeout(Duration::from_millis(300), rx_a.recv()).await;
+
+                // Second attach while A is still live (the upgrade re-entry).
+                let b = SimCaptureSession::start(&udid, 30, 700).await;
+                match &b {
+                    Ok(_) => eprintln!("round {round}: B attached while A live"),
+                    Err(e) => eprintln!("round {round}: B -> Err({e}) (acceptable)"),
+                }
+
+                // Now tear down A (what upgrade_ios_preview does to `old`),
+                // then keep pulling B for a moment.
+                a.stop().await;
+                drop(a);
+                if let Ok((b, mut rx_b)) = b {
+                    let _ = tokio::time::timeout(Duration::from_millis(400), rx_b.recv()).await;
+                    b.stop().await;
+                }
+            }
+            eprintln!("done, no panic across concurrent double-attach rounds");
         });
     }
 }

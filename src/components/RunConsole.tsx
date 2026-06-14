@@ -17,7 +17,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
   const running = useRunStore((s) => s.running);
   const exitCode = useRunStore((s) => s.exitCode);
   const logs = useRunStore((s) => s.logs);
-  const clearLogs = useRunStore((s) => s.clearLogs);
+  const clearConsole = useRunStore((s) => s.clearConsole);
 
   const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
   const panelOpen = useMetricsStore((s) => s.panelOpen);
@@ -102,7 +102,14 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
               Perf
             </Button>
           )}
-          <Button size="xs" variant="ghost" onClick={clearLogs} disabled={logs.length === 0}>
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={clearConsole}
+            // Disabled while running: clearing `steps` mid-run would wipe the
+            // live step list and incoming events can't repopulate it.
+            disabled={running || (logs.length === 0 && steps.length === 0)}
+          >
             <Eraser className="h-3 w-3" />
             Clear
           </Button>

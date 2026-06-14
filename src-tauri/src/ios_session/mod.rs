@@ -164,9 +164,27 @@ impl IosHttpClient {
     }
 
     pub async fn screenshot(&self) -> AppResult<Vec<u8>> {
+        self.screenshot_inner(false).await
+    }
+
+    /// JPEG (quality 0.5) instead of PNG. The runner's `jpegData` encode is
+    /// ~5-10x faster than `pngRepresentation` on-device — the capture encode
+    /// is the physical preview's fps ceiling — and the transfer is ~10x
+    /// smaller. Use for the live preview; keep PNG for anything needing
+    /// lossless pixels.
+    pub async fn screenshot_compressed(&self) -> AppResult<Vec<u8>> {
+        self.screenshot_inner(true).await
+    }
+
+    async fn screenshot_inner(&self, compressed: bool) -> AppResult<Vec<u8>> {
+        let url = if compressed {
+            format!("{}?compressed=true", self.url("screenshot"))
+        } else {
+            self.url("screenshot")
+        };
         let resp = self
             .client
-            .get(self.url("screenshot"))
+            .get(url)
             .send()
             .await
             .map_err(|e| AppError::IosDriverUnreachable(format!("screenshot: {e}")))?;
@@ -241,11 +259,75 @@ pub const PHYSICAL_BRIDGE_PORT: u16 = 6001;
 const READY_ATTEMPTS: u32 = 360;
 const READY_BACKOFF_MS: u64 = 500;
 /// Passed to maestro as MAESTRO_DRIVER_STARTUP_TIMEOUT so it doesn't give up on
-/// a cold simulator before the driver is ready (ms).
-const DRIVER_STARTUP_TIMEOUT_MS: &str = "120000";
+/// a cold simulator before the driver is ready (ms). Matched to our own ~180 s
+/// readiness budget above — at the old 120 s, maestro studio threw
+/// IOSDriverTimeoutException while we were still happily waiting.
+const DRIVER_STARTUP_TIMEOUT_MS: &str = "180000";
 
 fn studio_args(udid: &str) -> Vec<&str> {
     vec!["--device", udid, "studio", "--no-window"]
+}
+
+/// SIGKILL orphan `maestro … --device <udid> … studio` processes left behind
+/// by a crashed/SIGKILLed session (their `kill_on_drop` never ran). Scoped to
+/// this UDID so a legitimate Android studio keeper is never touched. Unix-only
+/// (`pgrep`/`kill`); simulators only exist on macOS anyway.
+async fn kill_orphan_studios_for(udid: &str) {
+    #[cfg(unix)]
+    {
+        let pattern = format!("maestro.*--device {udid}.*studio");
+        let Ok(output) = Command::new("pgrep").args(["-f", &pattern]).output().await else {
+            return;
+        };
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let Ok(pid) = line.trim().parse::<u32>() else {
+                continue;
+            };
+            warn!(
+                pid,
+                udid, "SIGKILL orphan maestro studio (stale iOS driver)"
+            );
+            let _ = Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output()
+                .await;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = udid;
+    }
+}
+
+/// SIGKILL orphan `maestro-ios-device … --device <udid>` bridges left behind by
+/// a crashed/SIGKILLed session. Leftover bridges keep their 600x ports bound,
+/// pushing every fresh bridge onto a different port than the one our HTTP
+/// client polls (`PHYSICAL_BRIDGE_PORT`). Scoped to this UDID.
+async fn kill_orphan_bridges_for(udid: &str) {
+    #[cfg(unix)]
+    {
+        let pattern = format!("maestro-ios-device.*--device {udid}");
+        let Ok(output) = Command::new("pgrep").args(["-f", &pattern]).output().await else {
+            return;
+        };
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let Ok(pid) = line.trim().parse::<u32>() else {
+                continue;
+            };
+            warn!(
+                pid,
+                udid, "SIGKILL orphan maestro-ios-device bridge (stale port holder)"
+            );
+            let _ = Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output()
+                .await;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = udid;
+    }
 }
 
 /// Which kind of iOS target a keeper drives.
@@ -271,7 +353,14 @@ pub struct IosDriverKeeper {
     /// `maestro-ios-device` (physical).
     driver_child: AsyncMutex<Option<Child>>,
     target: IosTarget,
+    /// Last time a `/status` probe succeeded (see [`Self::is_healthy`]).
+    health_checked: parking_lot::Mutex<Option<std::time::Instant>>,
 }
+
+/// How long a successful `/status` probe vouches for the on-device runner
+/// before `is_healthy` re-verifies. Keeps the per-command overhead at one
+/// cheap local HTTP GET every few seconds instead of one per tap.
+const HEALTH_TTL: Duration = Duration::from_secs(5);
 
 impl IosDriverKeeper {
     pub fn udid(&self) -> &str {
@@ -293,6 +382,34 @@ impl IosDriverKeeper {
         self.device_info.read().is_some()
     }
 
+    /// True while the ON-DEVICE runner still answers `/status`. The bridge
+    /// process (`maestro studio`) can outlive the XCTest runner it launched —
+    /// the JVM stays up while nothing listens on :22087 anymore, so a keeper
+    /// that only checks `is_process_alive` becomes a permanent zombie (every
+    /// tap / Home press fails with "driver unreachable" forever). A warming
+    /// keeper (not ready yet) is considered healthy — `wait_until_ready`
+    /// owns that phase. Successful probes are cached for [`HEALTH_TTL`].
+    pub async fn is_healthy(&self) -> bool {
+        if !self.is_ready() {
+            return true;
+        }
+        if let Some(t) = *self.health_checked.lock() {
+            if t.elapsed() < HEALTH_TTL {
+                return true;
+            }
+        }
+        if self.http.status().await {
+            *self.health_checked.lock() = Some(std::time::Instant::now());
+            true
+        } else {
+            warn!(
+                udid = %self.udid,
+                "iOS driver stopped answering /status (runner died?) — recycling keeper"
+            );
+            false
+        }
+    }
+
     /// Start the right keeper for the target. Returns IMMEDIATELY — does NOT
     /// wait for readiness (cold start can take minutes). Call `wait_until_ready`
     /// before issuing driver requests (hierarchy/input).
@@ -307,6 +424,16 @@ impl IosDriverKeeper {
     /// Boot the simulator and spawn `maestro studio` (installs/launches the XCTest
     /// runner on :22087).
     async fn spawn_simulator(udid: &str) -> AppResult<Arc<Self>> {
+        // After a crash / SIGKILL, `kill_on_drop` never fires and the studio
+        // JVM (which holds the XCTest driver on :22087) outlives the app.
+        // Stale instances then fight the fresh one for the driver, and the
+        // inspector hangs on a zombie runner for the whole readiness budget.
+        // Any studio targeting this UDID at spawn time is an orphan (the
+        // keeper for the current session is stopped before respawning), so
+        // cull them first — mirrors `hierarchy::studio::kill_orphan_studios`
+        // on the Android path.
+        kill_orphan_studios_for(udid).await;
+
         // Boot the sim (idempotent — `simctl boot` errors if already booted, ignored).
         let _ = Command::new("xcrun")
             .args(["simctl", "boot", udid])
@@ -333,6 +460,7 @@ impl IosDriverKeeper {
             device_info: parking_lot::RwLock::new(None),
             driver_child: AsyncMutex::new(Some(studio)),
             target: IosTarget::Simulator,
+            health_checked: parking_lot::Mutex::new(None),
         }))
     }
 
@@ -346,6 +474,14 @@ impl IosDriverKeeper {
                 "Set your Apple Team ID in Settings to drive a physical iOS device".into(),
             )
         })?;
+        // Same zombie problem as simulator studios: after a crash/SIGKILL the
+        // bridge outlives the app AND keeps its port. Each leftover instance
+        // holds 600x, so a fresh bridge binds the NEXT free port (observed: 9
+        // orphans on 6001-6009) while our HTTP client polls PHYSICAL_BRIDGE_PORT
+        // forever — taps/inspect dead even though a bridge says "Ready". Any
+        // bridge for this UDID at spawn time is an orphan (the keeper is
+        // stopped before respawning) — cull them so we always get 6001.
+        kill_orphan_bridges_for(udid).await;
         let bin = crate::tool_paths::maestro_ios_device_bin();
         let bridge = Command::new(&bin)
             .args(["--team-id", &team, "--device", udid])
@@ -369,6 +505,7 @@ impl IosDriverKeeper {
             device_info: parking_lot::RwLock::new(None),
             driver_child: AsyncMutex::new(Some(bridge)),
             target: IosTarget::Physical,
+            health_checked: parking_lot::Mutex::new(None),
         }))
     }
 
@@ -430,10 +567,16 @@ impl IosDriverKeeper {
 /// the pre-framebuffer fallback on sims, so a gentle cadence is fine).
 const SCREENSHOT_INTERVAL_MS: u64 = 350;
 /// Physical devices have no framebuffer/SCK path — this poller IS their preview.
-/// The driver's `/screenshot` capture is itself ~200 ms (the device-side ceiling,
-/// ~5 fps), so we poll back-to-back and let the capture latency pace us instead of
-/// adding a fixed interval on top.
-const PHYSICAL_SCREENSHOT_INTERVAL_MS: u64 = 0;
+/// Per-lane pause between completed frames. Don't set to 0: polling back-to-back
+/// once saturated the webview main thread and froze the whole UI the moment a
+/// physical device connected. Frames are now JPEG (~10x smaller than PNG) and
+/// pipelined across [`PHYSICAL_PIPELINE_DEPTH`] lanes, so 50 ms per lane yields
+/// roughly 8-12 fps while keeping the main thread responsive.
+const PHYSICAL_SCREENSHOT_INTERVAL_MS: u64 = 50;
+/// Concurrent `/screenshot` lanes for physical devices. The on-device capture +
+/// JPEG encode dominates the round-trip, so two lanes overlap capture with
+/// transfer (~2x fps). More lanes mostly just queue on the device.
+const PHYSICAL_PIPELINE_DEPTH: u32 = 2;
 /// Back-off after a failed poll (e.g. device unplugged) so we don't spin and flood
 /// logs when there's nothing to capture.
 const SCREENSHOT_ERROR_BACKOFF_MS: u64 = 500;
@@ -442,8 +585,13 @@ const IOS_FRAME_EVENT: &str = "ios_frame";
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IosFramePayload {
-    /// PNG bytes from `GET /screenshot` (native pixels).
-    pub data: Vec<u8>,
+    /// PNG bytes from `GET /screenshot` (native pixels), **base64-encoded**.
+    /// Tauri events serialize payloads as JSON, where a `Vec<u8>` becomes an
+    /// array of numbers — a multi-MB PNG turns into 4-15 MB of JSON parsed
+    /// token-by-token on the webview main thread, freezing the whole UI
+    /// (observed with physical devices). Base64 is one string token, ~4x
+    /// smaller and parsed orders of magnitude faster.
+    pub data: String,
     pub width: u32,
     pub height: u32,
 }
@@ -486,8 +634,25 @@ pub fn spawn_screenshot_poller(
             .map(|d| (d.width_pixels, d.height_pixels))
             .unwrap_or((0, 0));
         // Physical devices: the simulator `simctl` path doesn't apply — pull
-        // frames from the driver's HTTP `/screenshot` instead.
-        let physical = keeper.is_physical();
+        // frames from the driver's HTTP `/screenshot` (pipelined, JPEG).
+        if keeper.is_physical() {
+            let workers: Vec<_> = (0..PHYSICAL_PIPELINE_DEPTH)
+                .map(|_| {
+                    tokio::spawn(physical_screenshot_worker(
+                        app.clone(),
+                        keeper.clone(),
+                        w,
+                        h,
+                    ))
+                })
+                .collect();
+            let _ = (&mut abort_rx).await;
+            info!("iOS screenshot poller aborted");
+            for wk in workers {
+                wk.abort();
+            }
+            return;
+        }
         loop {
             tokio::select! {
                 biased;
@@ -495,24 +660,11 @@ pub fn spawn_screenshot_poller(
                     info!("iOS screenshot poller aborted");
                     return;
                 }
-                shot = async {
-                    if physical {
-                        keeper.http().screenshot().await
-                    } else {
-                        capture_simulator_screenshot(keeper.udid()).await
-                    }
-                } => {
+                shot = capture_simulator_screenshot(keeper.udid()) => {
                     let delay_ms = match shot {
                         Ok(data) => {
-                            let payload = IosFramePayload { data, width: w, height: h };
-                            if let Err(e) = app.emit(IOS_FRAME_EVENT, &payload) {
-                                warn!(error = %e, "failed to emit ios_frame");
-                            }
-                            if physical {
-                                PHYSICAL_SCREENSHOT_INTERVAL_MS
-                            } else {
-                                SCREENSHOT_INTERVAL_MS
-                            }
+                            emit_ios_frame(&app, data, w, h);
+                            SCREENSHOT_INTERVAL_MS
                         }
                         Err(e) => {
                             warn!(error = %e, "screenshot poll failed");
@@ -525,6 +677,68 @@ pub fn spawn_screenshot_poller(
         }
     });
     abort_tx
+}
+
+fn emit_ios_frame(app: &AppHandle, data: Vec<u8>, w: u32, h: u32) {
+    use base64::Engine as _;
+    let payload = IosFramePayload {
+        data: base64::engine::general_purpose::STANDARD.encode(&data),
+        width: w,
+        height: h,
+    };
+    if let Err(e) = app.emit(IOS_FRAME_EVENT, &payload) {
+        warn!(error = %e, "failed to emit ios_frame");
+    }
+}
+
+/// One lane of the physical-device screenshot pipeline. The on-device capture
+/// (`XCUIScreen.screenshot` + JPEG encode) dominates the period, so running
+/// [`PHYSICAL_PIPELINE_DEPTH`] of these concurrently overlaps capture with
+/// transfer and roughly multiplies the frame rate. A shared monotonically
+/// increasing ticket + a "newest emitted" watermark drop frames that finish
+/// out of order so the preview never steps backwards.
+async fn physical_screenshot_worker(app: AppHandle, keeper: Arc<IosDriverKeeper>, w: u32, h: u32) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use tauri::Manager;
+    static TICKET: AtomicU64 = AtomicU64::new(0);
+    static NEWEST: AtomicU64 = AtomicU64::new(0);
+
+    loop {
+        // Yield the single :22087 forward to an in-progress hierarchy dump —
+        // otherwise the /screenshot flood starves /status + /hierarchy and
+        // inspect hangs. Don't poll while inspect holds the bridge.
+        if app
+            .state::<crate::state::AppState>()
+            .ios_inspect_active
+            .load(Ordering::Relaxed)
+        {
+            sleep(std::time::Duration::from_millis(
+                PHYSICAL_SCREENSHOT_INTERVAL_MS,
+            ))
+            .await;
+            continue;
+        }
+        let seq = TICKET.fetch_add(1, Ordering::Relaxed) + 1;
+        match keeper.http().screenshot_compressed().await {
+            Ok(data) => {
+                // Emit only if no newer frame has already been emitted.
+                if NEWEST.fetch_max(seq, Ordering::Relaxed) <= seq {
+                    emit_ios_frame(&app, data, w, h);
+                }
+                sleep(std::time::Duration::from_millis(
+                    PHYSICAL_SCREENSHOT_INTERVAL_MS,
+                ))
+                .await;
+            }
+            Err(e) => {
+                warn!(error = %e, "physical screenshot poll failed");
+                sleep(std::time::Duration::from_millis(
+                    SCREENSHOT_ERROR_BACKOFF_MS,
+                ))
+                .await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -18,6 +18,7 @@ import { HealthcheckModal } from "@/components/HealthcheckModal";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useDeviceStore } from "@/stores/deviceStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import type { Device, HealthReport } from "@/types";
 import { isHealthReportClean } from "@/types";
@@ -36,12 +37,20 @@ export function DeviceSelector() {
     disconnect,
   } = useDeviceStore();
 
+  // The synthetic "Web Browser (Chromium)" target is hidden unless the user
+  // opts into the beta from Settings — the backend always returns it.
+  const webBrowserEnabled = useSettingsStore((s) => s.webBrowserEnabled);
+
   // Booted iOS sims, physical iPhones, and all non-iOS devices render as normal
   // rows; only SHUTDOWN iOS simulators go into the "Launch a simulator…" picker
   // (there can be dozens). Physical devices have booted=false but must stay in
   // the main list, hence the explicit `!d.physical` guard.
   const isShutdownSim = (d: Device) => d.platform === "ios" && !d.booted && !d.physical;
-  const rows = devices.filter((d) => !isShutdownSim(d));
+  // Hide the web target when the beta is off — but never hide it while it's the
+  // active connection, or the user couldn't disconnect it after toggling off.
+  const isHiddenWeb = (d: Device) =>
+    d.platform === "web" && !webBrowserEnabled && current?.serial !== d.serial;
+  const rows = devices.filter((d) => !isShutdownSim(d) && !isHiddenWeb(d));
   const shutdownSims = devices
     .filter(isShutdownSim)
     .sort(
