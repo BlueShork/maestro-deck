@@ -155,14 +155,16 @@ pub async fn connect_device(
 /// headless-framebuffer stream. Called by the frontend once an iOS device is
 /// connected with streaming. Waits for the background-warmed driver to become
 /// ready (the crop needs `device_info` for the aspect-ratio crop) before
-/// attempting the upgrade. Returns `true` if the native preview took over
-/// (screenshot poller aborted), `false` if it was unavailable and the
-/// screenshot poller keeps running. Never errors in a way that blanks the
-/// screen.
+/// attempting the upgrade. Returns `true` if the native preview started,
+/// `false` if it was unavailable and the screenshot poller keeps running. The
+/// screenshot poller is retired only once the native preview paints its first
+/// frame, so a capture that attaches but stays mute (e.g. AVF on some devices)
+/// never blanks the screen. Never errors in a way that blanks the screen.
 #[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn upgrade_ios_preview(
     channel: Channel<InvokeResponseBody>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<bool> {
     let device = state
@@ -195,7 +197,7 @@ pub async fn upgrade_ios_preview(
 
     match crate::ios_session::spawn_ios_preview(keeper.clone(), device.model.clone(), channel).await
     {
-        Ok(handle) => {
+        Ok((handle, first_frame_rx)) => {
             // Guard: the user may have disconnected or switched devices during
             // the readiness wait / preview start. If so, don't install a stale
             // session (which would leak); tear it down immediately.
@@ -210,14 +212,29 @@ pub async fn upgrade_ios_preview(
                 return Ok(false);
             }
 
-            if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
-                let _ = abort.send(());
-            }
             if let Some(old) = state.ios_preview_session.lock().await.take() {
                 old.teardown().await;
             }
             *state.ios_preview_session.lock().await = Some(handle);
-            info!("iOS preview upgraded to headless framebuffer");
+
+            // Retire the screenshot poller only once the native preview paints
+            // its first frame — NOT just because the capture attached. If the
+            // capture stays mute (mute AVF on some devices), `first_frame_rx`
+            // resolves Err when the preview task ends, the poller is left
+            // running, and the screen keeps mirroring via `/screenshot`.
+            let app = app.clone();
+            tokio::spawn(async move {
+                use tauri::Manager;
+                if first_frame_rx.await.is_ok() {
+                    let st = app.state::<AppState>();
+                    let abort = st.ios_screenshot_abort.lock().await.take();
+                    if let Some(abort) = abort {
+                        let _ = abort.send(());
+                        info!("native preview painted first frame — retired screenshot poller");
+                    }
+                }
+            });
+            info!("iOS preview started; screenshot poller stays until first native frame");
             Ok(true)
         }
         Err(e) => {

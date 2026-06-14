@@ -110,11 +110,17 @@ impl Drop for PreviewHandle {
 ///
 /// `device_name` is only used for logging (the headless source is keyed on the
 /// keeper's UDID, not a window title).
+/// Returns the [`PreviewHandle`] plus a receiver that fires once the capture
+/// source delivers its **first** real frame to the channel. The caller uses
+/// this to retire the screenshot poller only when the native preview is
+/// actually painting — if the capture attaches but stays mute (observed with
+/// AVF on some physical devices), the receiver never fires and the screenshot
+/// fallback keeps the screen alive instead of going blank.
 pub async fn spawn_ios_preview(
     keeper: Arc<IosDriverKeeper>,
     device_name: String,
     channel: Channel<InvokeResponseBody>,
-) -> AppResult<PreviewHandle> {
+) -> AppResult<(PreviewHandle, oneshot::Receiver<()>)> {
     // Pick the native source for the target: headless CoreSimulator framebuffer
     // for simulators, QuickTime-style USB screen capture (~27 fps) for physical
     // iPhones. Both return `Send` session + receiver pairs.
@@ -131,7 +137,10 @@ pub async fn spawn_ios_preview(
 
     // Drain task runs on the MAIN runtime (only touches Send values).
     let (abort_tx, mut abort_rx) = oneshot::channel::<()>();
+    // Fired once, on the first frame actually pushed to the channel.
+    let (first_frame_tx, first_frame_rx) = oneshot::channel::<()>();
     tokio::spawn(async move {
+        let mut first_frame_tx = Some(first_frame_tx);
         loop {
             tokio::select! {
                 biased;
@@ -157,6 +166,11 @@ pub async fn spawn_ios_preview(
                             info!("preview frame channel send failed (frontend gone)");
                             return;
                         }
+                        // Signal the first painted frame so the caller can retire
+                        // the screenshot fallback (no-op after the first).
+                        if let Some(tx) = first_frame_tx.take() {
+                            let _ = tx.send(());
+                        }
                     }
                 }
             }
@@ -164,10 +178,13 @@ pub async fn spawn_ios_preview(
     });
 
     info!(device = %device_name, "iOS preview started (headless CoreSimulator framebuffer)");
-    Ok(PreviewHandle {
-        session: Some(session),
-        abort: Some(abort_tx),
-    })
+    Ok((
+        PreviewHandle {
+            session: Some(session),
+            abort: Some(abort_tx),
+        },
+        first_frame_rx,
+    ))
 }
 
 /// Frame wire format: 8-byte little-endian header `[width u32][height u32]`
