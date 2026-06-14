@@ -68,6 +68,15 @@ pub async fn connect_device(
     state: State<'_, AppState>,
 ) -> AppResult<()> {
     use crate::device::Platform;
+    // A previous disconnect may have left a simulator keeper warm for fast
+    // reconnect. If we're now connecting something that isn't an iOS device,
+    // retire it — it still holds :22087 and a JVM. (iOS→iOS reuse or
+    // replacement is handled by `ensure_ios_keeper` keyed on the udid.)
+    if !matches!(platform, Platform::Ios) {
+        if let Some(keeper) = state.ios_driver.lock().await.take() {
+            keeper.stop().await;
+        }
+    }
     match platform {
         Platform::Android => {
             let device = adb::get_device_info(&serial)?;
@@ -342,7 +351,8 @@ async fn setup_scrcpy(serial: &str, app: AppHandle, state: &AppState) {
 
 #[tauri::command]
 pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
-    teardown_all_sessions(state.inner()).await;
+    // Keep a simulator's studio warm so reconnecting the same sim is fast.
+    teardown_all_sessions(state.inner(), true).await;
     Ok(())
 }
 
@@ -351,7 +361,7 @@ pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
 /// driver / browser. Shared by `disconnect_device` and the quit handler so a
 /// fast Cmd+Q doesn't leave orphaned studio / chromedriver / Chrome / iproxy
 /// processes behind.
-pub async fn teardown_all_sessions(state: &AppState) {
+pub async fn teardown_all_sessions(state: &AppState, keep_ios_sim_warm: bool) {
     let (serial, platform) = {
         let g = state.connected_device.read();
         (
@@ -372,7 +382,7 @@ pub async fn teardown_all_sessions(state: &AppState) {
     }
 
     match platform {
-        Some(crate::device::Platform::Ios) => teardown_ios(state).await,
+        Some(crate::device::Platform::Ios) => teardown_ios(state, keep_ios_sim_warm).await,
         Some(crate::device::Platform::Android) => {
             if let Some(serial) = serial {
                 teardown_scrcpy(&serial, state).await;
@@ -392,7 +402,8 @@ pub async fn confirm_quit(app: AppHandle, state: State<'_, AppState>) -> AppResu
     state
         .quit_confirmed
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    teardown_all_sessions(state.inner()).await;
+    // Quitting — stop everything, including any warm simulator keeper.
+    teardown_all_sessions(state.inner(), false).await;
     app.exit(0);
     Ok(())
 }
@@ -415,7 +426,13 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
 
 /// Tear down the iOS session: stop the screenshot poller, the native preview
 /// stream (if active), and the keeper (kills `maestro studio` + `iproxy`).
-async fn teardown_ios(state: &AppState) {
+/// `keep_sim_warm`: on a plain disconnect we leave a **simulator** keeper's
+/// `maestro studio` running so reconnecting the same booted sim reuses the
+/// already-installed XCTest driver (seconds instead of the ~1-2 min cold
+/// start). The keeper is retired later by `ensure_ios_keeper` (different
+/// device) or by `connect_device` (switching to a non-iOS target). On quit we
+/// pass `false` so nothing is orphaned. Physical bridges are never kept warm.
+async fn teardown_ios(state: &AppState, keep_sim_warm: bool) {
     if let Some(abort) = state.ios_screenshot_abort.lock().await.take() {
         let _ = abort.send(());
     }
@@ -423,8 +440,12 @@ async fn teardown_ios(state: &AppState) {
     if let Some(handle) = state.ios_preview_session.lock().await.take() {
         handle.teardown().await;
     }
-    if let Some(keeper) = state.ios_driver.lock().await.take() {
-        keeper.stop().await;
+    let mut slot = state.ios_driver.lock().await;
+    let keep = keep_sim_warm && slot.as_ref().is_some_and(|k| !k.is_physical());
+    if !keep {
+        if let Some(keeper) = slot.take() {
+            keeper.stop().await;
+        }
     }
 }
 
