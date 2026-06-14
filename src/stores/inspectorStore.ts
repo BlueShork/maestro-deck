@@ -4,6 +4,7 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { useDeviceStore } from "@/stores/deviceStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
@@ -129,8 +130,16 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       // Persistent snackbar while the dump runs — stays visible for the
       // entire duration (dump can take 500–2000 ms depending on the
       // device and Maestro driver state) and is dismissed only when the
-      // backend returns a result.
-      const toastId = toast.loading("Dumping hierarchy…");
+      // backend returns a result. On a cold iOS simulator the very first
+      // inspect blocks on the XCTest driver cold-start (~1–2 min), so say so
+      // instead of a silent "Dumping…" that reads as a freeze.
+      const device = useDeviceStore.getState().current;
+      const coldIosSim = device?.platform === "ios" && !device.physical;
+      const toastId = toast.loading(
+        coldIosSim
+          ? "Starting iOS simulator driver… first inspect can take ~1–2 min"
+          : "Dumping hierarchy…",
+      );
       try {
         const tree = await ipc.enterInspectMode(fastMode());
         treeUpdatedAt = Date.now();

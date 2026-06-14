@@ -476,7 +476,9 @@ pub async fn enter_inspect_mode(
         let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
         if !keeper.wait_until_ready().await {
             return Err(AppError::IosDriverUnreachable(
-                "the iOS simulator driver is still starting — try again in a moment".into(),
+                "the iOS simulator driver didn't start in time — it can take 1–2 min on a cold \
+                 simulator. Try Inspect again; if it keeps failing, erase/reboot the simulator."
+                    .into(),
             ));
         }
         // One transient "unreachable" right after a keeper respawn is common

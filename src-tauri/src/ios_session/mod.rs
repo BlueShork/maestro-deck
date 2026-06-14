@@ -259,8 +259,10 @@ pub const PHYSICAL_BRIDGE_PORT: u16 = 6001;
 const READY_ATTEMPTS: u32 = 360;
 const READY_BACKOFF_MS: u64 = 500;
 /// Passed to maestro as MAESTRO_DRIVER_STARTUP_TIMEOUT so it doesn't give up on
-/// a cold simulator before the driver is ready (ms).
-const DRIVER_STARTUP_TIMEOUT_MS: &str = "120000";
+/// a cold simulator before the driver is ready (ms). Matched to our own ~180 s
+/// readiness budget above — at the old 120 s, maestro studio threw
+/// IOSDriverTimeoutException while we were still happily waiting.
+const DRIVER_STARTUP_TIMEOUT_MS: &str = "180000";
 
 fn studio_args(udid: &str) -> Vec<&str> {
     vec!["--device", udid, "studio", "--no-window"]
