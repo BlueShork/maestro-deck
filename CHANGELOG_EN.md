@@ -1,3 +1,23 @@
+# What's New in v0.5.5
+
+## iOS
+- **Running flows on the iOS Simulator now works reliably** — starting a flow with the inspector open no longer hangs forever on "waiting for iOS driver".
+- **Much faster simulator reconnect** — reconnecting to the same booted simulator reuses the warm driver instead of paying the 1–2 min cold start again.
+- **Physical iPhone preview is more robust** — the live screen now shows even on devices where the USB mirror stays silent (it falls back to a screenshot mirror), and inspecting a physical device no longer freezes.
+- **Clearer first-connect feedback** — the simulator shows a "starting iOS driver…" message instead of a silent spinner, and the driver now gets its full startup window before timing out.
+
+## Android
+- **Fixed the frozen mirror on Android 16** — updated the bundled screen-mirroring engine (scrcpy 3.3.4), so Android 16 emulators and devices no longer freeze on the first frame.
+
+## General
+- **Web Browser is now an opt-in beta** — it's off by default; enable it from **Settings → Device & Performance** if you want to try it.
+- **Reorganized Settings** into clearer groups (Appearance, Editor, Application, Mirroring, Inspector, …).
+- **The console "Clear" button now works in Simple mode** — it clears the step list, not just the raw log.
+- **Inspect mode resets cleanly when you switch devices** — no more stuck "loading" spinner.
+- **No more spurious "update failed" popup on startup** when you're already up to date.
+
+---
+
 # What's New in v0.4.0
 
 ## iOS support
