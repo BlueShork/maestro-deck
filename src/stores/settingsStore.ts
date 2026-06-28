@@ -12,7 +12,6 @@ interface SettingsState {
   showFps: boolean;
   theme: ThemeMode;
   streamEnabled: boolean;
-  perfMonitoringEnabled: boolean;
   /**
    * When enabled, inspect mode spawns `maestro studio` once at startup
    * (slow: 10-15s) and then fetches the hierarchy over direct gRPC on
@@ -36,17 +35,24 @@ interface SettingsState {
    * from the dialog itself ("don't ask again") or re-enable it in Settings. */
   confirmBeforeQuit: boolean;
   consoleMode: ConsoleMode;
+  /**
+   * Value fed to maestro as `-e APP_ID=<appId>` on every run, so flow files
+   * can reference `${APP_ID}` (the same placeholder used in CI) and still run
+   * locally without editing each file. Empty string = pass nothing, behaving
+   * exactly as before.
+   */
+  appId: string;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
   setStreamEnabled: (v: boolean) => void;
-  setPerfMonitoringEnabled: (v: boolean) => void;
   setFastHierarchyEnabled: (v: boolean) => void;
   setAutoSaveEnabled: (v: boolean) => void;
   setAutoCheckUpdatesEnabled: (v: boolean) => void;
   setWebBrowserEnabled: (v: boolean) => void;
   setConfirmBeforeQuit: (v: boolean) => void;
   setConsoleMode: (m: ConsoleMode) => void;
+  setAppId: (id: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -56,24 +62,24 @@ export const useSettingsStore = create<SettingsState>()(
       showFps: false,
       theme: "system",
       streamEnabled: true,
-      perfMonitoringEnabled: false,
       fastHierarchyEnabled: false,
       autoSaveEnabled: true,
       autoCheckUpdatesEnabled: true,
       webBrowserEnabled: false,
       confirmBeforeQuit: true,
       consoleMode: "simple",
+      appId: "",
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
-      setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
       setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
       setAutoCheckUpdatesEnabled: (autoCheckUpdatesEnabled) => set({ autoCheckUpdatesEnabled }),
       setWebBrowserEnabled: (webBrowserEnabled) => set({ webBrowserEnabled }),
       setConfirmBeforeQuit: (confirmBeforeQuit) => set({ confirmBeforeQuit }),
       setConsoleMode: (consoleMode) => set({ consoleMode }),
+      setAppId: (appId) => set({ appId: appId.trim() }),
     }),
     {
       name: "maestro-deck.settings",
@@ -82,13 +88,13 @@ export const useSettingsStore = create<SettingsState>()(
         inspectKey: s.inspectKey,
         theme: s.theme,
         streamEnabled: s.streamEnabled,
-        perfMonitoringEnabled: s.perfMonitoringEnabled,
         fastHierarchyEnabled: s.fastHierarchyEnabled,
         autoSaveEnabled: s.autoSaveEnabled,
         autoCheckUpdatesEnabled: s.autoCheckUpdatesEnabled,
         webBrowserEnabled: s.webBrowserEnabled,
         confirmBeforeQuit: s.confirmBeforeQuit,
         consoleMode: s.consoleMode,
+        appId: s.appId,
       }),
     },
   ),

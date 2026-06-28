@@ -23,7 +23,6 @@ import { buildPartialFlow } from "@/lib/partialFlow";
 import { useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
 import { useFlowStore } from "@/stores/flowStore";
-import { useMetricsStore } from "@/stores/metricsStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
@@ -52,8 +51,6 @@ export function MainView() {
   const runningPid = useRunStore((s) => s.pid);
 
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
-  const panelOpen = useMetricsStore((s) => s.panelOpen);
-  const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
   const panels = usePanelsStore((s) => s.visible);
   const chatOpen = useChatStore((s) => s.isOpen);
 
@@ -74,7 +71,7 @@ export function MainView() {
   // editor + device get the most room; the user can drag it taller and the
   // size persists. `BOTTOM_MIN` must match the `main-bottom` Panel's `minSize`.
   const BOTTOM_MIN = 10;
-  const bottomVisible = panels.console || (perfEnabled && panelOpen && panels.metrics);
+  const bottomVisible = panels.console || panels.metrics;
   const mainTopSize = bottomVisible ? 100 - BOTTOM_MIN : 100;
   const mainBottomSize = 100 - mainTopSize;
 
@@ -94,7 +91,7 @@ export function MainView() {
       }
       resetSteps();
       initSteps(parseFlow(content).steps);
-      const pid = await ipc.runFlow(path);
+      const pid = await ipc.runFlow(path, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · ${path}]`);
     } catch (err) {
@@ -119,7 +116,7 @@ export function MainView() {
       const { content: c2 } = useFlowStore.getState();
       resetSteps();
       initSteps(parseFlow(c2).steps);
-      const pid = await ipc.runFlow(folder);
+      const pid = await ipc.runFlow(folder, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
     } catch (err) {
@@ -147,7 +144,7 @@ export function MainView() {
         }));
         resetSteps();
         initSteps(remappedSteps);
-        const pid = await ipc.runFlow(tempPath);
+        const pid = await ipc.runFlow(tempPath, useSettingsStore.getState().appId);
         setRunning(pid);
         appendLog(
           "system",
@@ -278,7 +275,7 @@ export function MainView() {
                 </PanelGroup>
               </Panel>
 
-              {panels.console || (perfEnabled && panelOpen && panels.metrics) ? (
+              {panels.console || panels.metrics ? (
                 <>
                   <PanelResizeHandle className={RESIZE_HANDLE_V} />
                   <Panel
@@ -292,7 +289,7 @@ export function MainView() {
                         <Panel
                           id="console"
                           order={1}
-                          defaultSize={perfEnabled && panelOpen && panels.metrics ? 70 : 100}
+                          defaultSize={panels.metrics ? 70 : 100}
                           minSize={20}
                         >
                           <PanelShell id="console">
@@ -301,7 +298,7 @@ export function MainView() {
                         </Panel>
                       ) : null}
 
-                      {perfEnabled && panelOpen && panels.metrics ? (
+                      {panels.metrics ? (
                         <>
                           {panels.console ? (
                             <PanelResizeHandle className={RESIZE_HANDLE_H} />

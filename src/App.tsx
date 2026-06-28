@@ -18,6 +18,7 @@ import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
@@ -146,6 +147,11 @@ export default function App() {
           memMb: p.mem_mb,
           fps: p.fps,
           jankPct: p.jank_pct,
+          frameP50: p.frame_p50_ms,
+          frameP90: p.frame_p90_ms,
+          frameP95: p.frame_p95_ms,
+          frameP99: p.frame_p99_ms,
+          thermalStatus: p.thermal_status,
           netRxKbps: p.net_rx_kbps,
           netTxKbps: p.net_tx_kbps,
         }),
@@ -202,16 +208,25 @@ export default function App() {
     };
   }, []);
 
-  const panelOpen = useMetricsStore((s) => s.panelOpen);
-  const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
-  const deviceConnected = useDeviceStore((s) => Boolean(s.current));
-  const currentPlatform = useDeviceStore((s) => s.current?.platform ?? null);
+  const metricsOpen = usePanelsStore((s) => s.visible.metrics);
+  // Use device identity (serial + platform + physical) rather than mere presence
+  // so that a direct A→B switch (where deviceConnected stays true) still causes
+  // the effect to re-run, stopping the old collector and starting a new one for
+  // the correct device.
+  const deviceKey = useDeviceStore((s) =>
+    s.current
+      ? `${s.current.serial}:${s.current.platform}:${String(s.current.physical)}`
+      : null,
+  );
 
   useEffect(() => {
-    if (!perfEnabled || !panelOpen || !deviceConnected || currentPlatform !== "android") {
+    if (!metricsOpen || !deviceKey) {
       void ipc.stopMetrics().catch(() => {});
       return;
     }
+    // Clear any stale samples/package from a previous device so nothing is
+    // misattributed while we wait for the new collector's first sample.
+    useMetricsStore.getState().reset();
     void ipc.startMetrics().catch((err) => {
       toast.error(
         "Performance monitoring failed to start",
@@ -221,7 +236,7 @@ export default function App() {
     return () => {
       void ipc.stopMetrics().catch(() => {});
     };
-  }, [perfEnabled, panelOpen, deviceConnected, currentPlatform]);
+  }, [metricsOpen, deviceKey]);
 
   return (
     <>

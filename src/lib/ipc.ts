@@ -34,6 +34,11 @@ export interface MetricsSamplePayload {
   mem_mb: number;
   fps: number | null;
   jank_pct: number | null;
+  frame_p50_ms: number | null;
+  frame_p90_ms: number | null;
+  frame_p95_ms: number | null;
+  frame_p99_ms: number | null;
+  thermal_status: number | null;
   net_rx_kbps: number;
   net_tx_kbps: number;
   ts: number;
@@ -45,7 +50,7 @@ export interface TargetChangedPayload {
 }
 
 export interface MetricsStoppedPayload {
-  reason: "user" | "device_disconnected" | "error";
+  reason: "user" | "device_disconnected" | "error" | "unsupported";
   message: string | null;
 }
 
@@ -78,7 +83,8 @@ export const ipc = {
   getDarkMode: () => call<boolean>("get_dark_mode"),
   // iOS-only: press the Home button to return to the home screen.
   iosPressHome: () => call<void>("ios_press_home"),
-  runFlow: (filePath: string) => call<number>("run_flow", { filePath }),
+  runFlow: (filePath: string, appId?: string) =>
+    call<number>("run_flow", { filePath, appId: appId?.trim() || null }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
   startStream: () => call<void>("start_stream"),

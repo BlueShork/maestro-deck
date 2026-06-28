@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { AiSettings } from "@/components/AiSettings";
 import { ToolPathsSettings } from "@/components/ToolPathsSettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
+import { BillySettings } from "@/components/settings/BillySettings";
 import { DevicePerformanceSettings } from "@/components/settings/DevicePerformanceSettings";
 import { GeneralSettings } from "@/components/settings/GeneralSettings";
 
@@ -21,6 +22,7 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = [
   { id: "device", label: "Device & Performance", render: () => <DevicePerformanceSettings /> },
   { id: "tools", label: "Tools", render: () => <ToolPathsSettings /> },
   { id: "ai", label: "AI", render: () => <AiSettings /> },
+  { id: "billy", label: "Billy AI", render: () => <BillySettings /> },
   { id: "about", label: "About", render: () => <AboutSettings /> },
 ];
 

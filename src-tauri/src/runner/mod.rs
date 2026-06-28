@@ -51,6 +51,18 @@ fn maestro_bin() -> String {
     crate::tool_paths::maestro_bin()
 }
 
+/// Build the `-e APP_ID=<value>` args for a maestro `test` invocation, or an
+/// empty vec when no app id is configured. This lets a single global APP_ID
+/// (set in Settings) feed the `${APP_ID}` placeholder users keep in their CI
+/// flow files, so those flows run locally without per-file edits. `-e` is a
+/// `test`-subcommand option, so callers must insert these args *after* `test`.
+fn app_id_env_args(app_id: Option<&str>) -> Vec<String> {
+    match app_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(value) => vec!["-e".to_string(), format!("APP_ID={value}")],
+        None => Vec::new(),
+    }
+}
+
 /// Spawn `maestro --udid <serial> test <flow>` and stream stdout/stderr to
 /// the frontend via Tauri events. The PID is returned so the frontend can
 /// request a stop.
@@ -63,10 +75,12 @@ pub async fn spawn_runner(
     app: AppHandle,
     serial: &str,
     flow_path: &str,
+    app_id: Option<&str>,
     on_exit: Option<Box<dyn FnOnce(AppHandle) + Send + 'static>>,
 ) -> AppResult<u32> {
     let bin = maestro_bin();
     info!(bin = %bin, serial, flow = %flow_path, "spawning maestro");
+    let env_args = app_id_env_args(app_id);
 
     // Maestro 2.5.x's session manager calls `dadb.Dadb.list()` which
     // walks every adb-server transport before honoring `--udid` — any
@@ -112,6 +126,7 @@ pub async fn spawn_runner(
     let mut child = Command::new(&bin)
         .no_window()
         .args(["--udid", serial, "test"])
+        .args(&env_args)
         .arg(flow_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -185,14 +200,20 @@ pub async fn spawn_runner(
 /// Maestro targets the browser via the flow's `url:` header, and no adb
 /// emulator-ghost preamble (irrelevant to web). Streams stdout/stderr and
 /// emits `runner:exit` exactly like [`spawn_runner`].
-pub async fn spawn_web_runner(app: AppHandle, flow_path: &str) -> AppResult<u32> {
+pub async fn spawn_web_runner(
+    app: AppHandle,
+    flow_path: &str,
+    app_id: Option<&str>,
+) -> AppResult<u32> {
     let bin = maestro_bin();
     info!(bin = %bin, flow = %flow_path, "spawning maestro (web)");
+    let env_args = app_id_env_args(app_id);
 
     let mut child = Command::new(&bin)
         .no_window()
         // `-p web` is a global flag and must precede the `test` subcommand.
         .args(["-p", "web", "test"])
+        .args(&env_args)
         .arg(flow_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -257,13 +278,20 @@ pub async fn spawn_web_runner(app: AppHandle, flow_path: &str) -> AppResult<u32>
 /// iOS). The caller stops the studio keeper first so `maestro test` can bring up
 /// its own XCTest driver on :22087 without contention. Streams stdout/stderr and
 /// emits `runner:exit` exactly like the other runners.
-pub async fn spawn_ios_runner(app: AppHandle, udid: &str, flow_path: &str) -> AppResult<u32> {
+pub async fn spawn_ios_runner(
+    app: AppHandle,
+    udid: &str,
+    flow_path: &str,
+    app_id: Option<&str>,
+) -> AppResult<u32> {
     let bin = maestro_bin();
     info!(bin = %bin, udid, flow = %flow_path, "spawning maestro (ios)");
+    let env_args = app_id_env_args(app_id);
 
     let mut child = Command::new(&bin)
         .no_window()
         .args(["--udid", udid, "test"])
+        .args(&env_args)
         .arg(flow_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -381,6 +409,7 @@ pub async fn spawn_ios_device_runner(
     udid: &str,
     flow_path: &str,
     port: u16,
+    app_id: Option<&str>,
 ) -> AppResult<u32> {
     let bin = maestro_bin();
     if !maestro_supports_driver_host_port(&bin).await {
@@ -392,10 +421,12 @@ pub async fn spawn_ios_device_runner(
     }
     let port_str = port.to_string();
     info!(bin = %bin, udid, port, flow = %flow_path, "spawning maestro (ios physical)");
+    let env_args = app_id_env_args(app_id);
 
     let mut child = Command::new(&bin)
         .no_window()
         .args(["--driver-host-port", &port_str, "--device", udid, "test"])
+        .args(&env_args)
         .arg(flow_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -477,5 +508,28 @@ mod tests {
     async fn kill_unknown_pid_errors() {
         let res = kill_runner(987_654_321).await;
         assert!(matches!(res, Err(AppError::RunnerFailed(_))));
+    }
+
+    #[test]
+    fn app_id_env_args_emits_e_flag_when_set() {
+        assert_eq!(
+            app_id_env_args(Some("com.example.app")),
+            vec!["-e".to_string(), "APP_ID=com.example.app".to_string()]
+        );
+    }
+
+    #[test]
+    fn app_id_env_args_trims_whitespace() {
+        assert_eq!(
+            app_id_env_args(Some("  com.example.app  ")),
+            vec!["-e".to_string(), "APP_ID=com.example.app".to_string()]
+        );
+    }
+
+    #[test]
+    fn app_id_env_args_empty_when_none_or_blank() {
+        assert!(app_id_env_args(None).is_empty());
+        assert!(app_id_env_args(Some("")).is_empty());
+        assert!(app_id_env_args(Some("   ")).is_empty());
     }
 }

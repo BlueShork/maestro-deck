@@ -5,6 +5,26 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 /**
+ * Zustand persist migration — exported for unit-test coverage.
+ *
+ * v0 → v1: Force `visible.metrics` to `false`.
+ * Old builds defaulted metrics to `true`; upgrade must honour the new
+ * "closed-by-default / opening starts capture" design without clobbering
+ * the user's other panel visibility preferences.
+ */
+export function migratePanelsStore(persisted: unknown, fromVersion: number): unknown {
+  if (fromVersion < 1) {
+    const state = persisted as Record<string, unknown> | null | undefined;
+    const visible = (state?.visible ?? {}) as Record<string, unknown>;
+    return {
+      ...state,
+      visible: { ...visible, metrics: false },
+    };
+  }
+  return persisted;
+}
+
+/**
  * Which panels are visible in the main layout. Hidden panels collapse
  * to zero size in the `PanelGroup` — their sibling(s) absorb the space.
  * Users re-open them from the View menu in the Toolbar.
@@ -33,10 +53,9 @@ export const usePanelsStore = create<PanelsState>()(
         device: true,
         editor: true,
         console: true,
-        // Metrics is still gated by the global perfMonitoringEnabled
-        // setting; this flag just decides whether the pane is shown
-        // when perf monitoring *is* enabled.
-        metrics: true,
+        // Performance tab is closed by default — opening it is what starts
+        // metric capture (see App.tsx). It does not auto-capture on launch.
+        metrics: false,
       },
       toggle: (id) =>
         set((s) => ({
@@ -58,13 +77,15 @@ export const usePanelsStore = create<PanelsState>()(
             device: true,
             editor: true,
             console: true,
-            metrics: true,
+            metrics: false,
           },
         })),
     }),
     {
       name: "maestro-deck.panels",
       storage: createJSONStorage(() => localStorage),
+      version: 1,
+      migrate: migratePanelsStore,
     },
   ),
 );

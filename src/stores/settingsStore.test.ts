@@ -29,10 +29,10 @@ beforeEach(() => {
     showFps: INITIAL.showFps,
     theme: "system",
     streamEnabled: true,
-    perfMonitoringEnabled: false,
     fastHierarchyEnabled: false,
     autoSaveEnabled: true,
     consoleMode: "simple",
+    appId: "",
   });
 });
 
@@ -42,12 +42,12 @@ describe("settingsStore defaults", () => {
     expect(s.inspectKey).toBe("i");
     expect(s.theme).toBe("system");
     expect(s.streamEnabled).toBe(true);
-    expect(s.perfMonitoringEnabled).toBe(false);
     expect(s.fastHierarchyEnabled).toBe(false);
     expect(s.autoSaveEnabled).toBe(true);
     expect(s.consoleMode).toBe("simple");
     // Web support is beta — the target stays hidden until opted in.
     expect(s.webBrowserEnabled).toBe(false);
+    expect(s.appId).toBe("");
   });
 });
 
@@ -72,15 +72,13 @@ describe("settingsStore setters", () => {
     }
   });
 
-  it("setStreamEnabled / setPerfMonitoringEnabled / setFastHierarchyEnabled / setAutoSaveEnabled toggle their flags", () => {
+  it("setStreamEnabled / setFastHierarchyEnabled / setAutoSaveEnabled toggle their flags", () => {
     const s = useSettingsStore.getState();
     s.setStreamEnabled(false);
-    s.setPerfMonitoringEnabled(true);
     s.setFastHierarchyEnabled(true);
     s.setAutoSaveEnabled(false);
     const after = useSettingsStore.getState();
     expect(after.streamEnabled).toBe(false);
-    expect(after.perfMonitoringEnabled).toBe(true);
     expect(after.fastHierarchyEnabled).toBe(true);
     expect(after.autoSaveEnabled).toBe(false);
   });
@@ -97,5 +95,12 @@ describe("settingsStore setters", () => {
     expect(useSettingsStore.getState().consoleMode).toBe("technical");
     useSettingsStore.getState().setConsoleMode("simple");
     expect(useSettingsStore.getState().consoleMode).toBe("simple");
+  });
+
+  it("setAppId stores a trimmed value", () => {
+    useSettingsStore.getState().setAppId("  com.example.app  ");
+    expect(useSettingsStore.getState().appId).toBe("com.example.app");
+    useSettingsStore.getState().setAppId("");
+    expect(useSettingsStore.getState().appId).toBe("");
   });
 });
