@@ -38,11 +38,13 @@ interface RunState {
   stopRequested: boolean;
   logs: LogLine[];
   steps: StepRunState[];
+  runTarget: { path: string; kind: "flow" | "all" } | null;
   setStarting: () => void;
   startFailed: () => void;
   setRunning: (pid: number) => void;
   requestStop: () => void;
   setStopped: (exitCode: number | null) => void;
+  setRunTarget: (target: { path: string; kind: "flow" | "all" }) => void;
   appendLog: (stream: LogStream, text: string) => void;
   /** Clears the visible console — both the technical `logs` and the Simple
    *  view's `steps`, plus the run-result badge — so "Clear" empties whichever
@@ -63,6 +65,7 @@ export const useRunStore = create<RunState>((set) => ({
   stopRequested: false,
   logs: [],
   steps: [],
+  runTarget: null,
   // Posted immediately on the Run click so the toolbar reacts instantly,
   // before the (potentially slow) backend round-trip returns the PID. Clears
   // logs here — the earliest point — so early runner stdout isn't dropped.
@@ -72,6 +75,7 @@ export const useRunStore = create<RunState>((set) => ({
     set({ running: true, starting: false, pid, exitCode: null, stopRequested: false }),
   requestStop: () => set({ stopRequested: true }),
   setStopped: (exitCode) => set({ running: false, starting: false, pid: null, exitCode }),
+  setRunTarget: (runTarget) => set({ runTarget }),
   appendLog: (stream, text) =>
     set((s) => {
       const entry = { id: nextId++, stream, text, timestamp: Date.now() };

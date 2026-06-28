@@ -91,6 +91,7 @@ export function MainView() {
       }
       resetSteps();
       initSteps(parseFlow(content).steps);
+      useRunStore.getState().setRunTarget({ path, kind: "flow" });
       const pid = await ipc.runFlow(path, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · ${path}]`);
@@ -116,6 +117,7 @@ export function MainView() {
       const { content: c2 } = useFlowStore.getState();
       resetSteps();
       initSteps(parseFlow(c2).steps);
+      useRunStore.getState().setRunTarget({ path: folder, kind: "all" });
       const pid = await ipc.runFlow(folder, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
@@ -144,6 +146,7 @@ export function MainView() {
         }));
         resetSteps();
         initSteps(remappedSteps);
+        useRunStore.getState().setRunTarget({ path: tempPath, kind: "flow" });
         const pid = await ipc.runFlow(tempPath, useSettingsStore.getState().appId);
         setRunning(pid);
         appendLog(
