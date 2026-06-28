@@ -17,6 +17,7 @@ import type {
   UINode,
   WorkspaceNode,
 } from "@/types";
+import type { RunReport } from "@/types/visualRegression";
 
 export class IpcError extends Error {
   constructor(
@@ -86,6 +87,23 @@ export const ipc = {
   runFlow: (filePath: string, appId?: string) =>
     call<number>("run_flow", { filePath, appId: appId?.trim() || null }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
+  compareScreenshots: (args: {
+    workspace: string;
+    flowPath: string;
+    model: string;
+    width: number;
+    height: number;
+    tolerance: number;
+    threshold: number;
+    runId: string;
+  }) => call<RunReport>("compare_screenshots", args),
+  resolveComparison: (args: {
+    workspace: string;
+    runId: string;
+    deviceKey: string;
+    name: string;
+    decision: "keep" | "replace";
+  }) => call<void>("resolve_comparison", args),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
   startStream: () => call<void>("start_stream"),
   stopStream: () => call<void>("stop_stream"),
