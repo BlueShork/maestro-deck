@@ -10,8 +10,29 @@ const mkSample = (ts: number): Sample => ({
   memMb: 0,
   fps: null,
   jankPct: null,
+  frameP50: null,
+  frameP90: null,
+  frameP95: null,
+  frameP99: null,
+  thermalStatus: null,
   netRxKbps: 0,
   netTxKbps: 0,
+});
+
+const sample = (over: Partial<Sample> = {}): Sample => ({
+  ts: 1,
+  cpuPct: 10,
+  memMb: 100,
+  fps: null,
+  jankPct: null,
+  frameP50: null,
+  frameP90: null,
+  frameP95: null,
+  frameP99: null,
+  thermalStatus: null,
+  netRxKbps: 0,
+  netTxKbps: 0,
+  ...over,
 });
 
 beforeEach(() => {
@@ -79,5 +100,20 @@ describe("metricsStore.reset", () => {
     expect(s.currentPackage).toBeNull();
     expect(s.samples).toEqual([]);
     expect(s.stoppedReason).toBeNull();
+  });
+});
+
+describe("metricsStore", () => {
+  it("keeps appended samples", () => {
+    useMetricsStore.getState().appendSample(sample({ cpuPct: 42 }));
+    const s = useMetricsStore.getState().samples;
+    expect(s).toHaveLength(1);
+    expect(s[0].cpuPct).toBe(42);
+  });
+
+  it("caps history at 60 samples", () => {
+    for (let i = 0; i < 70; i++) useMetricsStore.getState().appendSample(sample({ ts: i }));
+    expect(useMetricsStore.getState().samples).toHaveLength(60);
+    expect(useMetricsStore.getState().samples[0].ts).toBe(10);
   });
 });

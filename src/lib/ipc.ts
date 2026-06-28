@@ -34,6 +34,11 @@ export interface MetricsSamplePayload {
   mem_mb: number;
   fps: number | null;
   jank_pct: number | null;
+  frame_p50_ms: number | null;
+  frame_p90_ms: number | null;
+  frame_p95_ms: number | null;
+  frame_p99_ms: number | null;
+  thermal_status: number | null;
   net_rx_kbps: number;
   net_tx_kbps: number;
   ts: number;
@@ -45,7 +50,7 @@ export interface TargetChangedPayload {
 }
 
 export interface MetricsStoppedPayload {
-  reason: "user" | "device_disconnected" | "error";
+  reason: "user" | "device_disconnected" | "error" | "unsupported";
   message: string | null;
 }
 

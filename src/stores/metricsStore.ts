@@ -9,6 +9,11 @@ export interface Sample {
   memMb: number;
   fps: number | null;
   jankPct: number | null;
+  frameP50: number | null;
+  frameP90: number | null;
+  frameP95: number | null;
+  frameP99: number | null;
+  thermalStatus: number | null;
   netRxKbps: number;
   netTxKbps: number;
 }
