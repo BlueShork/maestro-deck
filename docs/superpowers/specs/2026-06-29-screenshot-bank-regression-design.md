@@ -18,10 +18,12 @@ la revue de l'utilisateur, qui décide de garder la référence ou de la remplac
 |-------|----------|
 | Source des screenshots | Commandes `takeScreenshot: <nom>` du flow YAML ; `<nom>` = clé de matching |
 | Algorithme de diff | Pixelmatch-like : seuil % de pixels changés + tolérance couleur par pixel |
+| Seuils | **Configurables** dans une nouvelle section des Paramètres (tolérance + seuil %) |
 | Masques / zones ignorées | **Hors scope v1** (prévu v2) |
 | Sémantique du refus | Garder la banque = **régression détectée** (signal d'alerte) ; banque inchangée |
 | Sémantique de l'acceptation | Remplacer = la nouvelle capture devient la vérité (écrase la banque) |
-| Portée | **Tout** run d'un flow (single + Run All) |
+| Portée | **Tout** run d'un flow (single + Run All), **uniquement si le run réussit** (exit 0) |
+| Run en échec | Exit ≠ 0 → **aucun** traitement de banque (ni comparaison ni seed) |
 | Clé de banque | `<model>_<W>x<H>` (modèle + résolution, sanitizé) |
 | Emplacement | `<workspace>/maestro/bank/<key>/` (créer `bank/` si `maestro/` existe déjà) |
 | Récupération PNG | Non invasif : CWD du runner = **dossier du flow** ; collecte des `<nom>.png` sur place |
@@ -41,8 +43,9 @@ Maestro exécute, écrit <nom>.png à côté du flow
         │
    runner:exit
         │
-        ▼
-[Rust] Comparateur de banque
+        ├─ exit ≠ 0 → STOP (aucun traitement de banque)
+        ▼ exit == 0
+[Rust] Comparateur de banque (seuils lus depuis les Paramètres)
    ├─ parse YAML → liste des noms takeScreenshot attendus
    ├─ résout clé device = <model>_<W>x<H>
    ├─ pour chaque <nom>.png :
@@ -96,8 +99,9 @@ Maestro exécute, écrit <nom>.png à côté du flow
   à côté du flow de façon déterministe.
 - Parse du YAML du flow pour extraire la **liste ordonnée des noms** `takeScreenshot`
   (sert au matching et à détecter un `Missing`).
-- Au `runner:exit` (code 0 ou non), collecte des `<nom>.png` attendus dans le dossier du
-  flow.
+- Au `runner:exit` : **si exit ≠ 0, on s'arrête là** — pas de comparaison, pas de seed.
+  Un run en échec n'a aucune logique de traitement de banque (état non fiable).
+- Si exit == 0, collecte des `<nom>.png` attendus dans le dossier du flow, puis comparaison.
 
 ### 3. Moteur de comparaison (Rust, nouveau module `src-tauri/src/bank/`)
 
@@ -109,9 +113,11 @@ Maestro exécute, écrit <nom>.png à côté du flow
   - `changed_ratio = pixels_changés / total`. Si `changed_ratio > seuil` → `Changed`.
   - Génère `diffs/<nom>.png` (overlay rouge sur les pixels changés) et le **bounding box**
     englobant (x, y, w, h) pour l'encadré UI.
-- Seuils par défaut configurables (constantes v1, settings plus tard) :
-  - tolérance couleur ≈ 0.1 (échelle pixelmatch)
-  - seuil ratio ≈ 0.001 (0.1 % des pixels)
+- **Seuils fournis par l'appel** (lus depuis les Paramètres côté front, passés à la commande
+  de comparaison) :
+  - `tolerance` : tolérance couleur par pixel (échelle pixelmatch, défaut 0.1)
+  - `threshold` : ratio de pixels changés au-delà duquel on flague (défaut 0.001 = 0.1 %)
+  - Si les Paramètres n'ont jamais été modifiés → valeurs par défaut embarquées.
 
 ### 4. Modèle de résultat
 
@@ -157,18 +163,37 @@ struct RunReport {
 - Les statuts `Seeded` ne déclenchent pas de revue : simple bandeau « N références créées ».
 - `Match` : silencieux.
 
-### 6. Commandes IPC (Rust ↔ front)
+### 6. Paramètres — section « Régression visuelle » (front)
 
-- `run_flow` (existant) — étendu : fixe le CWD, et après l'exit déclenche la comparaison.
+Suit le pattern existant (cf. prompt Billy : store Zustand dédié + `persist` localStorage,
+section enregistrée dans `SETTINGS_SECTIONS`).
+
+- Nouveau store `src/stores/visualRegressionStore.ts`, clé localStorage
+  `maestro-deck.visual-regression` :
+  - `tolerance: number | null` (null → défaut 0.1)
+  - `threshold: number | null` (null → défaut 0.001)
+  - setters + `reset()` (remet à `null` = défauts embarqués, façon Billy).
+- Nouveau composant `src/components/settings/VisualRegressionSettings.tsx` :
+  deux champs numériques (tolérance, seuil %) avec valeurs par défaut et bouton reset,
+  enveloppés dans `<SettingsSection>`.
+- Enregistrement dans `src/components/settings/sections.tsx` :
+  `{ id: "visual-regression", label: "Régression visuelle", render: () => <VisualRegressionSettings /> }`.
+- Au lancement d'un run, le front lit `visualRegressionStore.getState()` et passe
+  `tolerance` + `threshold` (résolus avec leurs défauts) à la commande de comparaison.
+
+### 7. Commandes IPC (Rust ↔ front)
+
+- `run_flow` (existant) — étendu : fixe le CWD ; après l'exit, **si exit == 0**, déclenche la
+  comparaison avec les seuils reçus.
 - `get_run_report(run_id) -> RunReport` — lire le rapport.
 - `resolve_comparison(run_id, name, decision: Keep | Replace)` — applique la décision.
 
 ## Gestion des erreurs / cas limites
 
-- **PNG manquant** alors qu'attendu (`takeScreenshot` dans le YAML mais pas de fichier) →
-  statut `Missing` (le flow a peut-être échoué avant cette étape). Signalé, pas bloquant.
-- **Run échoué** (exit ≠ 0) → on compare quand même les screenshots produits ; un run
-  interrompu produira des `Missing`.
+- **Run échoué** (exit ≠ 0) → **aucun** traitement de banque (ni comparaison, ni seed, ni
+  rapport). Un flow en erreur laisse un état device non fiable : pas de logique à appliquer.
+- **PNG manquant** sur un run réussi (`takeScreenshot` dans le YAML mais pas de fichier
+  produit) → statut `Missing`. Signalé, pas bloquant. Cas rare puisque le flow a réussi.
 - **YAML non parsable** → on ne bloque pas le run ; on collecte les PNG présents par leur
   nom de fichier en best-effort, et on log un avertissement.
 - **Nouvelle résolution / nouveau modèle** → nouvelle clé de banque → comportement seed
@@ -186,13 +211,15 @@ struct RunReport {
   forme `path:`).
 - **Intégration** — `resolve_comparison(Replace)` écrase bien le fichier banque ; `Keep`
   laisse la banque intacte et enregistre la régression.
+- **Intégration** — run en échec (exit ≠ 0) → aucun rapport, aucune écriture dans `bank/`.
+- **Unit** — seuils : `tolerance`/`threshold` reçus en paramètre modifient bien le verdict ;
+  store front résout `null` → défauts (0.1 / 0.001).
 - **Front** — `ScreenshotReview` : file de plusieurs diffs, actions Keep/Replace,
   rendu de la bbox et de l'overlay.
 
 ## Hors scope (v2+)
 
 - Masques / zones à ignorer (horloge, barre de statut) par screenshot.
-- Réglages de seuils dans l'UI Settings.
 - Historique/diff entre runs au-delà de la dernière référence.
 - Synchronisation cloud / partage d'équipe de la banque.
 - Fallback de clé par UUID device.
