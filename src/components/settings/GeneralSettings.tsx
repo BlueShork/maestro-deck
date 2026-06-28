@@ -28,6 +28,8 @@ export function GeneralSettings() {
   const setAutoCheckUpdatesEnabled = useSettingsStore((s) => s.setAutoCheckUpdatesEnabled);
   const confirmBeforeQuit = useSettingsStore((s) => s.confirmBeforeQuit);
   const setConfirmBeforeQuit = useSettingsStore((s) => s.setConfirmBeforeQuit);
+  const appId = useSettingsStore((s) => s.appId);
+  const setAppId = useSettingsStore((s) => s.setAppId);
 
   return (
     <SettingsSection
@@ -79,6 +81,24 @@ export function GeneralSettings() {
             onChange={(e) => setInspectKey(e.currentTarget.value.toLowerCase() || "i")}
             className="w-12 rounded border border-border bg-background px-2 py-1 text-center font-mono text-xs"
           />
+        </label>
+      </SettingsSubgroup>
+
+      <SettingsSubgroup title="Flows">
+        <label className="flex flex-col gap-1.5">
+          <span>App ID</span>
+          <input
+            type="text"
+            value={appId}
+            placeholder="com.example.app"
+            onChange={(e) => setAppId(e.currentTarget.value)}
+            className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+          />
+          <span className="text-xs text-muted-foreground">
+            Passed to maestro as <code>-e APP_ID=…</code> on every run, so flows that reference{" "}
+            <code>{"${APP_ID}"}</code> (e.g. your CI flows) run locally without editing each file.
+            Leave empty to pass nothing.
+          </span>
         </label>
       </SettingsSubgroup>
 

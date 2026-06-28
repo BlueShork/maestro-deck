@@ -33,6 +33,7 @@ beforeEach(() => {
     fastHierarchyEnabled: false,
     autoSaveEnabled: true,
     consoleMode: "simple",
+    appId: "",
   });
 });
 
@@ -48,6 +49,7 @@ describe("settingsStore defaults", () => {
     expect(s.consoleMode).toBe("simple");
     // Web support is beta — the target stays hidden until opted in.
     expect(s.webBrowserEnabled).toBe(false);
+    expect(s.appId).toBe("");
   });
 });
 
@@ -97,5 +99,12 @@ describe("settingsStore setters", () => {
     expect(useSettingsStore.getState().consoleMode).toBe("technical");
     useSettingsStore.getState().setConsoleMode("simple");
     expect(useSettingsStore.getState().consoleMode).toBe("simple");
+  });
+
+  it("setAppId stores a trimmed value", () => {
+    useSettingsStore.getState().setAppId("  com.example.app  ");
+    expect(useSettingsStore.getState().appId).toBe("com.example.app");
+    useSettingsStore.getState().setAppId("");
+    expect(useSettingsStore.getState().appId).toBe("");
   });
 });

@@ -36,6 +36,13 @@ interface SettingsState {
    * from the dialog itself ("don't ask again") or re-enable it in Settings. */
   confirmBeforeQuit: boolean;
   consoleMode: ConsoleMode;
+  /**
+   * Value fed to maestro as `-e APP_ID=<appId>` on every run, so flow files
+   * can reference `${APP_ID}` (the same placeholder used in CI) and still run
+   * locally without editing each file. Empty string = pass nothing, behaving
+   * exactly as before.
+   */
+  appId: string;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
@@ -47,6 +54,7 @@ interface SettingsState {
   setWebBrowserEnabled: (v: boolean) => void;
   setConfirmBeforeQuit: (v: boolean) => void;
   setConsoleMode: (m: ConsoleMode) => void;
+  setAppId: (id: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -63,6 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
       webBrowserEnabled: false,
       confirmBeforeQuit: true,
       consoleMode: "simple",
+      appId: "",
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
@@ -74,6 +83,7 @@ export const useSettingsStore = create<SettingsState>()(
       setWebBrowserEnabled: (webBrowserEnabled) => set({ webBrowserEnabled }),
       setConfirmBeforeQuit: (confirmBeforeQuit) => set({ confirmBeforeQuit }),
       setConsoleMode: (consoleMode) => set({ consoleMode }),
+      setAppId: (appId) => set({ appId: appId.trim() }),
     }),
     {
       name: "maestro-deck.settings",
@@ -89,6 +99,7 @@ export const useSettingsStore = create<SettingsState>()(
         webBrowserEnabled: s.webBrowserEnabled,
         confirmBeforeQuit: s.confirmBeforeQuit,
         consoleMode: s.consoleMode,
+        appId: s.appId,
       }),
     },
   ),
