@@ -1,7 +1,7 @@
 {
   "name": "maestro-deck",
   "private": true,
-  "version": "0.5.5",
+  "version": "0.6.0",
   "type": "module",
   "description": "Source-available visual IDE for Maestro mobile tests",
   "license": "BUSL-1.1",
