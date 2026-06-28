@@ -71,8 +71,15 @@ pub struct StoppedReason {
 pub async fn start(app: AppHandle, device: crate::device::Device) -> AppResult<()> {
     use crate::device::Platform;
     let mut guard = RUNNING.lock().await;
-    if guard.is_some() {
-        return Err(AppError::MetricsAlreadyRunning);
+    // Replace any running collector. On a device switch the frontend can call
+    // start() before the previous stop()'s join has completed, so reject-if-
+    // running would spuriously fail. Cancel + join the predecessor while
+    // holding the lock so there is no overlap. Safe from deadlock: a cancelled
+    // loop exits via the cancel arm and does NOT self-clear RUNNING (see
+    // exit_by_cancel), so it never tries to lock RUNNING during this join.
+    if let Some((tx, join)) = guard.take() {
+        let _ = tx.send(());
+        let _ = join.await;
     }
     match (device.platform, device.physical) {
         (Platform::Android, _) => {
