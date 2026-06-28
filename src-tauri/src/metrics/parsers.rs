@@ -485,6 +485,28 @@ Active UID stats:
 pub struct GfxStats {
     pub total_frames: u32,
     pub janky_frames: u32,
+    pub p50_ms: Option<f32>,
+    pub p90_ms: Option<f32>,
+    pub p95_ms: Option<f32>,
+    pub p99_ms: Option<f32>,
+}
+
+/// Parse the `<N>th percentile: <X>ms` value for a given percentile label.
+fn parse_percentile_ms(s: &str, label: &str) -> Option<f32> {
+    for line in s.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix(label) {
+            let digits: String = rest
+                .trim()
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            if let Ok(v) = digits.parse::<f32>() {
+                return Some(v);
+            }
+        }
+    }
+    None
 }
 
 pub fn parse_gfxinfo(s: &str) -> Option<GfxStats> {
@@ -501,6 +523,10 @@ pub fn parse_gfxinfo(s: &str) -> Option<GfxStats> {
     Some(GfxStats {
         total_frames: total?,
         janky_frames: janky?,
+        p50_ms: parse_percentile_ms(s, "50th percentile:"),
+        p90_ms: parse_percentile_ms(s, "90th percentile:"),
+        p95_ms: parse_percentile_ms(s, "95th percentile:"),
+        p99_ms: parse_percentile_ms(s, "99th percentile:"),
     })
 }
 
@@ -535,5 +561,30 @@ Graphics info for pid 1234 [com.example.app]
     fn returns_none_when_only_partial() {
         // Total present but janky missing — treat as None to avoid lying to UI
         assert!(parse_gfxinfo("Total frames rendered: 100\n").is_none());
+    }
+
+    #[test]
+    fn parses_frame_time_percentiles() {
+        let input = "\
+  Total frames rendered: 420
+  Janky frames: 38 (9.05%)
+  50th percentile: 8ms
+  90th percentile: 14ms
+  95th percentile: 17ms
+  99th percentile: 23ms
+";
+        let s = parse_gfxinfo(input).expect("should parse");
+        assert_eq!(s.p50_ms, Some(8.0));
+        assert_eq!(s.p90_ms, Some(14.0));
+        assert_eq!(s.p95_ms, Some(17.0));
+        assert_eq!(s.p99_ms, Some(23.0));
+    }
+
+    #[test]
+    fn percentiles_none_when_absent() {
+        let input = "  Total frames rendered: 10\n  Janky frames: 1 (10.00%)\n";
+        let s = parse_gfxinfo(input).expect("should parse");
+        assert_eq!(s.p50_ms, None);
+        assert_eq!(s.p99_ms, None);
     }
 }
