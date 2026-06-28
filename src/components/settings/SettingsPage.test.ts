@@ -27,6 +27,7 @@ describe("resolveSection", () => {
       "tools",
       "ai",
       "billy",
+      "visual-regression",
       "about",
     ]);
   });
