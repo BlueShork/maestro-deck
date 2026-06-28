@@ -14,6 +14,7 @@ const MetricsPanel = lazy(() =>
 );
 import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
+import { ScreenshotReview } from "@/components/ScreenshotReview";
 import { Toolbar } from "@/components/Toolbar";
 import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -187,157 +188,160 @@ export function MainView() {
   useShortcuts(shortcuts);
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      <Toolbar
-        onRun={() => void onRun()}
-        onRunAll={() => void onRunAll()}
-        onStop={() => void onStop()}
-      />
-      <div className="min-h-0 flex-1">
-        <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.outer">
-          {panels.workspace ? (
-            <>
-              <Panel
-                id="workspace"
-                order={1}
-                defaultSize={WORKSPACE_SIZE}
-                minSize={8}
-                className="border-r border-border"
-              >
-                <PanelShell id="workspace">
-                  <WorkspaceTree />
-                </PanelShell>
-              </Panel>
-              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-            </>
-          ) : null}
+    <>
+      <div className="flex h-screen flex-col bg-background text-foreground">
+        <Toolbar
+          onRun={() => void onRun()}
+          onRunAll={() => void onRunAll()}
+          onStop={() => void onStop()}
+        />
+        <div className="min-h-0 flex-1">
+          <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.outer">
+            {panels.workspace ? (
+              <>
+                <Panel
+                  id="workspace"
+                  order={1}
+                  defaultSize={WORKSPACE_SIZE}
+                  minSize={8}
+                  className="border-r border-border"
+                >
+                  <PanelShell id="workspace">
+                    <WorkspaceTree />
+                  </PanelShell>
+                </Panel>
+                <PanelResizeHandle className={RESIZE_HANDLE_H} />
+              </>
+            ) : null}
 
-          {panels.inspector ? (
-            <>
-              <Panel
-                id="inspector"
-                order={2}
-                defaultSize={INSPECTOR_SIZE}
-                minSize={10}
-                className="border-r border-border"
-              >
-                <PanelShell id="inspector">
-                  <DeviceSelector />
-                  <div className="min-h-0 flex-1 overflow-hidden">
-                    <InspectorPanel />
-                  </div>
-                </PanelShell>
-              </Panel>
-              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-            </>
-          ) : null}
+            {panels.inspector ? (
+              <>
+                <Panel
+                  id="inspector"
+                  order={2}
+                  defaultSize={INSPECTOR_SIZE}
+                  minSize={10}
+                  className="border-r border-border"
+                >
+                  <PanelShell id="inspector">
+                    <DeviceSelector />
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <InspectorPanel />
+                    </div>
+                  </PanelShell>
+                </Panel>
+                <PanelResizeHandle className={RESIZE_HANDLE_H} />
+              </>
+            ) : null}
 
-          <Panel id="main" order={3} defaultSize={mainSize} minSize={30}>
-            <PanelGroup direction="vertical" autoSaveId="maestro-deck.layout.main.v2">
-              <Panel id="main-top" order={1} defaultSize={mainTopSize} minSize={20}>
-                <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.top">
-                  {streamEnabled && panels.device ? (
-                    <>
-                      <Panel
-                        id="device"
-                        order={1}
-                        // Panels in the same group must have defaultSize
-                        // values that sum to 100, otherwise the library
-                        // warns and normalizes. Collapse to 100 when the
-                        // sibling is hidden so we don't rely on
-                        // normalization + avoid the console warning.
-                        defaultSize={panels.editor ? 55 : 100}
-                        minSize={20}
-                      >
-                        <PanelShell
-                          id="device"
-                          className="items-center justify-center bg-muted/40 p-4"
-                        >
-                          <DeviceView />
-                        </PanelShell>
-                      </Panel>
-                      {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
-                    </>
-                  ) : null}
-
-                  {panels.editor ? (
-                    <Panel
-                      id="editor"
-                      order={2}
-                      defaultSize={streamEnabled && panels.device ? 45 : 100}
-                      minSize={20}
-                      className={
-                        streamEnabled && panels.device ? "border-l border-border" : undefined
-                      }
-                    >
-                      <PanelShell id="editor">
-                        <FlowEditor onRunFrom={onRunFrom} />
-                      </PanelShell>
-                    </Panel>
-                  ) : null}
-                </PanelGroup>
-              </Panel>
-
-              {panels.console || panels.metrics ? (
-                <>
-                  <PanelResizeHandle className={RESIZE_HANDLE_V} />
-                  <Panel
-                    id="main-bottom"
-                    order={2}
-                    defaultSize={mainBottomSize}
-                    minSize={BOTTOM_MIN}
-                  >
-                    <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
-                      {panels.console ? (
+            <Panel id="main" order={3} defaultSize={mainSize} minSize={30}>
+              <PanelGroup direction="vertical" autoSaveId="maestro-deck.layout.main.v2">
+                <Panel id="main-top" order={1} defaultSize={mainTopSize} minSize={20}>
+                  <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.top">
+                    {streamEnabled && panels.device ? (
+                      <>
                         <Panel
-                          id="console"
+                          id="device"
                           order={1}
-                          defaultSize={panels.metrics ? 70 : 100}
+                          // Panels in the same group must have defaultSize
+                          // values that sum to 100, otherwise the library
+                          // warns and normalizes. Collapse to 100 when the
+                          // sibling is hidden so we don't rely on
+                          // normalization + avoid the console warning.
+                          defaultSize={panels.editor ? 55 : 100}
                           minSize={20}
                         >
-                          <PanelShell id="console">
-                            <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
+                          <PanelShell
+                            id="device"
+                            className="items-center justify-center bg-muted/40 p-4"
+                          >
+                            <DeviceView />
                           </PanelShell>
                         </Panel>
-                      ) : null}
+                        {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
+                      </>
+                    ) : null}
 
-                      {panels.metrics ? (
-                        <>
-                          {panels.console ? (
-                            <PanelResizeHandle className={RESIZE_HANDLE_H} />
-                          ) : null}
+                    {panels.editor ? (
+                      <Panel
+                        id="editor"
+                        order={2}
+                        defaultSize={streamEnabled && panels.device ? 45 : 100}
+                        minSize={20}
+                        className={
+                          streamEnabled && panels.device ? "border-l border-border" : undefined
+                        }
+                      >
+                        <PanelShell id="editor">
+                          <FlowEditor onRunFrom={onRunFrom} />
+                        </PanelShell>
+                      </Panel>
+                    ) : null}
+                  </PanelGroup>
+                </Panel>
+
+                {panels.console || panels.metrics ? (
+                  <>
+                    <PanelResizeHandle className={RESIZE_HANDLE_V} />
+                    <Panel
+                      id="main-bottom"
+                      order={2}
+                      defaultSize={mainBottomSize}
+                      minSize={BOTTOM_MIN}
+                    >
+                      <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
+                        {panels.console ? (
                           <Panel
-                            id="metrics"
-                            order={2}
-                            defaultSize={panels.console ? 30 : 100}
-                            minSize={15}
+                            id="console"
+                            order={1}
+                            defaultSize={panels.metrics ? 70 : 100}
+                            minSize={20}
                           >
-                            <PanelShell id="metrics">
-                              <Suspense fallback={null}>
-                                <MetricsPanel />
-                              </Suspense>
+                            <PanelShell id="console">
+                              <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
                             </PanelShell>
                           </Panel>
-                        </>
-                      ) : null}
-                    </PanelGroup>
-                  </Panel>
-                </>
-              ) : null}
-            </PanelGroup>
-          </Panel>
+                        ) : null}
 
-          {chatOpen ? (
-            <>
-              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-              <Panel id="chat" order={4} defaultSize={CHAT_SIZE} minSize={20} maxSize={50}>
-                <ChatPanel />
-              </Panel>
-            </>
-          ) : null}
-        </PanelGroup>
+                        {panels.metrics ? (
+                          <>
+                            {panels.console ? (
+                              <PanelResizeHandle className={RESIZE_HANDLE_H} />
+                            ) : null}
+                            <Panel
+                              id="metrics"
+                              order={2}
+                              defaultSize={panels.console ? 30 : 100}
+                              minSize={15}
+                            >
+                              <PanelShell id="metrics">
+                                <Suspense fallback={null}>
+                                  <MetricsPanel />
+                                </Suspense>
+                              </PanelShell>
+                            </Panel>
+                          </>
+                        ) : null}
+                      </PanelGroup>
+                    </Panel>
+                  </>
+                ) : null}
+              </PanelGroup>
+            </Panel>
+
+            {chatOpen ? (
+              <>
+                <PanelResizeHandle className={RESIZE_HANDLE_H} />
+                <Panel id="chat" order={4} defaultSize={CHAT_SIZE} minSize={20} maxSize={50}>
+                  <ChatPanel />
+                </Panel>
+              </>
+            ) : null}
+          </PanelGroup>
+        </div>
       </div>
-    </div>
+      <ScreenshotReview />
+    </>
   );
 }
 
