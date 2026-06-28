@@ -10,6 +10,7 @@
 
 pub mod collector;
 pub mod foreground;
+pub mod ios_sim;
 pub mod parsers;
 
 use std::time::{Duration, Instant};
