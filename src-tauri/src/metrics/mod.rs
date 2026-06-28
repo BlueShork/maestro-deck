@@ -21,7 +21,7 @@ use tokio::sync::{oneshot, Mutex as AsyncMutex};
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
-use crate::metrics::collector::{fetch_cpu_mem, fetch_gfx, GfxSample};
+use crate::metrics::collector::{fetch_cpu_mem, fetch_gfx, fetch_thermal, GfxSample};
 use crate::metrics::foreground::{resolve_target, Target};
 use crate::metrics::parsers::ProcStat;
 
@@ -45,6 +45,11 @@ pub struct MetricsSample {
     pub mem_mb: f32,
     pub fps: Option<f32>,
     pub jank_pct: Option<f32>,
+    pub frame_p50_ms: Option<f32>,
+    pub frame_p90_ms: Option<f32>,
+    pub frame_p95_ms: Option<f32>,
+    pub frame_p99_ms: Option<f32>,
+    pub thermal_status: Option<u8>,
     pub net_rx_kbps: f32,
     pub net_tx_kbps: f32,
     pub ts: u64,
@@ -91,6 +96,7 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
     let mut target: Option<Target> = None;
     let mut prev_stat: Option<(ProcStat, Instant)> = None;
     let mut last_gfx: Option<GfxSample> = None;
+    let mut last_thermal: Option<u8> = None;
     let mut last_fg_check = Instant::now() - FOREGROUND_CHECK_INTERVAL;
     let mut last_gfx_poll = Instant::now() - GFX_INTERVAL;
     let mut consecutive_errors: u32 = 0;
@@ -133,6 +139,7 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
                         );
                         prev_stat = None;
                         last_gfx = None;
+                        last_thermal = None;
                     }
                     target = Some(new_target);
                 }
@@ -200,6 +207,15 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
                     warn!(error = ?e, "gfx fetch failed");
                 }
             }
+            let serial_for_thermal = serial.clone();
+            match tokio::task::spawn_blocking(move || fetch_thermal(&serial_for_thermal))
+                .await
+                .unwrap_or_else(|e| {
+                    Err(AppError::MetricsFailed(format!("thermal join failed: {e}")))
+                }) {
+                Ok(t) => last_thermal = t,
+                Err(e) => warn!(error = ?e, "thermal fetch failed"),
+            }
         }
 
         if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
@@ -215,6 +231,11 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
             mem_mb: cpu_mem.mem_mb,
             fps: last_gfx.map(|g| g.fps),
             jank_pct: last_gfx.map(|g| g.jank_pct),
+            frame_p50_ms: last_gfx.and_then(|g| g.p50_ms),
+            frame_p90_ms: last_gfx.and_then(|g| g.p90_ms),
+            frame_p95_ms: last_gfx.and_then(|g| g.p95_ms),
+            frame_p99_ms: last_gfx.and_then(|g| g.p99_ms),
+            thermal_status: last_thermal,
             net_rx_kbps: 0.0,
             net_tx_kbps: 0.0,
             ts: ts_ms(),
