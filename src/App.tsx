@@ -209,13 +209,24 @@ export default function App() {
   }, []);
 
   const metricsOpen = usePanelsStore((s) => s.visible.metrics);
-  const deviceConnected = useDeviceStore((s) => Boolean(s.current));
+  // Use device identity (serial + platform + physical) rather than mere presence
+  // so that a direct A→B switch (where deviceConnected stays true) still causes
+  // the effect to re-run, stopping the old collector and starting a new one for
+  // the correct device.
+  const deviceKey = useDeviceStore((s) =>
+    s.current
+      ? `${s.current.serial}:${s.current.platform}:${String(s.current.physical)}`
+      : null,
+  );
 
   useEffect(() => {
-    if (!metricsOpen || !deviceConnected) {
+    if (!metricsOpen || !deviceKey) {
       void ipc.stopMetrics().catch(() => {});
       return;
     }
+    // Clear any stale samples/package from a previous device so nothing is
+    // misattributed while we wait for the new collector's first sample.
+    useMetricsStore.getState().reset();
     void ipc.startMetrics().catch((err) => {
       toast.error(
         "Performance monitoring failed to start",
@@ -225,7 +236,7 @@ export default function App() {
     return () => {
       void ipc.stopMetrics().catch(() => {});
     };
-  }, [metricsOpen, deviceConnected]);
+  }, [metricsOpen, deviceKey]);
 
   return (
     <>

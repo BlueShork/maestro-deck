@@ -124,12 +124,18 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
     let mut last_fg_check = Instant::now() - FOREGROUND_CHECK_INTERVAL;
     let mut last_gfx_poll = Instant::now() - GFX_INTERVAL;
     let mut consecutive_errors: u32 = 0;
+    // Track whether exit was triggered by stop() so we can skip the self-clear.
+    // stop() already .take()s the RUNNING slot before signalling, so there is
+    // nothing left to clear for cancel exits; only self-exits (error bailout)
+    // need to null the slot.
+    let mut exit_by_cancel = false;
     let mut ticker = tokio::time::interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         tokio::select! {
             _ = &mut cancel => {
+                exit_by_cancel = true;
                 emit_stopped(&app, "user", None);
                 break;
             }
@@ -268,16 +274,14 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
     }
 
     info!("metrics task exited");
-    // Self-clear the RUNNING slot when the task exits without an explicit
-    // stop() — e.g. on error bailout. We spawn this because we cannot await
-    // the mutex from inside the task's own body without risking reentrancy
-    // if stop() is concurrently holding the lock.
-    tokio::spawn(async {
-        let mut guard = RUNNING.lock().await;
-        // If stop() already took the slot (normal shutdown), nothing to do.
-        // Otherwise clear so a new start() can proceed.
-        *guard = None;
-    });
+    // Only self-clear on error/self-exit. When stop() was called it already
+    // .take()d the slot before signalling; self-clearing after a cancel exit
+    // would race with a subsequent start() that put a new task in the slot.
+    if !exit_by_cancel {
+        tokio::spawn(async {
+            *RUNNING.lock().await = None;
+        });
+    }
 }
 
 /// iOS-simulator polling loop. A simulated app runs as a host macOS process, so
@@ -286,12 +290,15 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
 /// net) are unavailable on this path and ship as `None`/`0.0`.
 async fn run_loop_ios_sim(app: AppHandle, udid: String, mut cancel: oneshot::Receiver<()>) {
     let mut consecutive_errors: u32 = 0;
+    // See run_loop for rationale: skip self-clear when exiting via stop() cancel.
+    let mut exit_by_cancel = false;
     let mut ticker = tokio::time::interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         tokio::select! {
             _ = &mut cancel => {
+                exit_by_cancel = true;
                 emit_stopped(&app, "user", None);
                 break;
             }
@@ -324,7 +331,17 @@ async fn run_loop_ios_sim(app: AppHandle, udid: String, mut cancel: oneshot::Rec
             .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("ios ps join failed: {e}"))));
         let (cpu_pct, mem_mb) = match cpu_mem {
             Ok(Some(v)) => v,
-            _ => continue,
+            // Process exited between pid resolution and ps — benign, try again.
+            Ok(None) => continue,
+            Err(e) => {
+                warn!(error = ?e, "ios cpu_mem fetch failed");
+                consecutive_errors += 1;
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                    emit_stopped(&app, "error", Some(e.to_string()));
+                    break;
+                }
+                continue;
+            }
         };
         consecutive_errors = 0;
 
@@ -347,9 +364,11 @@ async fn run_loop_ios_sim(app: AppHandle, udid: String, mut cancel: oneshot::Rec
     }
 
     info!("ios-sim metrics task exited");
-    tokio::spawn(async {
-        *RUNNING.lock().await = None;
-    });
+    if !exit_by_cancel {
+        tokio::spawn(async {
+            *RUNNING.lock().await = None;
+        });
+    }
 }
 
 fn emit_stopped(app: &AppHandle, reason: &'static str, message: Option<String>) {
