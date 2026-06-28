@@ -26,7 +26,7 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = [
   { id: "billy", label: "Billy AI", render: () => <BillySettings /> },
   {
     id: "visual-regression",
-    label: "Régression visuelle",
+    label: "Visual Regression",
     render: () => <VisualRegressionSettings />,
   },
   { id: "about", label: "About", render: () => <AboutSettings /> },
