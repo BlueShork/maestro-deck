@@ -4,6 +4,7 @@
 pub mod compare;
 pub mod diff;
 pub mod flow;
+pub mod ipc;
 
 pub fn device_key(model: &str, width: u32, height: u32) -> String {
     let sanitized: String = model
