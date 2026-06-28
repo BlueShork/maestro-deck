@@ -1048,13 +1048,12 @@ pub fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
 
 #[tauri::command]
 pub async fn start_metrics(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    let serial = state
+    let device = state
         .connected_device
         .read()
-        .as_ref()
-        .map(|d| d.serial.clone())
+        .clone()
         .ok_or(AppError::NoDevice)?;
-    metrics::start(app, serial).await
+    metrics::start(app, device).await
 }
 
 #[tauri::command]

@@ -68,16 +68,39 @@ pub struct StoppedReason {
     pub message: Option<String>,
 }
 
-pub async fn start(app: AppHandle, serial: String) -> AppResult<()> {
+pub async fn start(app: AppHandle, device: crate::device::Device) -> AppResult<()> {
+    use crate::device::Platform;
     let mut guard = RUNNING.lock().await;
     if guard.is_some() {
         return Err(AppError::MetricsAlreadyRunning);
     }
-    let (tx, rx) = oneshot::channel::<()>();
-    let join = tokio::spawn(run_loop(app, serial, rx));
-    *guard = Some((tx, join));
-    info!("metrics task started");
-    Ok(())
+    match (device.platform, device.physical) {
+        (Platform::Android, _) => {
+            let (tx, rx) = oneshot::channel::<()>();
+            let join = tokio::spawn(run_loop(app, device.serial, rx));
+            *guard = Some((tx, join));
+            info!("android metrics task started");
+            Ok(())
+        }
+        (Platform::Ios, false) => {
+            let (tx, rx) = oneshot::channel::<()>();
+            let join = tokio::spawn(run_loop_ios_sim(app, device.serial, rx));
+            *guard = Some((tx, join));
+            info!("ios-sim metrics task started");
+            Ok(())
+        }
+        (Platform::Ios, true) => {
+            emit_unsupported(
+                &app,
+                "Per-app metrics aren't available on physical iPhones (requires Instruments).",
+            );
+            Ok(())
+        }
+        (Platform::Web, _) => {
+            emit_unsupported(&app, "The Web target has no per-app performance metrics.");
+            Ok(())
+        }
+    }
 }
 
 pub async fn stop() -> AppResult<()> {
@@ -257,8 +280,90 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
     });
 }
 
+/// iOS-simulator polling loop. A simulated app runs as a host macOS process, so
+/// we resolve the frontmost `UIKitApplication`'s host PID + bundle id and sample
+/// CPU%/RAM via `ps`. All other metric fields (fps, jank, frame times, thermal,
+/// net) are unavailable on this path and ship as `None`/`0.0`.
+async fn run_loop_ios_sim(app: AppHandle, udid: String, mut cancel: oneshot::Receiver<()>) {
+    let mut consecutive_errors: u32 = 0;
+    let mut ticker = tokio::time::interval(TICK_INTERVAL);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        tokio::select! {
+            _ = &mut cancel => {
+                emit_stopped(&app, "user", None);
+                break;
+            }
+            _ = ticker.tick() => {}
+        }
+
+        let udid_for_pid = udid.clone();
+        let resolved =
+            tokio::task::spawn_blocking(move || ios_sim::frontmost_pid_and_bundle(&udid_for_pid))
+                .await
+                .unwrap_or_else(|e| {
+                    Err(AppError::MetricsFailed(format!("ios pid join failed: {e}")))
+                });
+        let (pid, bundle) = match resolved {
+            Ok(Some(v)) => v,
+            Ok(None) => continue,
+            Err(e) => {
+                warn!(error = ?e, "ios pid resolution failed");
+                consecutive_errors += 1;
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                    emit_stopped(&app, "error", Some(e.to_string()));
+                    break;
+                }
+                continue;
+            }
+        };
+
+        let cpu_mem = tokio::task::spawn_blocking(move || ios_sim::sample_cpu_mem(pid))
+            .await
+            .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("ios ps join failed: {e}"))));
+        let (cpu_pct, mem_mb) = match cpu_mem {
+            Ok(Some(v)) => v,
+            _ => continue,
+        };
+        consecutive_errors = 0;
+
+        let sample = MetricsSample {
+            package: bundle,
+            cpu_pct,
+            mem_mb,
+            fps: None,
+            jank_pct: None,
+            frame_p50_ms: None,
+            frame_p90_ms: None,
+            frame_p95_ms: None,
+            frame_p99_ms: None,
+            thermal_status: None,
+            net_rx_kbps: 0.0,
+            net_tx_kbps: 0.0,
+            ts: ts_ms(),
+        };
+        let _ = app.emit(EVT_SAMPLE, sample);
+    }
+
+    info!("ios-sim metrics task exited");
+    tokio::spawn(async {
+        *RUNNING.lock().await = None;
+    });
+}
+
 fn emit_stopped(app: &AppHandle, reason: &'static str, message: Option<String>) {
     let _ = app.emit(EVT_STOPPED, StoppedReason { reason, message });
+}
+
+fn emit_unsupported(app: &AppHandle, message: &str) {
+    let _ = app.emit(
+        EVT_STOPPED,
+        StoppedReason {
+            reason: "unsupported",
+            message: Some(message.to_string()),
+        },
+    );
 }
 
 fn ts_ms() -> u64 {
