@@ -17,6 +17,7 @@ import {
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useReviewStore } from "@/stores/reviewStore";
+import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 /** Neutral checkerboard so transparent PNGs and white captures both read
@@ -115,12 +116,12 @@ export function ScreenshotReview() {
         name,
         decision,
       });
-    } catch (err) {
-      console.error("resolve_comparison failed", err);
-    } finally {
       setShowDiff(true);
-      setPending(false);
       next();
+    } catch (err) {
+      toast.error("Could not update bank", err instanceof Error ? err.message : String(err));
+    } finally {
+      setPending(false);
     }
   };
 

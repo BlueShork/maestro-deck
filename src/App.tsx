@@ -161,7 +161,13 @@ export default function App() {
                 threshold,
                 runId,
               })
-              .then((report) => useReviewStore.getState().setReport(report))
+              .then((report) => {
+                useReviewStore.getState().setReport(report);
+                const seeded = report.comparisons.filter((c) => c.status === "seeded").length;
+                const missing = report.comparisons.filter((c) => c.status === "missing").length;
+                if (seeded > 0) appendLog("system", `[bank] ${seeded} reference screenshot(s) created`);
+                if (missing > 0) appendLog("system", `[bank] ${missing} expected screenshot(s) missing`);
+              })
               .catch((err) => appendLog("system", `[bank] échec comparaison: ${String(err)}`));
           }
         }
