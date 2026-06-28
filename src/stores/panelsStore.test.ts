@@ -19,7 +19,7 @@ vi.hoisted(() => {
   } as Storage;
 });
 
-import { usePanelsStore } from "./panelsStore";
+import { usePanelsStore, migratePanelsStore } from "./panelsStore";
 
 beforeEach(() => {
   usePanelsStore.getState().showAll();
@@ -63,6 +63,45 @@ describe("panelsStore", () => {
     expect(v.editor).toBe(false);
     expect(v.workspace).toBe(true);
     expect(v.console).toBe(true);
+  });
+
+  it("migratePanelsStore v0→v1 forces metrics:false even when persisted as true", () => {
+    const persisted = {
+      visible: {
+        workspace: true,
+        inspector: true,
+        device: true,
+        editor: true,
+        console: true,
+        metrics: true, // old persisted value from before the closed-by-default change
+      },
+    };
+    const result = migratePanelsStore(persisted, 0) as {
+      visible: Record<string, boolean>;
+    };
+    expect(result.visible.metrics).toBe(false);
+    // Other flags must be preserved
+    expect(result.visible.workspace).toBe(true);
+    expect(result.visible.inspector).toBe(true);
+    expect(result.visible.device).toBe(true);
+    expect(result.visible.editor).toBe(true);
+    expect(result.visible.console).toBe(true);
+  });
+
+  it("migratePanelsStore v0→v1 tolerates missing visible object", () => {
+    const result = migratePanelsStore(null, 0) as {
+      visible: Record<string, boolean>;
+    };
+    expect(result.visible.metrics).toBe(false);
+  });
+
+  it("migratePanelsStore is a no-op for current version (fromVersion >= 1)", () => {
+    const persisted = {
+      visible: { workspace: false, metrics: true },
+    };
+    const result = migratePanelsStore(persisted, 1);
+    // Must return the persisted value unchanged
+    expect(result).toBe(persisted);
   });
 
   it("showAll restores every panel except the metrics tab", () => {

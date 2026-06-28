@@ -94,7 +94,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
             size="xs"
             variant={metricsOpen ? "default" : "ghost"}
             onClick={() => toggleMetrics("metrics")}
-            title="Toggle performance HUD"
+            title="Toggle performance panel"
           >
             <Activity className="h-3 w-3" />
             Performance
