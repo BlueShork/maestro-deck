@@ -5,6 +5,7 @@
 
 #[cfg(target_os = "macos")]
 pub mod avf_capture;
+mod bank;
 pub mod credentials;
 pub mod device;
 mod env_shim;
