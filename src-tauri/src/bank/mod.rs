@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
+pub mod diff;
 pub mod flow;
 
 pub fn device_key(model: &str, width: u32, height: u32) -> String {
