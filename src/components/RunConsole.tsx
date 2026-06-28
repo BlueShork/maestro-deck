@@ -10,7 +10,7 @@ import { humanLabel, formatDuration } from "@/lib/stepRenderer";
 import { cn } from "@/lib/utils";
 import { useRunStore } from "@/stores/runStore";
 import type { StepRunState } from "@/stores/runStore";
-import { useMetricsStore } from "@/stores/metricsStore";
+import { usePanelsStore } from "@/stores/panelsStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () => void }) {
@@ -19,9 +19,8 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
   const logs = useRunStore((s) => s.logs);
   const clearConsole = useRunStore((s) => s.clearConsole);
 
-  const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
-  const panelOpen = useMetricsStore((s) => s.panelOpen);
-  const togglePanel = useMetricsStore((s) => s.togglePanel);
+  const metricsOpen = usePanelsStore((s) => s.visible.metrics);
+  const toggleMetrics = usePanelsStore((s) => s.toggle);
 
   const consoleMode = useSettingsStore((s) => s.consoleMode);
   const setConsoleMode = useSettingsStore((s) => s.setConsoleMode);
@@ -91,17 +90,15 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
               Technical
             </button>
           </div>
-          {perfEnabled && (
-            <Button
-              size="xs"
-              variant={panelOpen ? "default" : "ghost"}
-              onClick={togglePanel}
-              title="Toggle performance HUD"
-            >
-              <Activity className="h-3 w-3" />
-              Perf
-            </Button>
-          )}
+          <Button
+            size="xs"
+            variant={metricsOpen ? "default" : "ghost"}
+            onClick={() => toggleMetrics("metrics")}
+            title="Toggle performance HUD"
+          >
+            <Activity className="h-3 w-3" />
+            Performance
+          </Button>
           <Button
             size="xs"
             variant="ghost"

@@ -12,7 +12,6 @@ interface SettingsState {
   showFps: boolean;
   theme: ThemeMode;
   streamEnabled: boolean;
-  perfMonitoringEnabled: boolean;
   /**
    * When enabled, inspect mode spawns `maestro studio` once at startup
    * (slow: 10-15s) and then fetches the hierarchy over direct gRPC on
@@ -47,7 +46,6 @@ interface SettingsState {
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
   setStreamEnabled: (v: boolean) => void;
-  setPerfMonitoringEnabled: (v: boolean) => void;
   setFastHierarchyEnabled: (v: boolean) => void;
   setAutoSaveEnabled: (v: boolean) => void;
   setAutoCheckUpdatesEnabled: (v: boolean) => void;
@@ -64,7 +62,6 @@ export const useSettingsStore = create<SettingsState>()(
       showFps: false,
       theme: "system",
       streamEnabled: true,
-      perfMonitoringEnabled: false,
       fastHierarchyEnabled: false,
       autoSaveEnabled: true,
       autoCheckUpdatesEnabled: true,
@@ -76,7 +73,6 @@ export const useSettingsStore = create<SettingsState>()(
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
-      setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
       setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
       setAutoCheckUpdatesEnabled: (autoCheckUpdatesEnabled) => set({ autoCheckUpdatesEnabled }),
@@ -92,7 +88,6 @@ export const useSettingsStore = create<SettingsState>()(
         inspectKey: s.inspectKey,
         theme: s.theme,
         streamEnabled: s.streamEnabled,
-        perfMonitoringEnabled: s.perfMonitoringEnabled,
         fastHierarchyEnabled: s.fastHierarchyEnabled,
         autoSaveEnabled: s.autoSaveEnabled,
         autoCheckUpdatesEnabled: s.autoCheckUpdatesEnabled,

@@ -11,8 +11,6 @@ import { useSettingsStore } from "@/stores/settingsStore";
 export function DevicePerformanceSettings() {
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const setStreamEnabled = useSettingsStore((s) => s.setStreamEnabled);
-  const perfMonitoringEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
-  const setPerfMonitoringEnabled = useSettingsStore((s) => s.setPerfMonitoringEnabled);
   const fastHierarchyEnabled = useSettingsStore((s) => s.fastHierarchyEnabled);
   const setFastHierarchyEnabled = useSettingsStore((s) => s.setFastHierarchyEnabled);
   const webBrowserEnabled = useSettingsStore((s) => s.webBrowserEnabled);
@@ -51,15 +49,6 @@ export function DevicePerformanceSettings() {
           }
           checked={fastHierarchyEnabled}
           onCheckedChange={setFastHierarchyEnabled}
-        />
-      </SettingsSubgroup>
-
-      <SettingsSubgroup title="Monitoring">
-        <ToggleRow
-          label="Enable performance monitoring"
-          description="Adds a performance HUD next to the console."
-          checked={perfMonitoringEnabled}
-          onCheckedChange={setPerfMonitoringEnabled}
         />
       </SettingsSubgroup>
 

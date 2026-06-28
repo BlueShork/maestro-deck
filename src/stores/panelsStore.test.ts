@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 describe("panelsStore", () => {
-  it("defaults all panels to visible", () => {
+  it("defaults panels to visible except the metrics tab", () => {
     const { visible } = usePanelsStore.getState();
     expect(visible).toEqual({
       workspace: true,
@@ -34,7 +34,8 @@ describe("panelsStore", () => {
       device: true,
       editor: true,
       console: true,
-      metrics: true,
+      // The Performance tab is closed by default — opening it starts capture.
+      metrics: false,
     });
   });
 
@@ -64,13 +65,19 @@ describe("panelsStore", () => {
     expect(v.console).toBe(true);
   });
 
-  it("showAll restores every panel", () => {
+  it("showAll restores every panel except the metrics tab", () => {
     const s = usePanelsStore.getState();
     s.hide("workspace");
     s.hide("inspector");
     s.hide("device");
     s.showAll();
     const v = usePanelsStore.getState().visible;
-    expect(Object.values(v).every(Boolean)).toBe(true);
+    expect(v.workspace).toBe(true);
+    expect(v.inspector).toBe(true);
+    expect(v.device).toBe(true);
+    expect(v.editor).toBe(true);
+    expect(v.console).toBe(true);
+    // Restoring panels shouldn't silently start metric capture.
+    expect(v.metrics).toBe(false);
   });
 });

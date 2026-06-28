@@ -29,7 +29,6 @@ beforeEach(() => {
     showFps: INITIAL.showFps,
     theme: "system",
     streamEnabled: true,
-    perfMonitoringEnabled: false,
     fastHierarchyEnabled: false,
     autoSaveEnabled: true,
     consoleMode: "simple",
@@ -43,7 +42,6 @@ describe("settingsStore defaults", () => {
     expect(s.inspectKey).toBe("i");
     expect(s.theme).toBe("system");
     expect(s.streamEnabled).toBe(true);
-    expect(s.perfMonitoringEnabled).toBe(false);
     expect(s.fastHierarchyEnabled).toBe(false);
     expect(s.autoSaveEnabled).toBe(true);
     expect(s.consoleMode).toBe("simple");
@@ -74,15 +72,13 @@ describe("settingsStore setters", () => {
     }
   });
 
-  it("setStreamEnabled / setPerfMonitoringEnabled / setFastHierarchyEnabled / setAutoSaveEnabled toggle their flags", () => {
+  it("setStreamEnabled / setFastHierarchyEnabled / setAutoSaveEnabled toggle their flags", () => {
     const s = useSettingsStore.getState();
     s.setStreamEnabled(false);
-    s.setPerfMonitoringEnabled(true);
     s.setFastHierarchyEnabled(true);
     s.setAutoSaveEnabled(false);
     const after = useSettingsStore.getState();
     expect(after.streamEnabled).toBe(false);
-    expect(after.perfMonitoringEnabled).toBe(true);
     expect(after.fastHierarchyEnabled).toBe(true);
     expect(after.autoSaveEnabled).toBe(false);
   });

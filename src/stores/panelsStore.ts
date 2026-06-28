@@ -33,10 +33,9 @@ export const usePanelsStore = create<PanelsState>()(
         device: true,
         editor: true,
         console: true,
-        // Metrics is still gated by the global perfMonitoringEnabled
-        // setting; this flag just decides whether the pane is shown
-        // when perf monitoring *is* enabled.
-        metrics: true,
+        // Performance tab is closed by default — opening it is what starts
+        // metric capture (see App.tsx). It does not auto-capture on launch.
+        metrics: false,
       },
       toggle: (id) =>
         set((s) => ({
@@ -58,7 +57,7 @@ export const usePanelsStore = create<PanelsState>()(
             device: true,
             editor: true,
             console: true,
-            metrics: true,
+            metrics: false,
           },
         })),
     }),

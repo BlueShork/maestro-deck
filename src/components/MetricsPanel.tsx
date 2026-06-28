@@ -8,9 +8,10 @@ import { MetricsSparkline } from "@/components/MetricsSparkline";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { usePanelsStore } from "@/stores/panelsStore";
 
 export function MetricsPanel() {
-  const setPanelOpen = useMetricsStore((s) => s.setPanelOpen);
+  const hidePanel = usePanelsStore((s) => s.hide);
   const pkg = useMetricsStore((s) => s.currentPackage);
   const samples = useMetricsStore((s) => s.samples);
   const stopped = useMetricsStore((s) => s.stoppedReason);
@@ -30,7 +31,7 @@ export function MetricsPanel() {
         <Button
           size="xs"
           variant="ghost"
-          onClick={() => setPanelOpen(false)}
+          onClick={() => hidePanel("metrics")}
           aria-label="Close performance panel"
         >
           <X className="h-3 w-3" />

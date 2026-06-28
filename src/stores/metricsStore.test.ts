@@ -39,23 +39,6 @@ beforeEach(() => {
   useMetricsStore.getState().reset();
 });
 
-describe("metricsStore.togglePanel / setPanelOpen", () => {
-  it("toggle flips panelOpen", () => {
-    const { togglePanel } = useMetricsStore.getState();
-    togglePanel();
-    expect(useMetricsStore.getState().panelOpen).toBe(true);
-    togglePanel();
-    expect(useMetricsStore.getState().panelOpen).toBe(false);
-  });
-
-  it("setPanelOpen sets the value explicitly", () => {
-    useMetricsStore.getState().setPanelOpen(true);
-    expect(useMetricsStore.getState().panelOpen).toBe(true);
-    useMetricsStore.getState().setPanelOpen(false);
-    expect(useMetricsStore.getState().panelOpen).toBe(false);
-  });
-});
-
 describe("metricsStore.appendSample", () => {
   it("appends samples in order", () => {
     const { appendSample } = useMetricsStore.getState();
@@ -90,13 +73,11 @@ describe("metricsStore.onTargetChanged", () => {
 describe("metricsStore.reset", () => {
   it("returns store to initial values", () => {
     const s0 = useMetricsStore.getState();
-    s0.setPanelOpen(true);
     s0.appendSample(mkSample(1));
     s0.onTargetChanged("com.x");
     s0.setStoppedReason("oom");
     s0.reset();
     const s = useMetricsStore.getState();
-    expect(s.panelOpen).toBe(false);
     expect(s.currentPackage).toBeNull();
     expect(s.samples).toEqual([]);
     expect(s.stoppedReason).toBeNull();

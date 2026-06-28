@@ -18,6 +18,7 @@ import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
@@ -207,13 +208,11 @@ export default function App() {
     };
   }, []);
 
-  const panelOpen = useMetricsStore((s) => s.panelOpen);
-  const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
+  const metricsOpen = usePanelsStore((s) => s.visible.metrics);
   const deviceConnected = useDeviceStore((s) => Boolean(s.current));
-  const currentPlatform = useDeviceStore((s) => s.current?.platform ?? null);
 
   useEffect(() => {
-    if (!perfEnabled || !panelOpen || !deviceConnected || currentPlatform !== "android") {
+    if (!metricsOpen || !deviceConnected) {
       void ipc.stopMetrics().catch(() => {});
       return;
     }
@@ -226,7 +225,7 @@ export default function App() {
     return () => {
       void ipc.stopMetrics().catch(() => {});
     };
-  }, [perfEnabled, panelOpen, deviceConnected, currentPlatform]);
+  }, [metricsOpen, deviceConnected]);
 
   return (
     <>
