@@ -588,3 +588,47 @@ Graphics info for pid 1234 [com.example.app]
         assert_eq!(s.p99_ms, None);
     }
 }
+
+/// Parse the device thermal status code from `dumpsys thermalservice`.
+/// Handles both the "Thermal Status: N" line and the "mStatus=N" form.
+pub fn parse_thermal_status(s: &str) -> Option<u8> {
+    for line in s.lines() {
+        let t = line.trim();
+        for marker in ["Thermal Status:", "mStatus="] {
+            if let Some(idx) = t.find(marker) {
+                let rest = &t[idx + marker.len()..];
+                let digits: String = rest
+                    .trim_start()
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect();
+                if let Ok(v) = digits.parse::<u8>() {
+                    return Some(v);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests_thermal {
+    use super::*;
+
+    #[test]
+    fn parses_thermal_status_label_form() {
+        let dump = "Thermal Status: 2\nCached temperatures:\n  ...\n";
+        assert_eq!(parse_thermal_status(dump), Some(2));
+    }
+
+    #[test]
+    fn parses_mstatus_form() {
+        let dump = "IsStatusOverride: false\nmStatus=0\n";
+        assert_eq!(parse_thermal_status(dump), Some(0));
+    }
+
+    #[test]
+    fn none_when_absent() {
+        assert_eq!(parse_thermal_status("no thermal data here"), None);
+    }
+}
