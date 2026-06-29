@@ -8,8 +8,11 @@ export const DEFAULT_TOLERANCE = 0.1;
 export const DEFAULT_THRESHOLD = 0.001;
 
 export interface VisualRegressionState {
+  /** Master switch: when false, no screenshot comparison runs after a flow. */
+  enabled: boolean;
   tolerance: number | null;
   threshold: number | null;
+  setEnabled: (v: boolean) => void;
   setTolerance: (v: number | null) => void;
   setThreshold: (v: number | null) => void;
   reset: () => void;
@@ -18,8 +21,10 @@ export interface VisualRegressionState {
 export const useVisualRegressionStore = create<VisualRegressionState>()(
   persist(
     (set) => ({
+      enabled: true,
       tolerance: null,
       threshold: null,
+      setEnabled: (v) => set({ enabled: v }),
       setTolerance: (v) => set({ tolerance: v }),
       setThreshold: (v) => set({ threshold: v }),
       reset: () => set({ tolerance: null, threshold: null }),

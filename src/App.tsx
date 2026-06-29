@@ -17,7 +17,7 @@ import { parseLine as parseRunLine } from "@/lib/runStepParser";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useReviewStore } from "@/stores/reviewStore";
-import { effectiveThresholds } from "@/stores/visualRegressionStore";
+import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRegressionStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { usePanelsStore } from "@/stores/panelsStore";
@@ -141,7 +141,7 @@ export default function App() {
         if (wasStopped) toast.success("Flow stopped");
         else if (code === 0) toast.success("Flow completed");
         else toast.error("Flow failed", `exit code ${code}`);
-        if (code === 0 && !wasStopped) {
+        if (code === 0 && !wasStopped && useVisualRegressionStore.getState().enabled) {
           const target = useRunStore.getState().runTarget;
           const ws = useWorkspaceStore.getState().folderPath;
           const device = useDeviceStore.getState().current;

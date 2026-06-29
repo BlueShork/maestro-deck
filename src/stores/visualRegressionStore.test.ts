@@ -41,4 +41,10 @@ describe("visualRegressionStore", () => {
     useVisualRegressionStore.getState().setThreshold(0.05);
     expect(effectiveThresholds()).toEqual({ tolerance: 0.2, threshold: 0.05 });
   });
+
+  it("is enabled by default and toggles", () => {
+    expect(useVisualRegressionStore.getState().enabled).toBe(true);
+    useVisualRegressionStore.getState().setEnabled(false);
+    expect(useVisualRegressionStore.getState().enabled).toBe(false);
+  });
 });
