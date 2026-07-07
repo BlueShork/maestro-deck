@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import { getProvider } from "@/lib/chat/registry";
-import { BILLY_SYSTEM_PROMPT } from "@/lib/chat/systemPrompt";
+import { getEffectiveBillyPrompt } from "@/lib/chat/systemPrompt";
 import { useFlowStore } from "@/stores/flowStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { WorkspaceNode } from "@/types";
@@ -113,7 +113,7 @@ export const useChatStore = create<ChatState>()(
           const systemMsg: ChatMessage = {
             id: "system",
             role: "system",
-            content: BILLY_SYSTEM_PROMPT,
+            content: getEffectiveBillyPrompt(),
             createdAt: 0,
           };
 

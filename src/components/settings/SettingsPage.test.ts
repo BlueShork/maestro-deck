@@ -26,6 +26,7 @@ describe("resolveSection", () => {
       "device",
       "tools",
       "ai",
+      "billy",
       "about",
     ]);
   });

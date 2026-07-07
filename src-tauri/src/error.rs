@@ -45,9 +45,6 @@ pub enum AppError {
     #[error("Performance metrics collection failed: {0}")]
     MetricsFailed(String),
 
-    #[error("Performance metrics already running")]
-    MetricsAlreadyRunning,
-
     #[error("iOS tooling missing: {0}")]
     IosToolMissing(String),
 

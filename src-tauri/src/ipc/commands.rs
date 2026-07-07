@@ -953,6 +953,7 @@ pub async fn install_ios_device_bridge() -> AppResult<String> {
 #[tauri::command]
 pub async fn run_flow(
     file_path: String,
+    app_id: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<u32> {
@@ -962,12 +963,16 @@ pub async fn run_flow(
         .clone()
         .ok_or(AppError::NoDevice)?;
 
+    // Configured global APP_ID, forwarded to maestro as `-e APP_ID=…` so flows
+    // referencing `${APP_ID}` (the CI placeholder) run locally unchanged.
+    let app_id = app_id.as_deref();
+
     if device.platform == crate::device::Platform::Web {
         // Web flows run with no `--udid`; maestro targets the browser via the
         // flow's `url:` header. Pause the studio keeper so its browser doesn't
         // contend with the one `maestro test` launches.
         teardown_web(state.inner()).await;
-        return runner::spawn_web_runner(app, &file_path).await;
+        return runner::spawn_web_runner(app, &file_path, app_id).await;
     }
 
     if device.platform == crate::device::Platform::Ios {
@@ -981,6 +986,7 @@ pub async fn run_flow(
                 &device.serial,
                 &file_path,
                 crate::ios_session::PHYSICAL_BRIDGE_PORT,
+                app_id,
             )
             .await;
         }
@@ -1000,7 +1006,7 @@ pub async fn run_flow(
         state
             .ios_sim_run_active
             .store(true, std::sync::atomic::Ordering::SeqCst);
-        let spawned = runner::spawn_ios_runner(app, &device.serial, &file_path).await;
+        let spawned = runner::spawn_ios_runner(app, &device.serial, &file_path, app_id).await;
         if spawned.is_err() {
             state
                 .ios_sim_run_active
@@ -1027,7 +1033,7 @@ pub async fn run_flow(
     // With maestro 2.5.x, `maestro test` uses an adb-socket
     // (AdbSocketFactory) instead of a host TCP forward, so it cohabits
     // peacefully with our running studio. No cleanup needed.
-    runner::spawn_runner(app, &serial, &file_path, None).await
+    runner::spawn_runner(app, &serial, &file_path, app_id, None).await
 }
 
 #[tauri::command]
@@ -1042,13 +1048,12 @@ pub fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
 
 #[tauri::command]
 pub async fn start_metrics(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    let serial = state
+    let device = state
         .connected_device
         .read()
-        .as_ref()
-        .map(|d| d.serial.clone())
+        .clone()
         .ok_or(AppError::NoDevice)?;
-    metrics::start(app, serial).await
+    metrics::start(app, device).await
 }
 
 #[tauri::command]
