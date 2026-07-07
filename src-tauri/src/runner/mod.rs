@@ -81,6 +81,10 @@ pub async fn spawn_runner(
     let bin = maestro_bin();
     info!(bin = %bin, serial, flow = %flow_path, "spawning maestro");
     let env_args = app_id_env_args(app_id);
+    let flow_dir = std::path::Path::new(flow_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
 
     // Maestro 2.5.x's session manager calls `dadb.Dadb.list()` which
     // walks every adb-server transport before honoring `--udid` — any
@@ -128,6 +132,7 @@ pub async fn spawn_runner(
         .args(["--udid", serial, "test"])
         .args(&env_args)
         .arg(flow_path)
+        .current_dir(&flow_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -208,6 +213,10 @@ pub async fn spawn_web_runner(
     let bin = maestro_bin();
     info!(bin = %bin, flow = %flow_path, "spawning maestro (web)");
     let env_args = app_id_env_args(app_id);
+    let flow_dir = std::path::Path::new(flow_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
 
     let mut child = Command::new(&bin)
         .no_window()
@@ -215,6 +224,7 @@ pub async fn spawn_web_runner(
         .args(["-p", "web", "test"])
         .args(&env_args)
         .arg(flow_path)
+        .current_dir(&flow_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -287,12 +297,17 @@ pub async fn spawn_ios_runner(
     let bin = maestro_bin();
     info!(bin = %bin, udid, flow = %flow_path, "spawning maestro (ios)");
     let env_args = app_id_env_args(app_id);
+    let flow_dir = std::path::Path::new(flow_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
 
     let mut child = Command::new(&bin)
         .no_window()
         .args(["--udid", udid, "test"])
         .args(&env_args)
         .arg(flow_path)
+        .current_dir(&flow_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -422,12 +437,17 @@ pub async fn spawn_ios_device_runner(
     let port_str = port.to_string();
     info!(bin = %bin, udid, port, flow = %flow_path, "spawning maestro (ios physical)");
     let env_args = app_id_env_args(app_id);
+    let flow_dir = std::path::Path::new(flow_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
 
     let mut child = Command::new(&bin)
         .no_window()
         .args(["--driver-host-port", &port_str, "--device", udid, "test"])
         .args(&env_args)
         .arg(flow_path)
+        .current_dir(&flow_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)

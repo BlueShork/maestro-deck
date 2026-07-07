@@ -16,6 +16,8 @@ import { setShortcutsSuppressed } from "@/lib/keyboard";
 import { parseLine as parseRunLine } from "@/lib/runStepParser";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { useDeviceStore } from "@/stores/deviceStore";
+import { useReviewStore } from "@/stores/reviewStore";
+import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRegressionStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { usePanelsStore } from "@/stores/panelsStore";
@@ -130,6 +132,7 @@ export default function App() {
       events.onRunnerStderr((line) => appendLog("stderr", line)),
       events.onRunnerExit(({ code }) => {
         const wasStopped = useRunStore.getState().stopRequested;
+        const exitedPid = useRunStore.getState().pid;
         appendLog(
           "system",
           wasStopped ? "[runner stopped by user]" : `[runner exited with code ${code}]`,
@@ -138,6 +141,41 @@ export default function App() {
         if (wasStopped) toast.success("Flow stopped");
         else if (code === 0) toast.success("Flow completed");
         else toast.error("Flow failed", `exit code ${code}`);
+        if (code === 0 && !wasStopped && useVisualRegressionStore.getState().enabled) {
+          const target = useRunStore.getState().runTarget;
+          const ws = useWorkspaceStore.getState().folderPath;
+          const device = useDeviceStore.getState().current;
+          if (target?.kind === "all") {
+            appendLog(
+              "system",
+              "[bank] comparaison de banque ignorée pour Run All (non supporté dans cette version)",
+            );
+          } else if (target?.kind === "flow" && ws && device) {
+            const { tolerance, threshold } = effectiveThresholds();
+            const runId = String(exitedPid ?? Date.now());
+            void ipc
+              .compareScreenshots({
+                workspace: ws,
+                flowPath: target.path,
+                model: device.model,
+                width: device.screen_width,
+                height: device.screen_height,
+                tolerance,
+                threshold,
+                runId,
+              })
+              .then((report) => {
+                useReviewStore.getState().setReport(report);
+                const seeded = report.comparisons.filter((c) => c.status === "seeded").length;
+                const missing = report.comparisons.filter((c) => c.status === "missing").length;
+                if (seeded > 0)
+                  appendLog("system", `[bank] ${seeded} reference screenshot(s) created`);
+                if (missing > 0)
+                  appendLog("system", `[bank] ${missing} expected screenshot(s) missing`);
+              })
+              .catch((err) => appendLog("system", `[bank] échec comparaison: ${String(err)}`));
+          }
+        }
       }),
       events.onDeviceDisconnected(() => markDisconnected()),
       events.onMetricsSample((p) =>

@@ -5,6 +5,7 @@
 
 #[cfg(target_os = "macos")]
 pub mod avf_capture;
+pub mod bank;
 pub mod credentials;
 pub mod device;
 mod env_shim;
@@ -87,6 +88,8 @@ pub fn run() {
             get_dark_mode,
             run_flow,
             stop_flow,
+            bank::ipc::compare_screenshots,
+            bank::ipc::resolve_comparison,
             list_workspace,
             start_metrics,
             stop_metrics,

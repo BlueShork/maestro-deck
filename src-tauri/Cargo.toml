@@ -80,6 +80,9 @@ hex = "0.4"
 # YAML for Maestro flow generation
 serde_yaml = "0.9"
 
+# PNG image codec (screenshot regression bank)
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 # gRPC client for talking directly to the on-device Maestro driver
 # (bypasses the slow `maestro hierarchy` CLI invocation path when the
 # driver is kept alive by a background `maestro studio` process).
