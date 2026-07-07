@@ -146,7 +146,10 @@ export default function App() {
           const ws = useWorkspaceStore.getState().folderPath;
           const device = useDeviceStore.getState().current;
           if (target?.kind === "all") {
-            appendLog("system", "[bank] comparaison de banque ignorée pour Run All (non supporté dans cette version)");
+            appendLog(
+              "system",
+              "[bank] comparaison de banque ignorée pour Run All (non supporté dans cette version)",
+            );
           } else if (target?.kind === "flow" && ws && device) {
             const { tolerance, threshold } = effectiveThresholds();
             const runId = String(exitedPid ?? Date.now());
@@ -165,8 +168,10 @@ export default function App() {
                 useReviewStore.getState().setReport(report);
                 const seeded = report.comparisons.filter((c) => c.status === "seeded").length;
                 const missing = report.comparisons.filter((c) => c.status === "missing").length;
-                if (seeded > 0) appendLog("system", `[bank] ${seeded} reference screenshot(s) created`);
-                if (missing > 0) appendLog("system", `[bank] ${missing} expected screenshot(s) missing`);
+                if (seeded > 0)
+                  appendLog("system", `[bank] ${seeded} reference screenshot(s) created`);
+                if (missing > 0)
+                  appendLog("system", `[bank] ${missing} expected screenshot(s) missing`);
               })
               .catch((err) => appendLog("system", `[bank] échec comparaison: ${String(err)}`));
           }
