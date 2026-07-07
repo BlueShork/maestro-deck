@@ -214,9 +214,7 @@ export default function App() {
   // the effect to re-run, stopping the old collector and starting a new one for
   // the correct device.
   const deviceKey = useDeviceStore((s) =>
-    s.current
-      ? `${s.current.serial}:${s.current.platform}:${String(s.current.physical)}`
-      : null,
+    s.current ? `${s.current.serial}:${s.current.platform}:${String(s.current.physical)}` : null,
   );
 
   useEffect(() => {
