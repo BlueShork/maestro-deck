@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
 
+use base64::Engine;
 use serde::Serialize;
 
 use crate::bank::compare::{compare_flow, CompareInput, Comparison};
@@ -30,6 +31,62 @@ pub struct BankImage {
 pub struct BankGroup {
     pub device_key: String,
     pub images: Vec<BankImage>,
+}
+
+/// Rejects path components that could escape the bank directory.
+fn safe_component(s: &str) -> Result<(), String> {
+    if s.is_empty() || s.contains('/') || s.contains('\\') || s.contains("..") {
+        return Err(format!("invalid path component: {s:?}"));
+    }
+    Ok(())
+}
+
+fn bank_image_path(workspace: &str, device_key: &str, name: &str) -> PathBuf {
+    PathBuf::from(workspace)
+        .join("maestro")
+        .join("bank")
+        .join(device_key)
+        .join(format!("{name}.png"))
+}
+
+/// Returns one baseline PNG as a `data:image/png;base64,...` URI.
+#[tauri::command]
+pub async fn load_bank_image(
+    workspace: String,
+    device_key: String,
+    name: String,
+) -> Result<String, String> {
+    safe_component(&device_key)?;
+    safe_component(&name)?;
+    let path = bank_image_path(&workspace, &device_key, &name);
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
+/// Deletes one baseline PNG.
+#[tauri::command]
+pub async fn delete_bank_image(
+    workspace: String,
+    device_key: String,
+    name: String,
+) -> Result<(), String> {
+    safe_component(&device_key)?;
+    safe_component(&name)?;
+    fs::remove_file(bank_image_path(&workspace, &device_key, &name)).map_err(|e| e.to_string())
+}
+
+/// Deletes an entire device-key group directory.
+#[tauri::command]
+pub async fn delete_bank_device(workspace: String, device_key: String) -> Result<(), String> {
+    safe_component(&device_key)?;
+    let dir = PathBuf::from(&workspace)
+        .join("maestro")
+        .join("bank")
+        .join(&device_key);
+    fs::remove_dir_all(&dir).map_err(|e| e.to_string())
 }
 
 /// Ensures `<maestro_dir>/.gitignore` exists and contains `.runs/`.
@@ -338,5 +395,38 @@ mod tests {
         let groups =
             tauri::async_runtime::block_on(list_bank(ws.to_string_lossy().to_string())).unwrap();
         assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn safe_component_rejects_traversal() {
+        assert!(safe_component("Dev_2x3").is_ok());
+        assert!(safe_component("home").is_ok());
+        assert!(safe_component("..").is_err());
+        assert!(safe_component("a/b").is_err());
+        assert!(safe_component("a\\b").is_err());
+        assert!(safe_component("").is_err());
+    }
+
+    #[test]
+    fn delete_image_and_device_remove_files() {
+        let ws = std::env::temp_dir().join("mdbank_delete");
+        let _ = fs::remove_dir_all(&ws);
+        let group = ws.join("maestro/bank/Dev_2x3");
+        fs::create_dir_all(&group).unwrap();
+        fs::write(group.join("home.png"), b"x").unwrap();
+        fs::write(group.join("login.png"), b"y").unwrap();
+
+        let wss = ws.to_string_lossy().to_string();
+        tauri::async_runtime::block_on(delete_bank_image(
+            wss.clone(),
+            "Dev_2x3".into(),
+            "home".into(),
+        ))
+        .unwrap();
+        assert!(!group.join("home.png").exists());
+        assert!(group.join("login.png").exists());
+
+        tauri::async_runtime::block_on(delete_bank_device(wss, "Dev_2x3".into())).unwrap();
+        assert!(!group.exists());
     }
 }
