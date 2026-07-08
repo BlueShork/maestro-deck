@@ -11,6 +11,14 @@ import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import type { Device } from "@/types";
 
+// Stable fingerprint of the device list so the background poll can skip
+// state updates (and re-renders) when nothing actually changed.
+const deviceListKey = (devices: Device[]): string =>
+  devices
+    .map((d) => `${d.serial}|${d.platform}|${d.booted ? 1 : 0}|${d.physical ? 1 : 0}|${d.model}`)
+    .sort()
+    .join(",");
+
 interface DeviceState {
   devices: Device[];
   current: Device | null;
@@ -24,7 +32,12 @@ interface DeviceState {
   pendingSerial: string | null;
   pendingAction: "connect" | "disconnect" | null;
   error: string | null;
-  refresh: () => Promise<void>;
+  /**
+   * Re-list devices. Pass `{ silent: true }` for the background hotplug
+   * poll: it skips the loading spinner, swallows transient errors, and
+   * leaves the current list untouched unless something actually changed.
+   */
+  refresh: (opts?: { silent?: boolean }) => Promise<void>;
   connect: (serial: string) => Promise<void>;
   disconnect: () => Promise<void>;
   markDisconnected: () => void;
@@ -38,15 +51,31 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   pendingSerial: null,
   pendingAction: null,
   error: null,
-  refresh: async () => {
-    set({ loading: true, error: null });
+  refresh: async (opts) => {
+    const silent = opts?.silent ?? false;
+    if (!silent) set({ loading: true, error: null });
     try {
       const devices = await ipc.listDevices();
-      set({ devices, loading: false });
+      set((state) => {
+        // Only touch `devices` when the set changed, so the background
+        // poll never triggers a needless re-render of the selector.
+        const changed = deviceListKey(state.devices) !== deviceListKey(devices);
+        return {
+          loading: false,
+          error: null,
+          ...(changed ? { devices } : {}),
+        };
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ loading: false, error: message, devices: [] });
-      toast.error("Failed to list devices", message);
+      if (silent) {
+        // Transient poll failure (e.g. adb briefly busy) — keep the last
+        // known list and stay quiet; the next tick will recover.
+        set({ loading: false });
+      } else {
+        set({ loading: false, error: message, devices: [] });
+        toast.error("Failed to list devices", message);
+      }
     }
   },
   connect: async (serial) => {
