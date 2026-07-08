@@ -8,7 +8,6 @@ import { Suspense, lazy, useCallback, useMemo } from "react";
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
-import { InspectorPanel } from "@/components/InspectorPanel";
 const MetricsPanel = lazy(() =>
   import("@/components/MetricsPanel").then((m) => ({ default: m.MetricsPanel })),
 );
@@ -225,9 +224,6 @@ export function MainView() {
                 >
                   <PanelShell id="inspector">
                     <DeviceSelector />
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                      <InspectorPanel />
-                    </div>
                   </PanelShell>
                 </Panel>
                 <PanelResizeHandle className={RESIZE_HANDLE_H} />
