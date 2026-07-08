@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
 
 import { Button } from "@/components/ui/Button";
+import { ScrollArea } from "@/components/ui/ScrollArea";
 import { HealthcheckModal } from "@/components/HealthcheckModal";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
@@ -208,8 +209,8 @@ export function DeviceSelector() {
   };
 
   return (
-    <div className="flex flex-col gap-2 border-b border-border p-3">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full min-h-0 flex-col border-b border-border">
+      <div className="flex items-center justify-between px-3 pb-2 pt-3">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Devices
         </div>
@@ -225,34 +226,38 @@ export function DeviceSelector() {
         </Button>
       </div>
 
-      {error ? (
-        <div className="rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive-foreground">
-          {error}
-        </div>
-      ) : null}
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="flex flex-col gap-2 px-3 pb-3">
+          {error ? (
+            <div className="rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive-foreground">
+              {error}
+            </div>
+          ) : null}
 
-      {!loading && devices.length === 0 && !error ? (
-        <div className="rounded border border-dashed border-border p-2 text-[11px] text-muted-foreground">
-          No devices found. Plug in an Android device (USB debugging) or an iPhone (Developer Mode,
-          trusted).
-        </div>
-      ) : null}
+          {!loading && devices.length === 0 && !error ? (
+            <div className="rounded border border-dashed border-border p-2 text-[11px] text-muted-foreground">
+              No devices found. Plug in an Android device (USB debugging) or an iPhone (Developer
+              Mode, trusted).
+            </div>
+          ) : null}
 
-      <ul className="flex flex-col gap-1.5">{rows.map(renderRow)}</ul>
+          <ul className="flex flex-col gap-1.5">{rows.map(renderRow)}</ul>
 
-      {shutdownSims.length > 0 ? (
-        <div className="flex flex-col gap-1.5">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            iOS Simulators
-          </div>
-          <ul className="flex flex-col gap-1.5">{shutdownSims.map(renderRow)}</ul>
-          {bootingSim ? (
-            <div className="text-[11px] text-muted-foreground">
-              Booting simulator &amp; starting driver… (can take a minute)
+          {shutdownSims.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                iOS Simulators
+              </div>
+              <ul className="flex flex-col gap-1.5">{shutdownSims.map(renderRow)}</ul>
+              {bootingSim ? (
+                <div className="text-[11px] text-muted-foreground">
+                  Booting simulator &amp; starting driver… (can take a minute)
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
-      ) : null}
+      </ScrollArea>
 
       {report && (
         <HealthcheckModal
