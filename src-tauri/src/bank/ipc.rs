@@ -8,12 +8,28 @@ use std::time::SystemTime;
 use serde::Serialize;
 
 use crate::bank::compare::{compare_flow, CompareInput, Comparison};
+use std::path::PathBuf;
 
 #[derive(Serialize, Clone)]
 pub struct RunReport {
     pub run_id: String,
     pub device_key: String,
     pub comparisons: Vec<Comparison>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct BankImage {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub size_bytes: u64,
+    pub modified_ms: u64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct BankGroup {
+    pub device_key: String,
+    pub images: Vec<BankImage>,
 }
 
 /// Ensures `<maestro_dir>/.gitignore` exists and contains `.runs/`.
@@ -51,6 +67,58 @@ fn prune_runs(runs_dir: &Path, keep: usize) -> std::io::Result<()> {
         let _ = fs::remove_dir_all(&path);
     }
     Ok(())
+}
+
+/// Lists every `<workspace>/maestro/bank/<device_key>/*.png` as metadata only
+/// (no pixels). Returns an empty vec when the bank directory is absent.
+#[tauri::command]
+pub async fn list_bank(workspace: String) -> Result<Vec<BankGroup>, String> {
+    let bank = PathBuf::from(&workspace).join("maestro").join("bank");
+    let mut groups: Vec<BankGroup> = Vec::new();
+    let read = match fs::read_dir(&bank) {
+        Ok(r) => r,
+        Err(_) => return Ok(groups),
+    };
+    for entry in read.filter_map(|e| e.ok()) {
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let device_key = entry.file_name().to_string_lossy().to_string();
+        let mut images: Vec<BankImage> = Vec::new();
+        if let Ok(files) = fs::read_dir(&dir) {
+            for f in files.filter_map(|e| e.ok()) {
+                let p = f.path();
+                if p.extension().and_then(|e| e.to_str()) != Some("png") {
+                    continue;
+                }
+                let name = p
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let meta = f.metadata().ok();
+                let size_bytes = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                let modified_ms = meta
+                    .as_ref()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                let (width, height) = image::image_dimensions(&p).unwrap_or((0, 0));
+                images.push(BankImage {
+                    name,
+                    width,
+                    height,
+                    size_bytes,
+                    modified_ms,
+                });
+            }
+        }
+        images.sort_by(|a, b| a.name.cmp(&b.name));
+        groups.push(BankGroup { device_key, images });
+    }
+    groups.sort_by(|a, b| a.device_key.cmp(&b.device_key));
+    Ok(groups)
 }
 
 /// Remplace l'image de banque `<workspace>/maestro/bank/<key>/<name>.png`
@@ -233,5 +301,42 @@ mod tests {
 
         replace_bank_image(&ws, "r1", "Dev_2x2", "home").unwrap();
         assert_eq!(fs::read(bank.join("home.png")).unwrap(), b"NEW");
+    }
+
+    #[test]
+    fn list_bank_reports_groups_and_metadata() {
+        use image::{ImageEncoder, RgbaImage};
+        let ws = std::env::temp_dir().join("mdbank_list");
+        let _ = fs::remove_dir_all(&ws);
+        let group = ws.join("maestro/bank/Dev_2x3");
+        fs::create_dir_all(&group).unwrap();
+        let mut buf = Vec::new();
+        let img = RgbaImage::from_pixel(2, 3, image::Rgba([1, 2, 3, 255]));
+        image::codecs::png::PngEncoder::new(&mut buf)
+            .write_image(img.as_raw(), 2, 3, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        fs::write(group.join("home.png"), &buf).unwrap();
+        fs::write(group.join("notes.txt"), b"ignore me").unwrap();
+
+        let groups =
+            tauri::async_runtime::block_on(list_bank(ws.to_string_lossy().to_string())).unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].device_key, "Dev_2x3");
+        assert_eq!(groups[0].images.len(), 1); // .txt ignored
+        assert_eq!(groups[0].images[0].name, "home");
+        assert_eq!(
+            (groups[0].images[0].width, groups[0].images[0].height),
+            (2, 3)
+        );
+    }
+
+    #[test]
+    fn list_bank_empty_when_no_bank_dir() {
+        let ws = std::env::temp_dir().join("mdbank_list_empty");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).unwrap();
+        let groups =
+            tauri::async_runtime::block_on(list_bank(ws.to_string_lossy().to_string())).unwrap();
+        assert!(groups.is_empty());
     }
 }
