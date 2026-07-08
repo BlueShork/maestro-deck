@@ -1,3 +1,16 @@
+# What's New in v0.7.0
+
+## Visual regression
+- **Screenshot bank** — capture reference screenshots and compare later runs against them to catch unintended visual changes, with a side-by-side image diff.
+
+## Performance
+- **Perf panel improvements** and a configurable **`APP_ID`** so performance metrics target the right app.
+
+## Maintenance
+- Dependency and CI updates (js-yaml, vite, actions/checkout).
+
+---
+
 # What's New in v0.5.5
 
 ## iOS
