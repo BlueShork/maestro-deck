@@ -163,6 +163,8 @@ export default function App() {
                 tolerance,
                 threshold,
                 runId,
+                platform: device.platform,
+                ignoreStatusBar: useVisualRegressionStore.getState().ignoreStatusBar,
               })
               .then((report) => {
                 useReviewStore.getState().setReport(report);

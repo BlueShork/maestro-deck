@@ -96,6 +96,8 @@ export const ipc = {
     tolerance: number;
     threshold: number;
     runId: string;
+    platform: Platform;
+    ignoreStatusBar: boolean;
   }) => call<RunReport>("compare_screenshots", args),
   resolveComparison: (args: {
     workspace: string;
