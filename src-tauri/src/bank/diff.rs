@@ -13,10 +13,14 @@ pub fn diff_images(
     bank_png: &[u8],
     new_png: &[u8],
     tolerance: f64,
+    mask_ratio: f64,
 ) -> Result<DiffOutcome, image::ImageError> {
     let bank = image::load_from_memory(bank_png)?.to_rgba8();
     let mut new = image::load_from_memory(new_png)?.to_rgba8();
     let (w, h) = (new.width(), new.height());
+
+    // Rows [0, mask_top) are excluded from the comparison (status bar).
+    let mask_top = (((h as f64) * mask_ratio).round() as u32).min(h);
 
     // Seuil pixelmatch : delta max possible (noir↔blanc) = 35215.
     let max_delta = 35215.0 * tolerance * tolerance;
@@ -26,6 +30,22 @@ pub fn diff_images(
 
     for y in 0..h {
         for x in 0..w {
+            if y < mask_top {
+                // Ignored region: tint blue so the reviewer sees it was
+                // excluded, and skip the comparison entirely.
+                let p = new.get_pixel(x, y).0;
+                new.put_pixel(
+                    x,
+                    y,
+                    image::Rgba([
+                        (p[0] as u32 * 65 / 100) as u8,
+                        (p[1] as u32 * 65 / 100) as u8,
+                        ((p[2] as u32 * 65 / 100) + 90).min(255) as u8,
+                        255,
+                    ]),
+                );
+                continue;
+            }
             let a = bank.get_pixel(x, y).0;
             let b = new.get_pixel(x, y).0;
             if color_delta(a, b) > max_delta {
@@ -39,11 +59,11 @@ pub fn diff_images(
         }
     }
 
-    let total = (w as u64) * (h as u64);
-    let changed_ratio = if total == 0 {
+    let compared = (w as u64) * ((h - mask_top) as u64);
+    let changed_ratio = if compared == 0 {
         0.0
     } else {
-        changed as f32 / total as f32
+        changed as f32 / compared as f32
     };
     let bbox = if changed == 0 {
         None
@@ -102,7 +122,7 @@ mod tests {
     #[test]
     fn identical_images_have_zero_ratio() {
         let img = RgbaImage::from_pixel(4, 4, image::Rgba([10, 20, 30, 255]));
-        let out = diff_images(&png_bytes(&img), &png_bytes(&img), 0.1).unwrap();
+        let out = diff_images(&png_bytes(&img), &png_bytes(&img), 0.1, 0.0).unwrap();
         assert_eq!(out.changed_ratio, 0.0);
         assert!(out.bbox.is_none());
     }
@@ -112,8 +132,30 @@ mod tests {
         let bank = RgbaImage::from_pixel(4, 4, image::Rgba([0, 0, 0, 255]));
         let mut new = bank.clone();
         new.put_pixel(2, 1, image::Rgba([255, 255, 255, 255])); // blanc vs noir
-        let out = diff_images(&png_bytes(&bank), &png_bytes(&new), 0.1).unwrap();
+        let out = diff_images(&png_bytes(&bank), &png_bytes(&new), 0.1, 0.0).unwrap();
         assert!(out.changed_ratio > 0.0);
         assert_eq!(out.bbox, Some([2, 1, 1, 1]));
+    }
+
+    #[test]
+    fn change_inside_masked_band_is_ignored() {
+        // 4x4, mask_ratio 0.5 -> top 2 rows masked. Change only at (2,1) which is
+        // inside the masked band, so nothing is reported.
+        let bank = RgbaImage::from_pixel(4, 4, image::Rgba([0, 0, 0, 255]));
+        let mut new = bank.clone();
+        new.put_pixel(2, 1, image::Rgba([255, 255, 255, 255]));
+        let out = diff_images(&png_bytes(&bank), &png_bytes(&new), 0.1, 0.5).unwrap();
+        assert_eq!(out.changed_ratio, 0.0);
+        assert!(out.bbox.is_none());
+    }
+
+    #[test]
+    fn change_below_masked_band_is_detected() {
+        let bank = RgbaImage::from_pixel(4, 4, image::Rgba([0, 0, 0, 255]));
+        let mut new = bank.clone();
+        new.put_pixel(1, 3, image::Rgba([255, 255, 255, 255])); // row 3, below top-2 mask
+        let out = diff_images(&png_bytes(&bank), &png_bytes(&new), 0.1, 0.5).unwrap();
+        assert!(out.changed_ratio > 0.0);
+        assert_eq!(out.bbox, Some([1, 3, 1, 1]));
     }
 }
