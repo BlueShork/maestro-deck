@@ -67,7 +67,8 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
     let flow_dir = input.flow_path.parent().unwrap_or(Path::new("."));
     let yaml = fs::read_to_string(input.flow_path).unwrap_or_default();
     let names = screenshot_names(&yaml);
-    let mask_ratio = crate::bank::status_bar_ratio(input.platform, input.ignore_status_bar);
+    let mask_top = crate::bank::status_bar_ratio(input.platform, input.ignore_status_bar);
+    let mask_bottom = crate::bank::nav_bar_ratio(input.platform, input.ignore_status_bar);
 
     let mut comps = Vec::new();
     for name in names {
@@ -116,7 +117,13 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             continue;
         }
 
-        match diff_images(&bank_bytes, &new_bytes, input.tolerance, mask_ratio) {
+        match diff_images(
+            &bank_bytes,
+            &new_bytes,
+            input.tolerance,
+            mask_top,
+            mask_bottom,
+        ) {
             Ok(out) if out.changed_ratio as f64 > input.threshold => comps.push(Comparison {
                 name,
                 status: Status::Changed,
