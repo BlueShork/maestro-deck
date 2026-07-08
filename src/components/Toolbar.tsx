@@ -4,6 +4,7 @@
 import {
   BookOpen,
   Check,
+  Images,
   LayoutPanelLeft,
   ListChecks,
   Loader2,
@@ -256,6 +257,20 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
               </Button>
             </TooltipTrigger>
             <TooltipContent>Documentation</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => navigate("/image-bank")}
+                aria-label="Open image bank"
+              >
+                <Images className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Image bank</TooltipContent>
           </Tooltip>
 
           <Tooltip>

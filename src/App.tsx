@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
+import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
@@ -43,10 +44,11 @@ import { useWorkspaceStore } from "@/stores/workspaceStore";
 export default function App() {
   const location = useLocation();
   const settingsOpen = location.pathname.startsWith("/settings");
+  const imageBankOpen = location.pathname.startsWith("/image-bank");
   useEffect(() => {
-    setShortcutsSuppressed(settingsOpen);
+    setShortcutsSuppressed(settingsOpen || imageBankOpen);
     return () => setShortcutsSuppressed(false);
-  }, [settingsOpen]);
+  }, [settingsOpen, imageBankOpen]);
   const theme = useSettingsStore((s) => s.theme);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
@@ -280,12 +282,13 @@ export default function App() {
     <>
       {/* Always mounted; hidden (not unmounted) while settings is open so the
           editor + video decoder survive and returning is instant. */}
-      <div className={settingsOpen ? "hidden" : "contents"}>
+      <div className={settingsOpen || imageBankOpen ? "hidden" : "contents"}>
         <MainView />
       </div>
       <Routes>
         <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
+        <Route path="/image-bank" element={<ImageBankPage />} />
         {/* MainView already covers "/"; redirect any other unknown path there. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
