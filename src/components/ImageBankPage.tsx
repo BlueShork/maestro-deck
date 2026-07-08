@@ -97,6 +97,11 @@ export function ImageBankPage() {
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    // Reset on (re)mount too — React 18 StrictMode mounts, unmounts, then
+    // remounts in dev; without re-setting this to true the guard would stay
+    // false after the remount and every setState (incl. setLoading(false))
+    // would be skipped, leaving the page stuck on "Loading…".
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
