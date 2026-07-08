@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { Activity, Ban, CheckCircle2, Eraser, Play, Square, XCircle } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { renderAnsi } from "@/lib/ansi";
@@ -192,7 +192,9 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
   );
 }
 
-function SimpleConsoleBody({
+// Memoized so log lines streaming into the store (which re-render RunConsole)
+// don't re-render the whole step list — only an actual step change does.
+const SimpleConsoleBody = memo(function SimpleConsoleBody({
   steps,
   running,
   exitCode,
@@ -228,9 +230,11 @@ function SimpleConsoleBody({
       )}
     </div>
   );
-}
+});
 
-function SimpleStepLine({ step }: { step: StepRunState }) {
+// Memoized: steps are updated immutably (unchanged steps keep their reference),
+// so only the step whose status/duration changed re-renders.
+const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunState }) {
   const icon =
     step.status === "running"
       ? "▶"
@@ -261,7 +265,7 @@ function SimpleStepLine({ step }: { step: StepRunState }) {
       ) : null}
     </div>
   );
-}
+});
 
 function SimpleSummary({
   exitCode,

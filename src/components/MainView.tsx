@@ -48,7 +48,6 @@ export function MainView() {
   const setRunning = useRunStore((s) => s.setRunning);
   const setStarting = useRunStore((s) => s.setStarting);
   const startFailed = useRunStore((s) => s.startFailed);
-  const runningPid = useRunStore((s) => s.pid);
 
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const panels = usePanelsStore((s) => s.visible);
@@ -162,14 +161,18 @@ export function MainView() {
   );
 
   const onStop = useCallback(async () => {
-    if (runningPid === null) return;
+    // Read the pid at call time (via getState) rather than subscribing to it,
+    // so MainView — which owns the whole panel layout — doesn't re-render on
+    // every run start/stop.
+    const pid = useRunStore.getState().pid;
+    if (pid === null) return;
     useRunStore.getState().requestStop();
     try {
-      await ipc.stopFlow(runningPid);
+      await ipc.stopFlow(pid);
     } catch (err) {
       toast.error("Stop failed", err instanceof Error ? err.message : String(err));
     }
-  }, [runningPid]);
+  }, []);
 
   const shortcuts = useMemo(
     () => [
