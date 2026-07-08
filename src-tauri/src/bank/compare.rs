@@ -69,6 +69,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
     let names = screenshot_names(&yaml);
     let mask_top = crate::bank::status_bar_ratio(input.platform, input.ignore_status_bar);
     let mask_bottom = crate::bank::nav_bar_ratio(input.platform, input.ignore_status_bar);
+    let mask_right = crate::bank::scrollbar_ratio(input.platform, input.ignore_status_bar);
 
     let mut comps = Vec::new();
     for name in names {
@@ -123,6 +124,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             input.tolerance,
             mask_top,
             mask_bottom,
+            mask_right,
         ) {
             Ok(out) if out.changed_ratio as f64 > input.threshold => comps.push(Comparison {
                 name,

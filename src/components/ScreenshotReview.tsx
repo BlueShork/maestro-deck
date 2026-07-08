@@ -21,13 +21,19 @@ import { toast } from "@/stores/toastStore";
 import { useVisualRegressionStore } from "@/stores/visualRegressionStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
-/** Height fractions of the ignored system-bar bands, mirroring
- *  src-tauri/src/bank/mod.rs (status_bar_ratio / nav_bar_ratio). Used only to
- *  draw the review overlay — the actual masking happens in Rust. */
-function maskRatios(deviceKey: string, on: boolean): { top: number; bottom: number } {
-  if (!on) return { top: 0, bottom: 0 };
+/** Fractions of the ignored regions, mirroring src-tauri/src/bank/mod.rs
+ *  (status_bar_ratio / nav_bar_ratio / scrollbar_ratio). top/bottom are height
+ *  fractions, right is a width fraction. Used only to draw the review overlay —
+ *  the actual masking happens in Rust. */
+function maskRatios(
+  deviceKey: string,
+  on: boolean,
+): { top: number; bottom: number; right: number } {
+  if (!on) return { top: 0, bottom: 0, right: 0 };
   const ios = /iphone|ipad|ipod/i.test(deviceKey);
-  return ios ? { top: 0.06, bottom: 0.04 } : { top: 0.045, bottom: 0.045 };
+  return ios
+    ? { top: 0.06, bottom: 0.04, right: 0.02 }
+    : { top: 0.045, bottom: 0.045, right: 0.02 };
 }
 
 /** Neutral checkerboard so transparent PNGs and white captures both read
@@ -35,20 +41,26 @@ function maskRatios(deviceKey: string, on: boolean): { top: number; bottom: numb
 const CHECKERBOARD =
   "[background-image:linear-gradient(45deg,hsl(var(--muted))_25%,transparent_25%),linear-gradient(-45deg,hsl(var(--muted))_25%,transparent_25%),linear-gradient(45deg,transparent_75%,hsl(var(--muted))_75%),linear-gradient(-45deg,transparent_75%,hsl(var(--muted))_75%)] [background-position:0_0,0_8px,8px_-8px,-8px_0] [background-size:16px_16px]";
 
-/** Dimmed, hatched band marking an ignored region (status / navigation bar). */
-function IgnoredBand({ edge, pct }: { edge: "top" | "bottom"; pct: number }) {
+/** Dimmed, hatched band marking an ignored region (status / nav bar / scrollbar). */
+function IgnoredBand({ edge, pct }: { edge: "top" | "bottom" | "right"; pct: number }) {
   if (pct <= 0) return null;
+  const vertical = edge === "right";
   return (
     <div
-      style={{ height: `${pct * 100}%` }}
+      style={vertical ? { width: `${pct * 100}%` } : { height: `${pct * 100}%` }}
       className={cn(
-        "pointer-events-none absolute inset-x-0 flex items-center justify-center overflow-hidden bg-slate-900/40 [background-image:repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(255,255,255,0.07)_5px,rgba(255,255,255,0.07)_10px)]",
-        edge === "top" ? "top-0 border-b border-white/15" : "bottom-0 border-t border-white/15",
+        "pointer-events-none absolute flex items-center justify-center overflow-hidden bg-slate-900/40 [background-image:repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(255,255,255,0.07)_5px,rgba(255,255,255,0.07)_10px)]",
+        edge === "top" && "inset-x-0 top-0 border-b border-white/15",
+        edge === "bottom" && "inset-x-0 bottom-0 border-t border-white/15",
+        edge === "right" && "inset-y-0 right-0 border-l border-white/15",
       )}
     >
-      <span className="rounded-full bg-black/55 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-white/85">
-        ignored
-      </span>
+      {/* The scrollbar band is too thin for a legible label. */}
+      {!vertical && (
+        <span className="rounded-full bg-black/55 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-white/85">
+          ignored
+        </span>
+      )}
     </div>
   );
 }
@@ -59,12 +71,14 @@ function ImageFrame({
   accent,
   maskTop = 0,
   maskBottom = 0,
+  maskRight = 0,
 }: {
   src?: string;
   alt: string;
   accent: "neutral" | "warning";
   maskTop?: number;
   maskBottom?: number;
+  maskRight?: number;
 }) {
   return (
     <div
@@ -79,6 +93,7 @@ function ImageFrame({
           <img src={src} alt={alt} className="block max-h-[60vh] object-contain" />
           <IgnoredBand edge="top" pct={maskTop} />
           <IgnoredBand edge="bottom" pct={maskBottom} />
+          <IgnoredBand edge="right" pct={maskRight} />
         </div>
       ) : (
         <div className="flex flex-col items-center gap-1.5 py-10 text-xs text-muted-foreground">
@@ -144,7 +159,7 @@ export function ScreenshotReview() {
   // Ignored system-bar bands are drawn as an overlay (same fractions the Rust
   // diff excluded) rather than baked into the image.
   const mask = maskRatios(report.device_key, ignoreStatusBar);
-  const masked = mask.top > 0 || mask.bottom > 0;
+  const masked = mask.top > 0 || mask.bottom > 0 || mask.right > 0;
 
   const decide = async (decision: "keep" | "replace") => {
     if (pending) return;
@@ -221,6 +236,7 @@ export function ScreenshotReview() {
               accent="neutral"
               maskTop={mask.top}
               maskBottom={mask.bottom}
+              maskRight={mask.right}
             />
           </figure>
           <figure className="flex flex-col gap-2">
@@ -254,6 +270,7 @@ export function ScreenshotReview() {
               accent="warning"
               maskTop={mask.top}
               maskBottom={mask.bottom}
+              maskRight={mask.right}
             />
           </figure>
         </div>

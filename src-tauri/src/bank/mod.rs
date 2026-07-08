@@ -45,6 +45,19 @@ pub fn nav_bar_ratio(platform: &str, ignore: bool) -> f64 {
     }
 }
 
+/// Fraction of the screenshot *width* (from the right edge) to exclude from the
+/// diff — the scroll indicator, which appears in one capture and not another
+/// and would otherwise flag as a change. Shares the same opt-in as the bars.
+pub fn scrollbar_ratio(platform: &str, ignore: bool) -> f64 {
+    if !ignore {
+        return 0.0;
+    }
+    match platform {
+        "ios" | "android" => 0.02,
+        _ => 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,5 +85,13 @@ mod tests {
         assert_eq!(nav_bar_ratio("android", true), 0.045);
         assert_eq!(nav_bar_ratio("web", true), 0.0);
         assert_eq!(nav_bar_ratio("android", false), 0.0);
+    }
+
+    #[test]
+    fn scrollbar_ratio_per_platform() {
+        assert_eq!(scrollbar_ratio("ios", true), 0.02);
+        assert_eq!(scrollbar_ratio("android", true), 0.02);
+        assert_eq!(scrollbar_ratio("web", true), 0.0);
+        assert_eq!(scrollbar_ratio("ios", false), 0.0);
     }
 }
