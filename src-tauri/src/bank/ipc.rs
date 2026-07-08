@@ -89,6 +89,8 @@ pub async fn compare_screenshots(
     tolerance: f64,
     threshold: f64,
     run_id: String,
+    platform: String,
+    ignore_status_bar: bool,
 ) -> Result<RunReport, String> {
     let ws = std::path::PathBuf::from(&workspace);
     let flow = std::path::PathBuf::from(&flow_path);
@@ -116,6 +118,8 @@ pub async fn compare_screenshots(
         height,
         tolerance,
         threshold,
+        platform: &platform,
+        ignore_status_bar,
     })
     .map_err(|e| e.to_string())?;
 
