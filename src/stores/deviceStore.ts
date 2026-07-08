@@ -57,9 +57,14 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
     try {
       const devices = await ipc.listDevices();
       set((state) => {
-        // Only touch `devices` when the set changed, so the background
-        // poll never triggers a needless re-render of the selector.
         const changed = deviceListKey(state.devices) !== deviceListKey(devices);
+        // Background poll fast-path: when nothing changed and there's no
+        // spinner/error to clear, return the SAME state reference so zustand
+        // skips the notify entirely. Otherwise the poll would re-render the
+        // whole device list every tick and cause hover jank.
+        if (silent && !changed && !state.loading && !state.error) {
+          return state;
+        }
         return {
           loading: false,
           error: null,
@@ -71,7 +76,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       if (silent) {
         // Transient poll failure (e.g. adb briefly busy) — keep the last
         // known list and stay quiet; the next tick will recover.
-        set({ loading: false });
+        set((state) => (state.loading ? { loading: false } : state));
       } else {
         set({ loading: false, error: message, devices: [] });
         toast.error("Failed to list devices", message);
