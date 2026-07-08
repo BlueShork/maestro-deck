@@ -56,9 +56,11 @@ export function VisualRegressionSettings() {
   const enabled = useVisualRegressionStore((s) => s.enabled);
   const tolerance = useVisualRegressionStore((s) => s.tolerance);
   const threshold = useVisualRegressionStore((s) => s.threshold);
+  const ignoreStatusBar = useVisualRegressionStore((s) => s.ignoreStatusBar);
   const setEnabled = useVisualRegressionStore((s) => s.setEnabled);
   const setTolerance = useVisualRegressionStore((s) => s.setTolerance);
   const setThreshold = useVisualRegressionStore((s) => s.setThreshold);
+  const setIgnoreStatusBar = useVisualRegressionStore((s) => s.setIgnoreStatusBar);
   const reset = useVisualRegressionStore((s) => s.reset);
 
   const isCustomized = tolerance !== null || threshold !== null;
@@ -74,6 +76,12 @@ export function VisualRegressionSettings() {
           description="When off, flows run normally and no screenshot comparison happens."
           checked={enabled}
           onCheckedChange={setEnabled}
+        />
+        <ToggleRow
+          label="Ignore status bar"
+          description="Exclude the top band (clock, notch, carrier) from comparison to avoid false positives. iOS ~6%, Android ~4.5% of the screen height."
+          checked={ignoreStatusBar}
+          onCheckedChange={setIgnoreStatusBar}
         />
         <ThresholdField
           label="Per-pixel tolerance"
