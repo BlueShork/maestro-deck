@@ -110,7 +110,7 @@ export function DeviceSelector() {
           disabled={connecting || isPending}
           aria-busy={isPending}
           className={cn(
-            "group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+            "group flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors",
             // Pending state overrides connected state visually — the
             // shimmer/amber tint tells the user something is happening.
             isConnecting && "border-emerald-500/30 bg-emerald-500/5 animate-pulse",
@@ -127,7 +127,7 @@ export function DeviceSelector() {
           <div className="relative shrink-0">
             <DeviceIcon
               className={cn(
-                "h-5 w-5",
+                "h-4 w-4",
                 isConnecting && "text-emerald-500/70",
                 isDisconnecting && "text-amber-500",
                 !isPending && active && "text-emerald-500",
@@ -138,7 +138,7 @@ export function DeviceSelector() {
           <div className="min-w-0 flex-1">
             <div
               className={cn(
-                "truncate text-sm font-medium",
+                "truncate text-xs font-medium",
                 isDisconnecting && "text-amber-700 dark:text-amber-300",
                 !isPending && active && "text-emerald-700 dark:text-emerald-300",
               )}
@@ -147,7 +147,7 @@ export function DeviceSelector() {
             </div>
             <div
               className={cn(
-                "truncate font-mono text-[11px]",
+                "truncate font-mono text-[10px]",
                 isConnecting && "text-emerald-600/70 dark:text-emerald-400/70",
                 isDisconnecting && "text-amber-600/80 dark:text-amber-400/80",
                 !isPending && active
@@ -170,7 +170,7 @@ export function DeviceSelector() {
                         : `${d.serial} · Android ${d.os_version}`}
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             {active && !isPending && d.platform === "android" && (
               <span
                 role="button"
@@ -182,25 +182,25 @@ export function DeviceSelector() {
                 className="rounded p-0.5 hover:bg-emerald-500/20"
               >
                 {checkingSerial === d.serial ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-500" />
                 ) : (
-                  <Stethoscope className="h-4 w-4 text-emerald-500" />
+                  <Stethoscope className="h-3.5 w-3.5 text-emerald-500" />
                 )}
               </span>
             )}
             {isPending ? (
               <Loader2
                 className={cn(
-                  "h-4 w-4 animate-spin",
+                  "h-3.5 w-3.5 animate-spin",
                   isConnecting ? "text-emerald-500" : "text-amber-500",
                 )}
               />
             ) : active ? (
-              <PlugZap className="h-4 w-4 text-emerald-500" />
+              <PlugZap className="h-3.5 w-3.5 text-emerald-500" />
             ) : isSim ? (
-              <Play className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+              <Play className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
             ) : (
-              <Plug className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+              <Plug className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
             )}
           </div>
         </button>
