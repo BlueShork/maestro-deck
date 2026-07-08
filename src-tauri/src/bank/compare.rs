@@ -113,7 +113,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             continue;
         }
 
-        match diff_images(&bank_bytes, &new_bytes, input.tolerance) {
+        match diff_images(&bank_bytes, &new_bytes, input.tolerance, 0.0) {
             Ok(out) if out.changed_ratio as f64 > input.threshold => comps.push(Comparison {
                 name,
                 status: Status::Changed,
