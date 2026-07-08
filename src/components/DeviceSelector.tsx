@@ -198,9 +198,9 @@ export function DeviceSelector() {
             ) : active ? (
               <PlugZap className="h-3.5 w-3.5 text-emerald-500" />
             ) : isSim ? (
-              <Play className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+              <Play className="h-3.5 w-3.5 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />
             ) : (
-              <Plug className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+              <Plug className="h-3.5 w-3.5 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />
             )}
           </div>
         </button>
