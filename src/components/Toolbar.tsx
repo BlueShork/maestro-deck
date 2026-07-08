@@ -165,15 +165,15 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
           <Separator orientation="vertical" className="mx-1 h-5" />
 
           {starting ? (
-            <Button size="sm" variant="destructive" disabled className="gap-1.5">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Button size="default" variant="destructive" disabled>
+              <Loader2 className="h-4 w-4 animate-spin" />
               Starting…
             </Button>
           ) : running ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="sm" variant="destructive" onClick={onStop} className="gap-1.5">
-                  <Square className="h-3.5 w-3.5" fill="currentColor" />
+                <Button size="default" variant="destructive" onClick={onStop}>
+                  <Square className="h-4 w-4" fill="currentColor" />
                   Stop
                 </Button>
               </TooltipTrigger>
@@ -183,8 +183,8 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="sm" variant="default" onClick={onRun} className={cn("gap-1.5")}>
-                    <Play className="h-3.5 w-3.5" fill="currentColor" />
+                  <Button size="default" variant="default" onClick={onRun}>
+                    <Play className="h-4 w-4" fill="currentColor" />
                     Run
                   </Button>
                 </TooltipTrigger>
@@ -193,13 +193,12 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="sm"
+                    size="default"
                     variant="outline"
                     onClick={onRunAll}
                     disabled={!folderPath}
-                    className="gap-1.5"
                   >
-                    <ListChecks className="h-3.5 w-3.5" />
+                    <ListChecks className="h-4 w-4" />
                     Run all
                   </Button>
                 </TooltipTrigger>
