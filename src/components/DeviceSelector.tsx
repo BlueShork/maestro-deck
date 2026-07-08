@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
 
 import { Button } from "@/components/ui/Button";
-import { ScrollArea } from "@/components/ui/ScrollArea";
 import { HealthcheckModal } from "@/components/HealthcheckModal";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
@@ -226,7 +225,7 @@ export function DeviceSelector() {
         </Button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="flex flex-col gap-2 px-3 pb-3">
           {error ? (
             <div className="rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive-foreground">
@@ -257,7 +256,7 @@ export function DeviceSelector() {
             </div>
           ) : null}
         </div>
-      </ScrollArea>
+      </div>
 
       {report && (
         <HealthcheckModal
