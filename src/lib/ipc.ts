@@ -17,7 +17,7 @@ import type {
   UINode,
   WorkspaceNode,
 } from "@/types";
-import type { RunReport } from "@/types/visualRegression";
+import type { BankGroup, RunReport } from "@/types/visualRegression";
 
 export class IpcError extends Error {
   constructor(
@@ -106,6 +106,13 @@ export const ipc = {
     name: string;
     decision: "keep" | "replace";
   }) => call<void>("resolve_comparison", args),
+  listBank: (workspace: string) => call<BankGroup[]>("list_bank", { workspace }),
+  loadBankImage: (workspace: string, deviceKey: string, name: string) =>
+    call<string>("load_bank_image", { workspace, deviceKey, name }),
+  deleteBankImage: (workspace: string, deviceKey: string, name: string) =>
+    call<void>("delete_bank_image", { workspace, deviceKey, name }),
+  deleteBankDevice: (workspace: string, deviceKey: string) =>
+    call<void>("delete_bank_device", { workspace, deviceKey }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
   startStream: () => call<void>("start_stream"),
   stopStream: () => call<void>("stop_stream"),
