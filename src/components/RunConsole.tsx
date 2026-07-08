@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Activity, Eraser, Play, Square } from "lucide-react";
+import { Activity, Ban, CheckCircle2, Eraser, Play, Square, XCircle } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -12,6 +12,43 @@ import { useRunStore } from "@/stores/runStore";
 import type { StepRunState } from "@/stores/runStore";
 import { usePanelsStore } from "@/stores/panelsStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+
+/** Plain-language outcome of the last run instead of a raw `exit N` code. */
+function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: boolean }) {
+  const kind = stopped ? "stopped" : exitCode === 0 ? "passed" : "failed";
+  const { Icon, label, className } = {
+    passed: {
+      Icon: CheckCircle2,
+      label: "Passed",
+      className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+    },
+    failed: {
+      Icon: XCircle,
+      label: "Failed",
+      className: "bg-red-500/15 text-red-700 dark:text-red-300",
+    },
+    stopped: {
+      Icon: Ban,
+      label: "Stopped",
+      className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    },
+  }[kind];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
+        className,
+      )}
+      title={`Flow ${label.toLowerCase()} — exit code ${exitCode}`}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+      {kind === "failed" && (
+        <span className="font-mono text-[9px] opacity-70">exit {exitCode}</span>
+      )}
+    </span>
+  );
+}
 
 export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () => void }) {
   const running = useRunStore((s) => s.running);
@@ -51,16 +88,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
               running
             </span>
           ) : exitCode !== null ? (
-            <span
-              className={cn(
-                "rounded px-1.5 py-0.5 font-mono text-[10px]",
-                exitCode === 0
-                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                  : "bg-red-500/15 text-red-700 dark:text-red-300",
-              )}
-            >
-              exit {exitCode}
-            </span>
+            <RunStatusBadge exitCode={exitCode} stopped={stopRequested} />
           ) : null}
         </div>
         <div className="flex items-center gap-1">
