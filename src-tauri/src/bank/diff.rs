@@ -37,19 +37,10 @@ pub fn diff_images(
         let masked = y < mask_top || y >= bottom_start;
         for x in 0..w {
             if masked {
-                // Ignored region: tint blue so the reviewer sees it was
-                // excluded, and skip the comparison entirely.
-                let p = new.get_pixel(x, y).0;
-                new.put_pixel(
-                    x,
-                    y,
-                    image::Rgba([
-                        (p[0] as u32 * 65 / 100) as u8,
-                        (p[1] as u32 * 65 / 100) as u8,
-                        ((p[2] as u32 * 65 / 100) + 90).min(255) as u8,
-                        255,
-                    ]),
-                );
+                // Ignored region (status bar / nav bar): skip the comparison
+                // entirely and leave the pixels untouched. The review UI draws
+                // its own labelled overlay on these bands, so baking a tint
+                // into the PNG here would double up and read as a glitch.
                 continue;
             }
             let a = bank.get_pixel(x, y).0;
