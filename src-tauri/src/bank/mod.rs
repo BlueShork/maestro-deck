@@ -30,6 +30,21 @@ pub fn status_bar_ratio(platform: &str, ignore: bool) -> f64 {
     }
 }
 
+/// Fraction of the screenshot height (from the bottom) to exclude from the
+/// diff — the iOS home indicator / Android navigation (or gesture) bar. Like
+/// [`status_bar_ratio`], it's a ratio so it's resolution-independent, and
+/// returns 0.0 when masking is off or the platform has no bottom bar (web).
+pub fn nav_bar_ratio(platform: &str, ignore: bool) -> f64 {
+    if !ignore {
+        return 0.0;
+    }
+    match platform {
+        "ios" => 0.04,
+        "android" => 0.045,
+        _ => 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -49,5 +64,13 @@ mod tests {
         assert_eq!(status_bar_ratio("android", true), 0.045);
         assert_eq!(status_bar_ratio("web", true), 0.0);
         assert_eq!(status_bar_ratio("ios", false), 0.0);
+    }
+
+    #[test]
+    fn nav_bar_ratio_per_platform() {
+        assert_eq!(nav_bar_ratio("ios", true), 0.04);
+        assert_eq!(nav_bar_ratio("android", true), 0.045);
+        assert_eq!(nav_bar_ratio("web", true), 0.0);
+        assert_eq!(nav_bar_ratio("android", false), 0.0);
     }
 }

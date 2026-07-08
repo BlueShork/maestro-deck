@@ -78,8 +78,8 @@ export function VisualRegressionSettings() {
           onCheckedChange={setEnabled}
         />
         <ToggleRow
-          label="Ignore status bar"
-          description="Exclude the top band (clock, notch, carrier) from comparison to avoid false positives. iOS ~6%, Android ~4.5% of the screen height."
+          label="Ignore system bars"
+          description="Exclude the top status bar (clock, notch, carrier) and the bottom home indicator / navigation bar from comparison to avoid false positives. iOS ~6% top / ~4% bottom, Android ~4.5% each of the screen height."
           checked={ignoreStatusBar}
           onCheckedChange={setIgnoreStatusBar}
         />
