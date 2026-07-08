@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { ArrowLeft, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
@@ -94,22 +94,30 @@ export function ImageBankPage() {
   const [loading, setLoading] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [confirmGroup, setConfirmGroup] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!folderPath) {
-      setGroups([]);
-      setSelected(null);
+      if (mountedRef.current) setGroups([]);
+      if (mountedRef.current) setSelected(null);
       return;
     }
-    setLoading(true);
+    if (mountedRef.current) setLoading(true);
     try {
       const g = await ipc.listBank(folderPath);
+      if (!mountedRef.current) return;
       setGroups(g);
       setSelected((prev) =>
         prev && g.some((x) => x.device_key === prev) ? prev : (g[0]?.device_key ?? null),
       );
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, [folderPath]);
 
@@ -161,7 +169,10 @@ export function ImageBankPage() {
               <button
                 key={g.device_key}
                 type="button"
-                onClick={() => setSelected(g.device_key)}
+                onClick={() => {
+                  setSelected(g.device_key);
+                  setConfirmGroup(false);
+                }}
                 aria-current={selected === g.device_key ? "page" : undefined}
                 className={cn(
                   "w-full rounded px-3 py-1.5 text-left text-xs transition-colors",
