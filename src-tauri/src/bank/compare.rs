@@ -42,6 +42,8 @@ pub struct CompareInput<'a> {
     pub height: u32,
     pub tolerance: f64,
     pub threshold: f64,
+    pub platform: &'a str,
+    pub ignore_status_bar: bool,
 }
 
 fn b64(bytes: &[u8]) -> String {
@@ -65,6 +67,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
     let flow_dir = input.flow_path.parent().unwrap_or(Path::new("."));
     let yaml = fs::read_to_string(input.flow_path).unwrap_or_default();
     let names = screenshot_names(&yaml);
+    let mask_ratio = crate::bank::status_bar_ratio(input.platform, input.ignore_status_bar);
 
     let mut comps = Vec::new();
     for name in names {
@@ -113,7 +116,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             continue;
         }
 
-        match diff_images(&bank_bytes, &new_bytes, input.tolerance, 0.0) {
+        match diff_images(&bank_bytes, &new_bytes, input.tolerance, mask_ratio) {
             Ok(out) if out.changed_ratio as f64 > input.threshold => comps.push(Comparison {
                 name,
                 status: Status::Changed,
@@ -193,6 +196,8 @@ mod tests {
             height: 2,
             tolerance: 0.1,
             threshold: 0.001,
+            platform: "android",
+            ignore_status_bar: false,
         };
         let (key, comps) = compare_flow(input).unwrap();
         assert_eq!(comps.len(), 1);
@@ -209,6 +214,8 @@ mod tests {
             height: 2,
             tolerance: 0.1,
             threshold: 0.001,
+            platform: "android",
+            ignore_status_bar: false,
         };
         let (_, comps2) = compare_flow(input2).unwrap();
         assert!(matches!(comps2[0].status, Status::Match));
@@ -240,6 +247,8 @@ mod tests {
             height: 4,
             tolerance: 0.1,
             threshold: 0.001,
+            platform: "android",
+            ignore_status_bar: false,
         })
         .unwrap();
         assert!(matches!(comps[0].status, Status::Changed));
@@ -262,8 +271,43 @@ mod tests {
             height: 2,
             tolerance: 0.1,
             threshold: 0.001,
+            platform: "android",
+            ignore_status_bar: false,
         })
         .unwrap();
         assert!(matches!(comps[0].status, Status::Missing));
+    }
+
+    #[test]
+    fn ignores_change_in_status_bar_band() {
+        let ws = temp_dir("statusbar");
+        let flow_dir = ws.join("flows");
+        let flow_path = flow_dir.join("f.yaml");
+        fs::create_dir_all(&flow_dir).unwrap();
+        fs::write(&flow_path, "- takeScreenshot: home\n").unwrap();
+        let key = device_key("Dev", 10, 100);
+        // Baseline: solid black 10x100.
+        write_png(
+            &ws.join("maestro/bank").join(&key).join("home.png"),
+            &RgbaImage::from_pixel(10, 100, image::Rgba([0, 0, 0, 255])),
+        );
+        // Produced: identical except a changed pixel at y=2 (inside iOS 6% band = top 6 rows).
+        let mut produced = RgbaImage::from_pixel(10, 100, image::Rgba([0, 0, 0, 255]));
+        produced.put_pixel(5, 2, image::Rgba([255, 255, 255, 255]));
+        write_png(&flow_dir.join("home.png"), &produced);
+
+        let (_, comps) = compare_flow(CompareInput {
+            workspace: &ws,
+            flow_path: &flow_path,
+            model: "Dev",
+            width: 10,
+            height: 100,
+            tolerance: 0.1,
+            threshold: 0.001,
+            platform: "ios",
+            ignore_status_bar: true,
+        })
+        .unwrap();
+        assert!(matches!(comps[0].status, Status::Match));
     }
 }
