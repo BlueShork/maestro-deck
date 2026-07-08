@@ -18,3 +18,16 @@ export interface RunReport {
   device_key: string;
   comparisons: Comparison[];
 }
+
+export interface BankImage {
+  name: string;
+  width: number;
+  height: number;
+  size_bytes: number;
+  modified_ms: number;
+}
+
+export interface BankGroup {
+  device_key: string;
+  images: BankImage[];
+}
