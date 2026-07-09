@@ -133,10 +133,24 @@ export interface ToolCallCardProps {
   result?: ToolResult;
 }
 
+/** Human rendering of the tool input. Multiline string fields (write_flow's
+ *  YAML `content`, input_text's `text`) display as plain text — JSON escaping
+ *  (`\n`, `\"`) makes YAML unreadable in the card. */
+function formatInput(use: ToolUse): string {
+  const input = use.input as Record<string, unknown>;
+  if (use.name === "write_flow" && typeof input.content === "string") {
+    return `path: ${String(input.path ?? "?")}\n\n${input.content}`;
+  }
+  if (use.name === "input_text" && typeof input.text === "string") {
+    return input.text;
+  }
+  return JSON.stringify(use.input, null, 2);
+}
+
 export function ToolCallCard({ use, result }: ToolCallCardProps): ReactElement {
   const glyph = statusGlyph(result);
   const label = toolLabel(use, result);
-  const inputJson = JSON.stringify(use.input, null, 2);
+  const inputJson = formatInput(use);
 
   return (
     <details className="my-1 rounded-lg border border-border bg-muted/40 text-xs">

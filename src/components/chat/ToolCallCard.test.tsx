@@ -115,3 +115,26 @@ describe("ChatMessage with block content", () => {
     expect(html).not.toMatch(/<details/);
   });
 });
+
+describe("ToolCallCard input formatting", () => {
+  it("renders write_flow content as plain YAML, not escaped JSON", () => {
+    const yaml = 'appId: com.example\n---\n- launchApp\n- tapOn: "Login"';
+    const html = renderToStaticMarkup(
+      <ToolCallCard use={use("write_flow", { path: "login.yaml", content: yaml })} />,
+    );
+    expect(html).toContain("path: login.yaml");
+    expect(html).toContain("- launchApp");
+    expect(html).not.toContain("\\n");
+    expect(html).not.toContain("&quot;content&quot;");
+  });
+
+  it("renders input_text as plain text", () => {
+    const html = renderToStaticMarkup(<ToolCallCard use={use("input_text", { text: "a\nb" })} />);
+    expect(html).not.toContain("\\n");
+  });
+
+  it("still renders other tools' input as pretty JSON", () => {
+    const html = renderToStaticMarkup(<ToolCallCard use={use("tap", { x: 1, y: 2 })} />);
+    expect(html).toContain("&quot;x&quot;: 1");
+  });
+});
