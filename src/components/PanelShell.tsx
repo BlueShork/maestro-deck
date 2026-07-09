@@ -43,7 +43,7 @@ export function PanelShell({
         // composited even at opacity-0 and recomputes every frame the
         // content behind it changes (row hover transitions), which shows
         // up as hover jank in every panel.
-        className="absolute right-1 top-1 z-20 flex h-5 w-5 items-center justify-center rounded border border-border/0 bg-card text-muted-foreground opacity-0 shadow-sm transition-opacity hover:border-border hover:bg-accent hover:text-foreground group-hover/panel:opacity-100"
+        className="absolute right-1 top-1 z-20 flex h-5 w-5 items-center justify-center rounded border border-border/0 bg-card text-muted-foreground opacity-0 shadow-sm transition-opacity hover:border-border hover:bg-accent hover:text-foreground group-hover/panel:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="h-3 w-3" />
       </button>

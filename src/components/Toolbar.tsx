@@ -117,7 +117,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                 type="button"
                 onClick={() => void checkUpdate()}
                 disabled={updatePhase === "checking"}
-                className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-60"
+                className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {updatePhase === "checking" ? (
                   <span className="inline-flex items-center gap-1">
