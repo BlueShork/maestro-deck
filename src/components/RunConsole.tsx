@@ -171,7 +171,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
                 key={l.id}
                 className={cn(
                   "whitespace-pre-wrap",
-                  l.stream === "stderr" && "text-red-700 dark:text-red-300",
+                  l.stream === "stderr" && "text-red-600 dark:text-red-400",
                   l.stream === "system" && "text-muted-foreground italic",
                 )}
               >
@@ -266,7 +266,7 @@ const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunSta
       <span className="flex-1 truncate">{label}</span>
       <span className="tabular-nums text-muted-foreground">{duration}</span>
       {step.status === "failed" && step.error ? (
-        <span className="ml-2 truncate text-red-500/80" title={step.error}>
+        <span className="ml-2 truncate text-red-600/70 dark:text-red-400/70" title={step.error}>
           — {step.error}
         </span>
       ) : null}
