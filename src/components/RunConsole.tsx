@@ -97,7 +97,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
               type="button"
               onClick={() => setConsoleMode("simple")}
               className={cn(
-                "px-2 py-0.5 text-[10px]",
+                "px-2 py-0.5 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 consoleMode === "simple"
                   ? "bg-primary text-primary-foreground"
                   : "bg-transparent text-muted-foreground hover:bg-muted",
@@ -109,7 +109,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
               type="button"
               onClick={() => setConsoleMode("technical")}
               className={cn(
-                "px-2 py-0.5 text-[10px]",
+                "px-2 py-0.5 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 consoleMode === "technical"
                   ? "bg-primary text-primary-foreground"
                   : "bg-transparent text-muted-foreground hover:bg-muted",
