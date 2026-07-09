@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { Monitor, Moon, Sun } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import {
   SettingsSection,
   SettingsSubgroup,
   ToggleRow,
 } from "@/components/settings/SettingsPrimitives";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
+import { useTourStore } from "@/stores/tourStore";
 
 const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> = [
   { value: "light", label: "Light", icon: Sun },
@@ -18,6 +21,9 @@ const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; icon: typeof Sun }
 ];
 
 export function GeneralSettings() {
+  const navigate = useNavigate();
+  const startTour = useTourStore((s) => s.start);
+
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const inspectKey = useSettingsStore((s) => s.inspectKey);
@@ -116,6 +122,28 @@ export function GeneralSettings() {
           checked={confirmBeforeQuit}
           onCheckedChange={setConfirmBeforeQuit}
         />
+      </SettingsSubgroup>
+
+      <SettingsSubgroup title="Onboarding">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col">
+            <span>Guided tour</span>
+            <span className="text-xs text-muted-foreground">
+              Replay the first-launch walkthrough of the workspace.
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              // The tour anchors live on the main workspace, so leave settings first.
+              navigate("/");
+              startTour();
+            }}
+          >
+            Replay tutorial
+          </Button>
+        </div>
       </SettingsSubgroup>
     </SettingsSection>
   );
