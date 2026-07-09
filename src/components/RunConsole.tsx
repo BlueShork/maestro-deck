@@ -43,9 +43,6 @@ function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: bool
     >
       <Icon className="h-3 w-3" />
       {label}
-      {kind === "failed" && (
-        <span className="font-mono text-[9px] opacity-70">exit {exitCode}</span>
-      )}
     </span>
   );
 }
