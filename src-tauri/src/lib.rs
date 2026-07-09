@@ -90,6 +90,7 @@ pub fn run() {
             run_flow,
             stop_flow,
             bank::ipc::compare_screenshots,
+            bank::ipc::compare_screenshots_all,
             bank::ipc::resolve_comparison,
             bank::ipc::list_bank,
             bank::ipc::load_bank_image,

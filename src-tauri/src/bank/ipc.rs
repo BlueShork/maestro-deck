@@ -8,7 +8,7 @@ use std::time::SystemTime;
 use base64::Engine;
 use serde::Serialize;
 
-use crate::bank::compare::{compare_flow, CompareInput, Comparison};
+use crate::bank::compare::{compare_flow, CompareInput, Comparison, Status};
 use std::path::PathBuf;
 
 #[derive(Serialize, Clone)]
@@ -16,6 +16,8 @@ pub struct RunReport {
     pub run_id: String,
     pub device_key: String,
     pub comparisons: Vec<Comparison>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub flow_errors: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -126,6 +128,54 @@ fn prune_runs(runs_dir: &Path, keep: usize) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Top-level flow files of a workspace, mirroring what `maestro test <dir>`
+/// executes: `*.yaml` / `*.yml` directly in the folder, `config.yaml`
+/// excluded, sorted by name. Entries are matched by extension only — an
+/// unreadable "flow" surfaces later as a per-flow error, not a silent skip.
+fn discover_flows(workspace: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut flows: Vec<PathBuf> = fs::read_dir(workspace)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            matches!(
+                p.extension().and_then(|e| e.to_str()),
+                Some("yaml") | Some("yml")
+            )
+        })
+        .filter(|p| {
+            p.file_name().and_then(|n| n.to_str()) != Some("config.yaml")
+                && p.file_name().and_then(|n| n.to_str()) != Some("config.yml")
+        })
+        .collect();
+    flows.sort();
+    Ok(flows)
+}
+
+/// Ranks statuses so same-name comparisons across flows keep the one the
+/// user must actually look at (they share a single flat baseline anyway).
+fn severity(s: &Status) -> u8 {
+    match s {
+        Status::Changed => 5,
+        Status::DimensionMismatch => 4,
+        Status::Missing => 3,
+        Status::Seeded => 2,
+        Status::Match => 1,
+    }
+}
+
+/// Copies the PNGs a flow produced next to it into the run directory (stable
+/// source for `resolve_comparison`'s replace). Shared by both compare commands.
+fn stage_run_pngs(flow: &Path, run_dir: &Path) {
+    let flow_dir = flow.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let yaml = fs::read_to_string(flow).unwrap_or_default();
+    for name in crate::bank::flow::screenshot_names(&yaml) {
+        let produced = flow_dir.join(format!("{name}.png"));
+        if produced.exists() {
+            let _ = fs::copy(&produced, run_dir.join(format!("{name}.png")));
+        }
+    }
+}
+
 /// Lists every `<workspace>/maestro/bank/<device_key>/*.png` as metadata only
 /// (no pixels). Returns an empty vec when the bank directory is absent.
 #[tauri::command]
@@ -219,7 +269,6 @@ pub async fn compare_screenshots(
 ) -> Result<RunReport, String> {
     let ws = std::path::PathBuf::from(&workspace);
     let flow = std::path::PathBuf::from(&flow_path);
-    let flow_dir = flow.parent().map(|p| p.to_path_buf()).unwrap_or_default();
 
     // Copier les PNG produits dans le dossier de run (source stable pour `replace`).
     let maestro_dir = ws.join("maestro");
@@ -227,13 +276,7 @@ pub async fn compare_screenshots(
     let run_dir = maestro_dir.join(".runs").join(&run_id);
     fs::create_dir_all(&run_dir).map_err(|e| e.to_string())?;
     let _ = prune_runs(&maestro_dir.join(".runs"), 10);
-    let yaml = fs::read_to_string(&flow).unwrap_or_default();
-    for name in crate::bank::flow::screenshot_names(&yaml) {
-        let produced = flow_dir.join(format!("{name}.png"));
-        if produced.exists() {
-            let _ = fs::copy(&produced, run_dir.join(format!("{name}.png")));
-        }
-    }
+    stage_run_pngs(&flow, &run_dir);
 
     let (device_key, comparisons) = compare_flow(CompareInput {
         workspace: &ws,
@@ -264,6 +307,7 @@ pub async fn compare_screenshots(
         run_id,
         device_key,
         comparisons,
+        flow_errors: Vec::new(),
     })
 }
 
@@ -282,6 +326,101 @@ pub async fn resolve_comparison(
     }
     // "keep": régression confirmée, banque inchangée (déjà tracée dans report.json).
     Ok(())
+}
+
+#[tauri::command]
+pub async fn compare_screenshots_all(
+    workspace: String,
+    model: String,
+    width: u32,
+    height: u32,
+    tolerance: f64,
+    threshold: f64,
+    run_id: String,
+    platform: String,
+    ignore_status_bar: bool,
+) -> Result<RunReport, String> {
+    let ws = PathBuf::from(&workspace);
+    let flows = discover_flows(&ws).map_err(|e| e.to_string())?;
+
+    let maestro_dir = ws.join("maestro");
+    let _ = ensure_runs_gitignore(&maestro_dir);
+    let run_dir = maestro_dir.join(".runs").join(&run_id);
+    fs::create_dir_all(&run_dir).map_err(|e| e.to_string())?;
+    let _ = prune_runs(&maestro_dir.join(".runs"), 10);
+
+    let mut device_key = String::new();
+    let mut merged: Vec<Comparison> = Vec::new();
+    let mut flow_errors: Vec<String> = Vec::new();
+
+    for flow in &flows {
+        let stem = flow
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if fs::metadata(flow).map(|m| !m.is_file()).unwrap_or(true) {
+            flow_errors.push(format!("{stem}: not a readable flow file"));
+            continue;
+        }
+        stage_run_pngs(flow, &run_dir);
+        match compare_flow(CompareInput {
+            workspace: &ws,
+            flow_path: flow,
+            model: &model,
+            width,
+            height,
+            tolerance,
+            threshold,
+            platform: &platform,
+            ignore_status_bar,
+        }) {
+            Ok((key, comps)) => {
+                if device_key.is_empty() {
+                    device_key = key;
+                }
+                for mut c in comps {
+                    c.flow = Some(stem.clone());
+                    match merged.iter_mut().find(|m| m.name == c.name) {
+                        Some(existing) => {
+                            if severity(&c.status) > severity(&existing.status) {
+                                *existing = c;
+                            }
+                        }
+                        None => merged.push(c),
+                    }
+                }
+            }
+            Err(e) => flow_errors.push(format!("{stem}: {e}")),
+        }
+    }
+
+    if device_key.is_empty() && merged.is_empty() && !flow_errors.is_empty() {
+        return Err(format!(
+            "no flow could be compared: {}",
+            flow_errors.join(" | ")
+        ));
+    }
+
+    // report.json slim, same shape as the single-flow command.
+    let slim: Vec<_> = merged
+        .iter()
+        .map(|c| {
+            serde_json::json!({ "name": c.name, "status": c.status, "changed_ratio": c.changed_ratio, "flow": c.flow })
+        })
+        .collect();
+    let report =
+        serde_json::json!({ "run_id": run_id, "device_key": device_key, "comparisons": slim });
+    let _ = fs::write(
+        run_dir.join("report.json"),
+        serde_json::to_vec_pretty(&report).unwrap_or_default(),
+    );
+
+    Ok(RunReport {
+        run_id,
+        device_key,
+        comparisons: merged,
+        flow_errors,
+    })
 }
 
 #[cfg(test)]
@@ -405,6 +544,156 @@ mod tests {
         assert!(safe_component("a/b").is_err());
         assert!(safe_component("a\\b").is_err());
         assert!(safe_component("").is_err());
+    }
+
+    fn write_test_png(path: &Path, w: u32, h: u32, px: [u8; 4]) {
+        use image::{ImageEncoder, RgbaImage};
+        let mut buf = Vec::new();
+        let img = RgbaImage::from_pixel(w, h, image::Rgba(px));
+        image::codecs::png::PngEncoder::new(&mut buf)
+            .write_image(img.as_raw(), w, h, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, buf).unwrap();
+    }
+
+    #[test]
+    fn discover_flows_lists_top_level_yaml_skipping_config() {
+        let ws = std::env::temp_dir().join("mdbank_discover");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(ws.join("sub")).unwrap();
+        fs::write(ws.join("b_flow.yaml"), "- launchApp\n").unwrap();
+        fs::write(ws.join("a_flow.yml"), "- launchApp\n").unwrap();
+        fs::write(ws.join("config.yaml"), "flows: []\n").unwrap();
+        fs::write(ws.join("notes.txt"), "x").unwrap();
+        fs::write(ws.join("sub/nested.yaml"), "- launchApp\n").unwrap();
+
+        let flows = discover_flows(&ws).unwrap();
+        let names: Vec<_> = flows
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names, vec!["a_flow.yml", "b_flow.yaml"]); // sorted, no config/nested/txt
+    }
+
+    #[test]
+    fn severity_prefers_changed_over_match() {
+        use crate::bank::compare::Status;
+        assert!(severity(&Status::Changed) > severity(&Status::DimensionMismatch));
+        assert!(severity(&Status::DimensionMismatch) > severity(&Status::Missing));
+        assert!(severity(&Status::Missing) > severity(&Status::Seeded));
+        assert!(severity(&Status::Seeded) > severity(&Status::Match));
+    }
+
+    #[test]
+    fn compare_all_merges_flows_and_tags_them() {
+        let ws = std::env::temp_dir().join("mdbank_all_merge");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).unwrap();
+        fs::write(ws.join("login.yaml"), "- takeScreenshot: login_home\n").unwrap();
+        fs::write(
+            ws.join("checkout.yaml"),
+            "- takeScreenshot: checkout_cart\n",
+        )
+        .unwrap();
+        write_test_png(&ws.join("login_home.png"), 2, 2, [1, 2, 3, 255]);
+        write_test_png(&ws.join("checkout_cart.png"), 2, 2, [4, 5, 6, 255]);
+
+        let report = tauri::async_runtime::block_on(compare_screenshots_all(
+            ws.to_string_lossy().to_string(),
+            "Dev".into(),
+            2,
+            2,
+            0.1,
+            0.001,
+            "r1".into(),
+            "android".into(),
+            false,
+        ))
+        .unwrap();
+
+        assert_eq!(report.comparisons.len(), 2);
+        let flows: Vec<_> = report
+            .comparisons
+            .iter()
+            .map(|c| c.flow.clone().unwrap())
+            .collect();
+        assert!(flows.contains(&"login".to_string()));
+        assert!(flows.contains(&"checkout".to_string()));
+        assert!(report.flow_errors.is_empty());
+        // Both seeded into the same flat bank.
+        assert!(ws
+            .join("maestro/bank")
+            .join(&report.device_key)
+            .join("login_home.png")
+            .exists());
+    }
+
+    #[test]
+    fn compare_all_dedupes_same_name_keeping_worst_status() {
+        let ws = std::env::temp_dir().join("mdbank_all_dedupe");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).unwrap();
+        // Two flows take a screenshot with the SAME name.
+        fs::write(ws.join("a.yaml"), "- takeScreenshot: shared\n").unwrap();
+        fs::write(ws.join("b.yaml"), "- takeScreenshot: shared\n").unwrap();
+        // Baseline black; produced white → Changed for both flows.
+        let key = crate::bank::device_key("Dev", 4, 4);
+        write_test_png(
+            &ws.join("maestro/bank").join(&key).join("shared.png"),
+            4,
+            4,
+            [0, 0, 0, 255],
+        );
+        write_test_png(&ws.join("shared.png"), 4, 4, [255, 255, 255, 255]);
+
+        let report = tauri::async_runtime::block_on(compare_screenshots_all(
+            ws.to_string_lossy().to_string(),
+            "Dev".into(),
+            4,
+            4,
+            0.1,
+            0.001,
+            "r1".into(),
+            "android".into(),
+            false,
+        ))
+        .unwrap();
+
+        let shared: Vec<_> = report
+            .comparisons
+            .iter()
+            .filter(|c| c.name == "shared")
+            .collect();
+        assert_eq!(shared.len(), 1, "same-name comparisons must be deduped");
+    }
+
+    #[test]
+    fn compare_all_continues_past_a_failing_flow() {
+        let ws = std::env::temp_dir().join("mdbank_all_partial");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).unwrap();
+        fs::write(ws.join("good.yaml"), "- takeScreenshot: good_home\n").unwrap();
+        write_test_png(&ws.join("good_home.png"), 2, 2, [1, 2, 3, 255]);
+        // A yaml that is a DIRECTORY: read_to_string fails → flow error path.
+        fs::create_dir_all(ws.join("broken.yaml")).unwrap();
+
+        let report = tauri::async_runtime::block_on(compare_screenshots_all(
+            ws.to_string_lossy().to_string(),
+            "Dev".into(),
+            2,
+            2,
+            0.1,
+            0.001,
+            "r1".into(),
+            "android".into(),
+            false,
+        ))
+        .unwrap();
+
+        assert_eq!(report.comparisons.len(), 1);
+        assert_eq!(report.flow_errors.len(), 1);
+        assert!(report.flow_errors[0].contains("broken"));
     }
 
     #[test]

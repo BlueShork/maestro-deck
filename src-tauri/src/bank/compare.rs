@@ -23,6 +23,10 @@ pub enum Status {
 #[derive(serde::Serialize, Clone)]
 pub struct Comparison {
     pub name: String,
+    /// Flow file stem this comparison came from (Run All only; None for
+    /// single-flow comparisons).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flow: Option<String>,
     pub status: Status,
     pub changed_ratio: f32,
     pub bbox: Option<[u32; 4]>,
@@ -95,6 +99,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
         if !produced.exists() {
             comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Missing,
                 changed_ratio: 0.0,
                 bbox: None,
@@ -110,6 +115,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             fs::copy(&produced, &reference)?;
             comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Seeded,
                 changed_ratio: 0.0,
                 bbox: None,
@@ -124,6 +130,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
         if dims(&bank_bytes) != dims(&new_bytes) {
             comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::DimensionMismatch,
                 changed_ratio: 0.0,
                 bbox: None,
@@ -144,6 +151,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
         ) {
             Ok(out) if out.changed_ratio as f64 > input.threshold => comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Changed,
                 changed_ratio: out.changed_ratio,
                 bbox: out.bbox,
@@ -153,6 +161,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             }),
             Ok(out) => comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Match,
                 changed_ratio: out.changed_ratio,
                 bbox: None,
@@ -162,6 +171,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             }),
             Err(_) => comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Missing,
                 changed_ratio: 0.0,
                 bbox: None,
