@@ -291,10 +291,19 @@ pub async fn install_tool(app: AppHandle, id: String) -> AppResult<()> {
         });
     }
 
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| AppError::RunnerFailed(format!("wait failed: {e}")))?;
+    let status = match child.wait().await {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = app.emit(
+                EVT_INSTALL_DONE,
+                InstallDone {
+                    id: id.clone(),
+                    code: None,
+                },
+            );
+            return Err(AppError::RunnerFailed(format!("wait failed: {e}")));
+        }
+    };
 
     // A fresh maestro may land in a new location — drop the resolution cache.
     crate::tool_paths::invalidate_cache();
