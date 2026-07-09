@@ -64,9 +64,9 @@ function TreeNodeImpl({ node, depth }: TreeNodeProps) {
       <div
         className={cn(
           "group flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-[11px]",
-          selected && "bg-primary/20",
-          !selected && hovered && "bg-accent/40",
-          !selected && !hovered && "hover:bg-accent/30",
+          selected && "bg-accent",
+          !selected && hovered && "bg-accent/50",
+          !selected && !hovered && "hover:bg-accent/50",
         )}
         style={{ paddingLeft: depth * 10 + 4 }}
         onClick={() => void select(node)}

@@ -371,7 +371,7 @@ function TreeItem({
                 <button
                   type="button"
                   onClick={() => toggle(node.path)}
-                  className="flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left text-xs text-foreground/90 transition-colors hover:bg-accent/40"
+                  className="flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left text-xs text-foreground/90 transition-colors hover:bg-accent/50"
                 >
                   <ChevronRight
                     className={cn(
@@ -504,10 +504,13 @@ function TreeItem({
           <div
             className={cn(
               "group relative flex items-center transition-colors",
-              isActive ? "bg-primary/15" : "hover:bg-accent/40",
+              isActive ? "bg-accent" : "hover:bg-accent/50",
             )}
             onContextMenu={(e) => e.stopPropagation()}
           >
+            {isActive && (
+              <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-emerald-500" />
+            )}
             <button
               type="button"
               onClick={() => void openFlowFile(node.path)}
@@ -521,7 +524,7 @@ function TreeItem({
               <FileCode2
                 className={cn(
                   "h-3.5 w-3.5 shrink-0",
-                  isActive ? "text-primary" : "text-muted-foreground",
+                  isActive ? "text-emerald-400" : "text-muted-foreground",
                 )}
               />
               <span className="truncate">{node.name}</span>
