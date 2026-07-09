@@ -196,6 +196,126 @@ pub async fn environment_status() -> AppResult<EnvStatus> {
     })
 }
 
+use tauri::{AppHandle, Emitter};
+use tokio::io::{AsyncBufReadExt, BufReader};
+
+use crate::error::AppError;
+
+const EVT_INSTALL_OUTPUT: &str = "env:install:output";
+const EVT_INSTALL_DONE: &str = "env:install:done";
+
+#[derive(Serialize, Clone)]
+struct InstallOutput {
+    id: String,
+    line: String,
+}
+
+#[derive(Serialize, Clone)]
+struct InstallDone {
+    id: String,
+    code: Option<i32>,
+}
+
+/// One install at a time — concurrent requests error out immediately.
+static INSTALL_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+fn brew_bin() -> Option<&'static str> {
+    ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
+        .into_iter()
+        .find(|p| std::path::Path::new(p).is_file())
+}
+
+#[tauri::command]
+pub async fn install_tool(app: AppHandle, id: String) -> AppResult<()> {
+    let _guard = INSTALL_LOCK
+        .try_lock()
+        .map_err(|_| AppError::RunnerFailed("an install is already running".into()))?;
+
+    let mut cmd = match id.as_str() {
+        "maestro" => {
+            // The official install script honors MAESTRO_VERSION for pinning.
+            let mut c = tokio::process::Command::new("bash");
+            c.args(["-c", "curl -Ls 'https://get.maestro.mobile.dev' | bash"])
+                .env("MAESTRO_VERSION", REQUIRED_MAESTRO);
+            c
+        }
+        "java" => {
+            let brew = brew_bin().ok_or_else(|| {
+                AppError::RunnerFailed("Homebrew not found — install Java manually".into())
+            })?;
+            let mut c = tokio::process::Command::new(brew);
+            c.args(["install", "--cask", "temurin@21"]);
+            c
+        }
+        other => return Err(AppError::RunnerFailed(format!("unknown tool: {other}"))),
+    };
+
+    let mut child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| AppError::RunnerFailed(format!("spawn failed: {e}")))?;
+
+    // Stream both pipes as progress lines (same pattern as the flow runner).
+    if let Some(stdout) = child.stdout.take() {
+        let app = app.clone();
+        let id = id.clone();
+        let mut reader = BufReader::new(stdout).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                let _ = app.emit(
+                    EVT_INSTALL_OUTPUT,
+                    InstallOutput {
+                        id: id.clone(),
+                        line,
+                    },
+                );
+            }
+        });
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let app = app.clone();
+        let id = id.clone();
+        let mut reader = BufReader::new(stderr).lines();
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = reader.next_line().await {
+                let _ = app.emit(
+                    EVT_INSTALL_OUTPUT,
+                    InstallOutput {
+                        id: id.clone(),
+                        line,
+                    },
+                );
+            }
+        });
+    }
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| AppError::RunnerFailed(format!("wait failed: {e}")))?;
+
+    // A fresh maestro may land in a new location — drop the resolution cache.
+    crate::tool_paths::invalidate_cache();
+    let _ = app.emit(
+        EVT_INSTALL_DONE,
+        InstallDone {
+            id: id.clone(),
+            code: status.code(),
+        },
+    );
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(AppError::RunnerFailed(format!(
+            "install exited with code {:?}",
+            status.code()
+        )))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

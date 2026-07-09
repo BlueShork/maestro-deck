@@ -108,6 +108,7 @@ pub fn run() {
             get_tool_paths,
             set_tool_paths,
             env_check::environment_status,
+            env_check::install_tool,
         ])
         .setup(|app| {
             ipc::register_events(app)?;
