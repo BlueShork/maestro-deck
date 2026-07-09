@@ -168,63 +168,67 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
     const hasVisibleContent = blocks.some((b) => b.type === "text" || b.type === "tool_use");
 
     return (
-      <div className="flex min-w-0 gap-2.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/80 to-primary/40 text-primary-foreground ring-1 ring-primary/20">
-          <Sparkles className="h-3.5 w-3.5" />
-        </div>
-        <div className="min-w-0 flex-1 pt-0.5">
-          <div className="mb-1 text-[11px] font-medium text-muted-foreground">Billy</div>
-          {hasVisibleContent ? (
-            <div className="text-sm leading-relaxed text-foreground">
-              {blocks.map((block, i) => {
-                if (block.type === "text" && block.text) {
-                  return <Markdown key={i} text={block.text} />;
-                }
-                if (block.type === "tool_use") {
-                  return (
-                    <ToolCallCard
-                      key={block.id}
-                      use={block}
-                      result={findResult(blocks, block.id)}
-                    />
-                  );
-                }
-                // tool_result renders nothing standalone
-                return null;
-              })}
-            </div>
-          ) : (
-            <div className="flex h-5 items-center gap-1 text-muted-foreground">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:150ms]" />
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:300ms]" />
-            </div>
-          )}
-        </div>
-      </div>
+      <AssistantShell>
+        {hasVisibleContent ? (
+          <div className="text-sm leading-relaxed text-foreground">
+            {blocks.map((block, i) => {
+              if (block.type === "text" && block.text) {
+                return <Markdown key={i} text={block.text} />;
+              }
+              if (block.type === "tool_use") {
+                return (
+                  <ToolCallCard key={block.id} use={block} result={findResult(blocks, block.id)} />
+                );
+              }
+              // tool_result renders nothing standalone
+              return null;
+            })}
+          </div>
+        ) : (
+          <PulseDots />
+        )}
+      </AssistantShell>
     );
   }
 
-  // ── assistant: string content (byte-for-byte identical to original) ────────
+  // ── assistant: string content ───────────────────────────────────────────────
   return (
-    <div className="flex min-w-0 gap-2.5">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/80 to-primary/40 text-primary-foreground ring-1 ring-primary/20">
-        <Sparkles className="h-3.5 w-3.5" />
-      </div>
-      <div className="min-w-0 flex-1 pt-0.5">
-        <div className="mb-1 text-[11px] font-medium text-muted-foreground">Billy</div>
-        {messageText(message) ? (
-          <div className="text-sm leading-relaxed text-foreground">
-            <Markdown text={messageText(message)} />
-          </div>
-        ) : (
-          <div className="flex h-5 items-center gap-1 text-muted-foreground">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:150ms]" />
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:300ms]" />
-          </div>
-        )}
-      </div>
-    </div>
+    <AssistantShell>
+      {messageText(message) ? (
+        <div className="text-sm leading-relaxed text-foreground">
+          <Markdown text={messageText(message)} />
+        </div>
+      ) : (
+        <PulseDots />
+      )}
+    </AssistantShell>
   );
 });
+
+/** Assistant chrome: avatar + name as a compact header ROW, content below at
+ *  full panel width. The previous side-by-side avatar column indented every
+ *  assistant message (text, tool cards, code blocks) by ~38px — too much for
+ *  a narrow chat panel. */
+function AssistantShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="mb-1.5 flex items-center gap-2">
+        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/80 to-primary/40 text-primary-foreground ring-1 ring-primary/20">
+          <Sparkles className="h-3 w-3" />
+        </div>
+        <span className="text-[11px] font-medium text-muted-foreground">Billy</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function PulseDots() {
+  return (
+    <div className="flex h-5 items-center gap-1 text-muted-foreground">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:150ms]" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:300ms]" />
+    </div>
+  );
+}
