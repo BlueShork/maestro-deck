@@ -18,6 +18,7 @@ import {
 
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { H264Decoder } from "@/lib/decoder";
+import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
@@ -335,6 +336,13 @@ export function DeviceView() {
   useFrameStream(canvasRef);
   useScreenshotStream(canvasRef);
   useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled);
+
+  // Register this canvas in the module-level registry so non-React code
+  // (e.g. Billy's take_screenshot tool) can capture frames without prop-drilling.
+  useEffect(() => {
+    registerDeviceCanvas(canvasRef.current);
+    return () => registerDeviceCanvas(null);
+  }, []);
 
   const deviceWidth = streamW || current?.screen_width || 1080;
   const deviceHeight = streamH || current?.screen_height || 2340;
