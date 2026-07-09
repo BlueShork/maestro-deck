@@ -9,6 +9,7 @@ import {
   ImageIcon,
   Layers,
   RefreshCw,
+  Search,
   Trash2,
   X,
   ZoomIn,
@@ -19,6 +20,7 @@ import { useNavigate } from "react-router-dom";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
 import { Button } from "@/components/ui/Button";
+import { filterGroups, filterImages } from "@/lib/bankFilter";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -346,6 +348,7 @@ export function ImageBankPage() {
   const [loading, setLoading] = useState(true);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [confirmGroup, setConfirmGroup] = useState(false);
+  const [query, setQuery] = useState("");
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -388,16 +391,21 @@ export function ImageBankPage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (lightboxIndex !== null) setLightboxIndex(null);
+      else if (query) setQuery("");
       else navigate("/");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, lightboxIndex]);
+  }, [navigate, lightboxIndex, query]);
 
   const activeGroup = groups.find((g) => g.device_key === selected) ?? null;
   const totalImages = groups.reduce((n, g) => n + g.images.length, 0);
   const activeMeta = activeGroup ? parseDeviceKey(activeGroup.device_key) : null;
   const activeSize = activeGroup?.images.reduce((n, i) => n + i.size_bytes, 0) ?? 0;
+
+  const visibleGroups = filterGroups(groups, query);
+  const visibleImages = activeGroup ? filterImages(activeGroup.images, query) : [];
+  const filtering = query.trim().length > 0;
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -423,6 +431,28 @@ export function ImageBankPage() {
               : "no workspace"}
           </div>
         </div>
+        {folderPath && groups.length > 0 && (
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search screenshots…"
+              aria-label="Search screenshots by name"
+              className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-7 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
+            />
+            {filtering && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
         <Button
           size="icon"
           variant="ghost"
@@ -462,7 +492,7 @@ export function ImageBankPage() {
             <div className="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Devices
             </div>
-            {groups.map((g) => {
+            {visibleGroups.map((g) => {
               const meta = parseDeviceKey(g.device_key);
               const active = selected === g.device_key;
               return (
@@ -504,7 +534,7 @@ export function ImageBankPage() {
                         : "bg-muted text-muted-foreground",
                     )}
                   >
-                    {g.images.length}
+                    {filtering ? filterImages(g.images, query).length : g.images.length}
                   </span>
                 </button>
               );
@@ -523,7 +553,10 @@ export function ImageBankPage() {
                     <div>
                       <h1 className="text-lg font-semibold leading-tight">{activeMeta.name}</h1>
                       <div className="font-mono text-[11px] text-muted-foreground">
-                        {activeMeta.resolution} · {activeGroup.images.length} baseline
+                        {activeMeta.resolution} ·{" "}
+                        {filtering
+                          ? `${visibleImages.length} / ${activeGroup.images.length} baseline`
+                          : `${activeGroup.images.length} baseline`}
                         {activeGroup.images.length === 1 ? "" : "s"} · {formatBytes(activeSize)}
                       </div>
                     </div>
@@ -549,23 +582,29 @@ export function ImageBankPage() {
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4">
-                  {activeGroup.images.map((img, i) => (
-                    <Thumb
-                      key={img.name}
-                      workspace={folderPath}
-                      deviceKey={activeGroup.device_key}
-                      image={img}
-                      index={i}
-                      onOpen={() => setLightboxIndex(i)}
-                      onDelete={() =>
-                        void ipc
-                          .deleteBankImage(folderPath, activeGroup.device_key, img.name)
-                          .then(refresh)
-                      }
-                    />
-                  ))}
-                </div>
+                {filtering && visibleImages.length === 0 ? (
+                  <EmptyState icon={<Search className="h-7 w-7" />} title="No results">
+                    No screenshot matches "{query.trim()}" in this device group.
+                  </EmptyState>
+                ) : (
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4">
+                    {visibleImages.map((img) => (
+                      <Thumb
+                        key={img.name}
+                        workspace={folderPath}
+                        deviceKey={activeGroup.device_key}
+                        image={img}
+                        index={activeGroup.images.indexOf(img)}
+                        onOpen={() => setLightboxIndex(activeGroup.images.indexOf(img))}
+                        onDelete={() =>
+                          void ipc
+                            .deleteBankImage(folderPath, activeGroup.device_key, img.name)
+                            .then(refresh)
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
