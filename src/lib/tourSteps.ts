@@ -31,7 +31,7 @@ export const TOUR_STEPS: TourStep[] = [
     target: "device",
     requiresPanel: ["device"],
     title: "Mirror & inspect",
-    body: 'A live, touchable mirror of your phone. Toggle Inspect mode (press "{inspectKey}") to explore the UI hierarchy element by element.',
+    body: "A live, touchable mirror of your phone. Toggle Inspect mode (press {inspectKey}) to explore the UI hierarchy element by element.",
     placement: "right",
   },
   {
