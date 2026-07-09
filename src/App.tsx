@@ -9,6 +9,7 @@ import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
+import { SetupPopup } from "@/components/SetupPopup";
 import { TourOverlay } from "@/components/TourOverlay";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { Toaster } from "@/components/ui/Toast";
@@ -341,6 +342,7 @@ export default function App() {
       <UpdateDialog />
       <QuitConfirmDialog />
       <TourOverlay />
+      <SetupPopup />
       <Toaster />
     </>
   );
