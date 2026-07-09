@@ -165,50 +165,52 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
           <Separator orientation="vertical" className="mx-1 h-5" />
 
-          {starting ? (
-            <Button size="default" variant="destructive" disabled>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Starting…
-            </Button>
-          ) : running ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="default" variant="destructive" onClick={onStop}>
-                  <Square className="h-4 w-4" fill="currentColor" />
-                  Stop
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Stop flow</TooltipContent>
-            </Tooltip>
-          ) : (
-            <>
+          <div data-tour="run-controls" className="flex items-center gap-1">
+            {starting ? (
+              <Button size="default" variant="destructive" disabled>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Starting…
+              </Button>
+            ) : running ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="default" variant="default" onClick={onRun}>
-                    <Play className="h-4 w-4" fill="currentColor" />
-                    Run
+                  <Button size="default" variant="destructive" onClick={onStop}>
+                    <Square className="h-4 w-4" fill="currentColor" />
+                    Stop
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Run flow (Cmd/Ctrl+R)</TooltipContent>
+                <TooltipContent>Stop flow</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="default"
-                    variant="outline"
-                    onClick={onRunAll}
-                    disabled={!folderPath}
-                  >
-                    <ListChecks className="h-4 w-4" />
-                    Run all
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {folderPath ? "Run every flow in the workspace" : "Open a folder to enable"}
-                </TooltipContent>
-              </Tooltip>
-            </>
-          )}
+            ) : (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="default" variant="default" onClick={onRun}>
+                      <Play className="h-4 w-4" fill="currentColor" />
+                      Run
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Run flow (Cmd/Ctrl+R)</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="default"
+                      variant="outline"
+                      onClick={onRunAll}
+                      disabled={!folderPath}
+                    >
+                      <ListChecks className="h-4 w-4" />
+                      Run all
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {folderPath ? "Run every flow in the workspace" : "Open a folder to enable"}
+                  </TooltipContent>
+                </Tooltip>
+              </>
+            )}
+          </div>
 
           <DropdownMenu>
             <Tooltip>
@@ -238,6 +240,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                 variant={chatOpen ? "secondary" : "ghost"}
                 onClick={toggleChat}
                 aria-label="Toggle AI assistant"
+                data-tour="chat-toggle"
               >
                 <Sparkles className="h-4 w-4" />
               </Button>

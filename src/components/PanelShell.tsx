@@ -28,6 +28,7 @@ export function PanelShell({
   const hide = usePanelsStore((s) => s.hide);
   return (
     <div
+      data-tour={id}
       className={cn("group/panel relative flex h-full min-h-0 w-full min-w-0 flex-col", className)}
     >
       {children}
