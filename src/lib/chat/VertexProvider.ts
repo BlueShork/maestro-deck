@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { ChatMessage } from "@/types/chat";
 
+import { messageText } from "./content";
 import { modelsByProvider } from "./models";
 import type { ChatProvider } from "./provider";
 import { readSSE } from "./sse";
@@ -67,7 +68,7 @@ export class VertexProvider implements ChatProvider {
 
     const systemPrompt = messages
       .filter((m) => m.role === "system")
-      .map((m) => m.content)
+      .map((m) => messageText(m))
       .join("\n\n");
     const nonSystem = messages.filter((m) => m.role !== "system");
 
@@ -82,7 +83,7 @@ export class VertexProvider implements ChatProvider {
           system: systemPrompt
             ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
             : undefined,
-          messages: nonSystem.map((m) => ({ role: m.role, content: m.content })),
+          messages: nonSystem.map((m) => ({ role: m.role, content: messageText(m) })),
         }
       : {
           systemInstruction: systemPrompt
@@ -90,7 +91,7 @@ export class VertexProvider implements ChatProvider {
             : undefined,
           contents: nonSystem.map((m) => ({
             role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }],
+            parts: [{ text: messageText(m) }],
           })),
         };
 

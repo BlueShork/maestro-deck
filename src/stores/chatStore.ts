@@ -163,17 +163,48 @@ export const useChatStore = create<ChatState>()(
 
           for await (const delta of stream) {
             set((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === assistantId ? { ...m, content: m.content + delta } : m,
-              ),
+              messages: s.messages.map((m) => {
+                if (m.id !== assistantId) return m;
+                if (typeof m.content === "string") {
+                  return { ...m, content: m.content + delta };
+                }
+                // Content is an array; append to the trailing text block or push a new one
+                const blocks = [...m.content];
+                const lastBlock = blocks[blocks.length - 1];
+                if (lastBlock?.type === "text") {
+                  blocks[blocks.length - 1] = {
+                    ...lastBlock,
+                    text: lastBlock.text + delta,
+                  };
+                } else {
+                  blocks.push({ type: "text", text: delta });
+                }
+                return { ...m, content: blocks };
+              }),
             }));
           }
         } catch (err) {
           if (abort.signal.aborted) {
             set((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === assistantId ? { ...m, content: m.content + "\n\n_[stopped]_" } : m,
-              ),
+              messages: s.messages.map((m) => {
+                if (m.id !== assistantId) return m;
+                const stopped = "\n\n_[stopped]_";
+                if (typeof m.content === "string") {
+                  return { ...m, content: m.content + stopped };
+                }
+                // Content is an array; append to the trailing text block or push a new one
+                const blocks = [...m.content];
+                const lastBlock = blocks[blocks.length - 1];
+                if (lastBlock?.type === "text") {
+                  blocks[blocks.length - 1] = {
+                    ...lastBlock,
+                    text: lastBlock.text + stopped,
+                  };
+                } else {
+                  blocks.push({ type: "text", text: stopped });
+                }
+                return { ...m, content: blocks };
+              }),
             }));
           } else {
             const message = err instanceof Error ? err.message : String(err);

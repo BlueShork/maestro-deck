@@ -3,6 +3,7 @@
 
 import type { ChatMessage } from "@/types/chat";
 
+import { messageText } from "./content";
 import { modelsByProvider } from "./models";
 import type { ChatProvider } from "./provider";
 import { readSSE } from "./sse";
@@ -15,7 +16,7 @@ interface AnthropicEvent {
 function buildSystemBlocks(messages: ChatMessage[]) {
   const text = messages
     .filter((m) => m.role === "system")
-    .map((m) => m.content)
+    .map((m) => messageText(m))
     .join("\n\n");
   if (!text) return undefined;
   return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
@@ -61,7 +62,7 @@ export class AnthropicProvider implements ChatProvider {
         system: buildSystemBlocks(messages),
         messages: messages
           .filter((m) => m.role !== "system")
-          .map((m) => ({ role: m.role, content: m.content })),
+          .map((m) => ({ role: m.role, content: messageText(m) })),
       }),
     });
 
