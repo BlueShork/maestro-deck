@@ -144,6 +144,9 @@ export const ipc = {
       appleTeamId,
       maestroIosDevice,
     }),
+  // Environment prerequisites for the onboarding setup popup.
+  environmentStatus: () => call<EnvStatusResult>("environment_status"),
+  installTool: (id: "maestro" | "java") => call<void>("install_tool", { id }),
 };
 
 export interface IosPhysicalSetupStatus {
@@ -152,6 +155,19 @@ export interface IosPhysicalSetupStatus {
   // serde `rename_all = "camelCase"` turns `maestro_is_2_5_1` into `maestroIs251`.
   maestroIs251: boolean;
   maestroPatched: boolean;
+}
+
+export type EnvCheckId = "maestro" | "java" | "adb" | "xcode";
+export type EnvCheckStatus = "ok" | "missing" | "wrong-version" | "error";
+export interface EnvCheckResult {
+  id: EnvCheckId;
+  status: EnvCheckStatus;
+  version: string | null;
+  detail: string | null;
+}
+export interface EnvStatusResult {
+  checks: EnvCheckResult[];
+  minimalOk: boolean;
 }
 
 export interface ToolPathsView {
@@ -211,6 +227,10 @@ export const events = {
     }),
   onRunnerStdout: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stdout", (e) => handler(e.payload)),
+  onEnvInstallOutput: (handler: (p: { id: string; line: string }) => void) =>
+    listen<{ id: string; line: string }>("env:install:output", (e) => handler(e.payload)),
+  onEnvInstallDone: (handler: (p: { id: string; code: number | null }) => void) =>
+    listen<{ id: string; code: number | null }>("env:install:done", (e) => handler(e.payload)),
   onRunnerStderr: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stderr", (e) => handler(e.payload)),
   onRunnerExit: (handler: (payload: RunnerExitPayload) => void): Promise<UnlistenFn> =>
