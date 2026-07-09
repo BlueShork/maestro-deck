@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import type { ChatMessage } from "@/types/chat";
+import type { ChatMessage, ProviderEvent, ToolSpec } from "@/types/chat";
 
 import { messageText } from "./content";
 import { modelsByProvider } from "./models";
@@ -48,15 +48,19 @@ export class VertexProvider implements ChatProvider {
     return value;
   }
 
+  // TODO(Task 7): tools is ignored here; VertexProvider will be fully
+  // migrated to use toAnthropicBody / mapAnthropicSSE in Task 7.
   async *stream({
     model,
     messages,
+    tools: _tools,
     signal,
   }: {
     model: string;
     messages: ChatMessage[];
+    tools: ToolSpec[];
     signal: AbortSignal;
-  }): AsyncIterable<string> {
+  }): AsyncIterable<ProviderEvent> {
     const token = await this.accessToken();
     const isAnthropic = model.startsWith("claude-");
     const publisher = isAnthropic ? "anthropic" : "google";
@@ -110,6 +114,8 @@ export class VertexProvider implements ChatProvider {
       throw new Error(`Vertex ${resp.status}: ${detail || resp.statusText}`);
     }
 
+    // Temporary shims — Task 7 will migrate both branches to use
+    // mapAnthropicSSE (Anthropic) and a proper Gemini mapper.
     if (isAnthropic) {
       for await (const evt of readSSE(resp.body) as AsyncIterable<AnthropicVertexEvent>) {
         if (
@@ -117,14 +123,16 @@ export class VertexProvider implements ChatProvider {
           evt.delta?.type === "text_delta" &&
           evt.delta.text
         ) {
-          yield evt.delta.text;
+          yield { type: "text_delta", text: evt.delta.text };
         }
       }
+      yield { type: "stop", reason: "end_turn" };
     } else {
       for await (const evt of readSSE(resp.body) as AsyncIterable<GeminiEvent>) {
         const text = evt.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) yield text;
+        if (text) yield { type: "text_delta", text };
       }
+      yield { type: "stop", reason: "end_turn" };
     }
   }
 }

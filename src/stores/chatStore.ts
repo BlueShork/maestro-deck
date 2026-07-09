@@ -158,10 +158,17 @@ export const useChatStore = create<ChatState>()(
           const stream = provider.stream({
             model: get().currentModel,
             messages: contextMsg ? [systemMsg, contextMsg, ...history] : [systemMsg, ...history],
+            // Task 8 will populate tools from the tool registry; for now pass
+            // an empty list so the provider omits the tools field from the body.
+            tools: [],
             signal: abort.signal,
           });
 
-          for await (const delta of stream) {
+          for await (const event of stream) {
+            // Task 8 will handle tool_use and stop events fully; for now only
+            // text_delta is consumed to update the assistant message content.
+            if (event.type !== "text_delta") continue;
+            const delta = event.text;
             set((s) => ({
               messages: s.messages.map((m) => {
                 if (m.id !== assistantId) return m;

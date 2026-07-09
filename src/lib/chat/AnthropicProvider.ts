@@ -1,26 +1,12 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import type { ChatMessage } from "@/types/chat";
+import type { ChatMessage, ProviderEvent, ToolSpec } from "@/types/chat";
 
-import { messageText } from "./content";
+import { mapAnthropicSSE, toAnthropicBody } from "./anthropicSerde";
 import { modelsByProvider } from "./models";
 import type { ChatProvider } from "./provider";
 import { readSSE } from "./sse";
-
-interface AnthropicEvent {
-  type: string;
-  delta?: { type?: string; text?: string };
-}
-
-function buildSystemBlocks(messages: ChatMessage[]) {
-  const text = messages
-    .filter((m) => m.role === "system")
-    .map((m) => messageText(m))
-    .join("\n\n");
-  if (!text) return undefined;
-  return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
-}
 
 export class AnthropicProvider implements ChatProvider {
   readonly id = "anthropic" as const;
@@ -34,12 +20,19 @@ export class AnthropicProvider implements ChatProvider {
   async *stream({
     model,
     messages,
+    tools,
     signal,
   }: {
     model: string;
     messages: ChatMessage[];
+    tools: ToolSpec[];
     signal: AbortSignal;
-  }): AsyncIterable<string> {
+  }): AsyncIterable<ProviderEvent> {
+    const body = {
+      model,
+      ...toAnthropicBody(messages, tools, { vertex: false }),
+    };
+
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       signal,
@@ -50,20 +43,7 @@ export class AnthropicProvider implements ChatProvider {
         // Required when calling the API directly from a browser/webview.
         "anthropic-dangerous-direct-browser-access": "true",
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        stream: true,
-        // Mark the system prompt as cacheable — Anthropic hashes it and on
-        // subsequent requests within ~5 min reads from the cache, billing
-        // that portion at ~10% of the input rate. Requires the prompt to
-        // be ≥1024 tokens (Sonnet/Opus) or ≥2048 (Haiku); below that the
-        // marker is ignored, no harm done.
-        system: buildSystemBlocks(messages),
-        messages: messages
-          .filter((m) => m.role !== "system")
-          .map((m) => ({ role: m.role, content: messageText(m) })),
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!resp.ok || !resp.body) {
@@ -71,14 +51,6 @@ export class AnthropicProvider implements ChatProvider {
       throw new Error(`Anthropic ${resp.status}: ${detail || resp.statusText}`);
     }
 
-    for await (const evt of readSSE(resp.body) as AsyncIterable<AnthropicEvent>) {
-      if (
-        evt.type === "content_block_delta" &&
-        evt.delta?.type === "text_delta" &&
-        evt.delta.text
-      ) {
-        yield evt.delta.text;
-      }
-    }
+    yield* mapAnthropicSSE(readSSE(resp.body));
   }
 }
