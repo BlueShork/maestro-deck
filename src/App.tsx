@@ -9,6 +9,7 @@ import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
+import { TourOverlay } from "@/components/TourOverlay";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { Toaster } from "@/components/ui/Toast";
 import { openFlowFile } from "@/lib/flow-io";
@@ -27,6 +28,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast, useToastStore } from "@/stores/toastStore";
 import { useUpdateStore } from "@/stores/updateStore";
+import { useTourStore } from "@/stores/tourStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 /**
@@ -61,6 +63,14 @@ export default function App() {
   useEffect(() => {
     const last = useWorkspaceStore.getState().lastOpenFile;
     if (last) void openFlowFile(last, { silent: true });
+  }, []);
+
+  // First launch: start the onboarding tour once. `hasSeenTour` hydrates
+  // synchronously from localStorage, so it's correct on the first tick.
+  useEffect(() => {
+    if (!useTourStore.getState().hasSeenTour) {
+      useTourStore.getState().start();
+    }
   }, []);
 
   // Silent update check on startup. Skipped if the user disabled it in
@@ -332,6 +342,7 @@ export default function App() {
       </Routes>
       <UpdateDialog />
       <QuitConfirmDialog />
+      <TourOverlay />
       <Toaster />
     </>
   );
