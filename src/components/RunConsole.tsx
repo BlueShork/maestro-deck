@@ -242,7 +242,9 @@ const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunSta
         ? "✓"
         : step.status === "failed"
           ? "✗"
-          : " ";
+          : step.status === "skipped"
+            ? "⊘"
+            : " ";
   const colorClass =
     step.status === "done"
       ? "text-emerald-600 dark:text-emerald-400"
@@ -252,7 +254,12 @@ const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunSta
           ? "text-blue-600 dark:text-blue-400"
           : "text-muted-foreground";
   const label = humanLabel(step);
-  const duration = step.status === "running" ? "…" : formatDuration(step.durationMs);
+  const duration =
+    step.status === "running"
+      ? "…"
+      : step.status === "skipped"
+        ? "skipped"
+        : formatDuration(step.durationMs);
   return (
     <div className={cn("flex items-baseline gap-2 whitespace-pre", colorClass)}>
       <span className="w-3 text-center">{icon}</span>

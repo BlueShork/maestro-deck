@@ -144,6 +144,11 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         color: dark ? "rgb(252 165 165)" : "rgb(127 29 29)",
         fontWeight: "600",
       },
+      ".cm-gutterElement.cm-step-line-skipped": {
+        backgroundColor: dark ? "rgba(148,163,184,0.16)" : "rgba(100,116,139,0.14)",
+        color: dark ? "rgb(148 163 184)" : "rgb(71 85 105)",
+        fontWeight: "600",
+      },
       ".cm-gutterElement.cm-step-line-running": {
         backgroundColor: "rgba(59,130,246,0.22)",
         color: dark ? "rgb(147 197 253)" : "rgb(30 64 175)",

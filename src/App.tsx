@@ -15,7 +15,6 @@ import { Toaster } from "@/components/ui/Toast";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
-import { parseLine as parseRunLine } from "@/lib/runStepParser";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useReviewStore } from "@/stores/reviewStore";
@@ -54,7 +53,7 @@ export default function App() {
   const theme = useSettingsStore((s) => s.theme);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
-  const applyStepEvent = useRunStore((s) => s.applyEvent);
+  const ingestLine = useRunStore((s) => s.ingestLine);
   const setStopped = useRunStore((s) => s.setStopped);
 
   // Restore the last opened file from the previous session. The workspace
@@ -138,8 +137,7 @@ export default function App() {
     Promise.all([
       events.onRunnerStdout((line) => {
         appendLog("stdout", line);
-        const ev = parseRunLine(line);
-        if (ev) applyStepEvent(ev);
+        ingestLine(line);
       }),
       events.onRunnerStderr((line) => appendLog("stderr", line)),
       events.onRunnerExit(({ code }) => {
@@ -258,7 +256,7 @@ export default function App() {
     };
   }, [
     appendLog,
-    applyStepEvent,
+    ingestLine,
     setStopped,
     markDisconnected,
     appendSample,

@@ -18,7 +18,7 @@ import { Toolbar } from "@/components/Toolbar";
 import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ipc } from "@/lib/ipc";
-import { parseFlow } from "@/lib/flowAst";
+import { flowDisplayName, parseFlow } from "@/lib/flowAst";
 import { buildPartialFlow } from "@/lib/partialFlow";
 import { useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
@@ -113,10 +113,16 @@ export function MainView() {
         await writeTextFile(filePath, content);
         useFlowStore.getState().saved(filePath);
       }
-      const { content: c2 } = useFlowStore.getState();
+      const { content: c2, filePath: fp2 } = useFlowStore.getState();
       resetSteps();
       initSteps(parseFlow(c2).steps);
-      useRunStore.getState().setRunTarget({ path: folder, kind: "all" });
+      // Run All executes every flow in the folder through one runner process;
+      // only the open file's flow may drive the editor/console step states.
+      useRunStore.getState().setRunTarget({
+        path: folder,
+        kind: "all",
+        expectedFlow: flowDisplayName(c2, fp2),
+      });
       const pid = await ipc.runFlow(folder, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);

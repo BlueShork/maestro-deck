@@ -88,7 +88,7 @@ function renderCompletionDescription(completion: { description?: string }): Node
 
 const setActiveLine = StateEffect.define<number | null>();
 
-type StepStatus = "running" | "done" | "failed";
+type StepStatus = "running" | "done" | "failed" | "skipped";
 type StepStatusMap = Map<number, { status: StepStatus; endLine: number }>;
 
 const setStepStatuses = StateEffect.define<StepStatusMap>();
@@ -255,7 +255,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
     if (!view) return;
     const map: StepStatusMap = new Map();
     for (const s of steps) {
-      if (s.status === "running" || s.status === "done" || s.status === "failed") {
+      if (s.status !== "pending") {
         map.set(s.line, { status: s.status, endLine: s.endLine });
       }
     }
