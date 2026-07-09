@@ -31,6 +31,7 @@ pub mod vertex;
 pub mod video;
 mod web_session;
 pub mod workspace;
+pub mod workspace_fs;
 pub mod yaml;
 
 use tauri::{Emitter, Manager};
@@ -96,6 +97,8 @@ pub fn run() {
             bank::ipc::load_bank_image,
             bank::ipc::delete_bank_image,
             bank::ipc::delete_bank_device,
+            workspace_fs::read_workspace_file,
+            workspace_fs::write_workspace_file,
             list_workspace,
             start_metrics,
             stop_metrics,

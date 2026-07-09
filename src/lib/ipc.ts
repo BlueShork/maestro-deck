@@ -124,6 +124,10 @@ export const ipc = {
     call<void>("delete_bank_image", { workspace, deviceKey, name }),
   deleteBankDevice: (workspace: string, deviceKey: string) =>
     call<void>("delete_bank_device", { workspace, deviceKey }),
+  readWorkspaceFile: (workspace: string, relPath: string) =>
+    call<string>("read_workspace_file", { workspace, relPath }),
+  writeWorkspaceFile: (workspace: string, relPath: string, content: string) =>
+    call<void>("write_workspace_file", { workspace, relPath, content }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
   startStream: () => call<void>("start_stream"),
   stopStream: () => call<void>("stop_stream"),
