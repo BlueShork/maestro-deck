@@ -126,7 +126,7 @@ function Thumb({
             }
           }}
           className={cn(
-            "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium backdrop-blur transition-all",
+            "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium backdrop-blur transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             confirming
               ? "bg-red-500/90 text-white opacity-100"
               : "bg-background/70 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
@@ -410,7 +410,7 @@ export function ImageBankPage() {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-gradient-to-b from-muted/40 to-background px-3">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3">
         <Button
           size="icon"
           variant="ghost"
@@ -446,7 +446,7 @@ export function ImageBankPage() {
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Clear search"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -505,7 +505,7 @@ export function ImageBankPage() {
                   }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "group relative flex w-full items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-2 text-left transition-colors",
+                    "group relative flex w-full items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     active ? "bg-accent" : "hover:bg-accent/50",
                   )}
                 >
