@@ -126,7 +126,7 @@ function Thumb({
             }
           }}
           className={cn(
-            "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium backdrop-blur transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium backdrop-blur transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             confirming
               ? "bg-red-500/90 text-white opacity-100"
               : "bg-background/70 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
@@ -216,7 +216,7 @@ function Lightbox({
             type="button"
             onClick={() => setZoomed((z) => !z)}
             aria-label={zoomed ? "Fit to screen" : "Actual size"}
-            className="rounded-md p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            className="rounded-md p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             {zoomed ? <ZoomOut className="h-4 w-4" /> : <ZoomIn className="h-4 w-4" />}
           </button>
@@ -224,7 +224,7 @@ function Lightbox({
             type="button"
             onClick={onClose}
             aria-label="Close preview (Esc)"
-            className="rounded-md p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            className="rounded-md p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -247,7 +247,7 @@ function Lightbox({
               prev();
             }}
             aria-label="Previous"
-            className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white/80 backdrop-blur transition-colors hover:bg-white/20 hover:text-white"
+            className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white/80 backdrop-blur transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -280,7 +280,7 @@ function Lightbox({
               next();
             }}
             aria-label="Next"
-            className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white/80 backdrop-blur transition-colors hover:bg-white/20 hover:text-white"
+            className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white/80 backdrop-blur transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
