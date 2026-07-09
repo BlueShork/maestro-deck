@@ -718,7 +718,7 @@ export function DeviceView() {
       <canvas
         ref={canvasRef}
         className={cn(
-          "pointer-events-none rounded-lg bg-card shadow-2xl",
+          "pointer-events-none rounded-lg bg-black shadow-2xl",
           !hasFrame && "hidden",
           inspectEnabled && "cursor-crosshair",
         )}
