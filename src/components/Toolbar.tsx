@@ -107,7 +107,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-3">
         <div className="flex items-center gap-2">
           <Logo className="h-7 w-auto text-foreground" />
           <Separator orientation="vertical" className="mx-1 h-5" />

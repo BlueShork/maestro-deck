@@ -258,7 +258,7 @@ export function MainView() {
                         >
                           <PanelShell
                             id="device"
-                            className="items-center justify-center bg-muted/40 p-4"
+                            className="items-center justify-center bg-card p-4"
                           >
                             <DeviceView />
                           </PanelShell>
