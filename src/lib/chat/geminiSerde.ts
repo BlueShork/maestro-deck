@@ -103,6 +103,24 @@ function messageToGeminiTurns(msg: ChatMessage): GeminiTurn[] {
 }
 
 /**
+ * Merge adjacent Gemini turns with the same role by concatenating their parts.
+ * Prevents consecutive same-role turns that the Gemini API rejects.
+ */
+function mergeAdjacentGeminiTurns(turns: GeminiTurn[]): GeminiTurn[] {
+  if (turns.length === 0) return turns;
+  const merged: GeminiTurn[] = [];
+  for (const turn of turns) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.role === turn.role) {
+      prev.parts = [...prev.parts, ...turn.parts];
+    } else {
+      merged.push({ role: turn.role, parts: [...turn.parts] });
+    }
+  }
+  return merged;
+}
+
+/**
  * Build a Gemini generateContent request body from chat history and tools.
  */
 export function toGeminiBody(messages: ChatMessage[], tools: ToolSpec[]): object {
@@ -123,8 +141,11 @@ export function toGeminiBody(messages: ChatMessage[], tools: ToolSpec[]): object
     ? { role: "system", parts: [{ text: systemText }] }
     : undefined;
 
-  // Non-system messages → Gemini turns
-  const contents = messages.filter((m) => m.role !== "system").flatMap(messageToGeminiTurns);
+  // Non-system messages → Gemini turns (merge adjacent same-role turns so we
+  // never send consecutive user or model entries to the API).
+  const contents = mergeAdjacentGeminiTurns(
+    messages.filter((m) => m.role !== "system").flatMap(messageToGeminiTurns),
+  );
 
   // Tools → Gemini functionDeclarations format (omit when empty)
   const apiTools =

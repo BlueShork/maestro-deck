@@ -30,6 +30,9 @@ function waitForExit(): Promise<number | null> {
   });
 }
 
+/** Milliseconds to wait for the runner to stop after an abort before giving up. */
+const ABORT_DRAIN_TIMEOUT_MS = 10_000;
+
 export const tools = [
   {
     spec: {
@@ -45,7 +48,10 @@ export const tools = [
         required: ["path"],
       },
     } satisfies ToolSpec,
-    execute: async (input: { path: string; appId?: string }): Promise<string> => {
+    execute: async (
+      input: { path: string; appId?: string },
+      signal?: AbortSignal,
+    ): Promise<string> => {
       const ws = useWorkspaceStore.getState().folderPath;
       if (!ws) throw new Error("No workspace folder open — ask the user to open one.");
       const run = useRunStore.getState();
@@ -62,6 +68,8 @@ export const tools = [
         const logs = useRunStore.getState().logs;
         return logs.length ? logs[logs.length - 1].id : 0;
       })();
+
+      let pid: number;
       try {
         store.resetSteps();
         // Drive the editor highlighting only when Billy runs the open file.
@@ -69,14 +77,70 @@ export const tools = [
           store.initSteps(parseFlow(content).steps);
         }
         useRunStore.getState().setRunTarget({ path: abs, kind: "flow" });
-        const pid = await ipc.runFlow(abs, input.appId ?? useSettingsStore.getState().appId);
+        pid = await ipc.runFlow(abs, input.appId ?? useSettingsStore.getState().appId);
         useRunStore.getState().setRunning(pid);
         useRunStore.getState().appendLog("system", `[runner started pid ${pid} · ${abs} (Billy)]`);
       } catch (err) {
         useRunStore.getState().startFailed();
         throw err instanceof Error ? err : new Error(String(err));
       }
-      const exitCode = await waitForExit();
+
+      // Race waitForExit() against the AbortSignal so the chat Stop button
+      // doesn't leave the loop wedged forever.
+      const exitPromise = waitForExit();
+
+      let exitCode: number | null;
+      if (!signal) {
+        exitCode = await exitPromise;
+      } else {
+        exitCode = await new Promise<number | null>((resolve) => {
+          let settled = false;
+
+          // Listener: resolve immediately when exit arrives normally.
+          exitPromise.then((code) => {
+            if (!settled) {
+              settled = true;
+              resolve(code);
+            }
+          });
+
+          const onAbort = () => {
+            if (settled) return;
+
+            // Request stop and send IPC signal; don't throw — we still wait
+            // for the runner to exit, but with a bounded timeout.
+            useRunStore.getState().requestStop();
+            void ipc.stopFlow(pid).catch(() => {});
+
+            // Bounded drain: if the backend dies and runner:exit never fires,
+            // give up after ABORT_DRAIN_TIMEOUT_MS and resolve with current state.
+            const timer = setTimeout(() => {
+              if (!settled) {
+                settled = true;
+                resolve(useRunStore.getState().exitCode);
+              }
+            }, ABORT_DRAIN_TIMEOUT_MS);
+
+            exitPromise.then((code) => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                resolve(code);
+              }
+            });
+          };
+
+          if (signal.aborted) {
+            onAbort();
+          } else {
+            signal.addEventListener("abort", onAbort, { once: true });
+            exitPromise.then(() => {
+              signal.removeEventListener("abort", onAbort);
+            });
+          }
+        });
+      }
+
       const { logs, stopRequested } = useRunStore.getState();
       const tail = logs
         .filter((l) => l.id > logWatermark)

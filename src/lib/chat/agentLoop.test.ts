@@ -113,9 +113,9 @@ describe("runAgentLoop", () => {
       runAgentLoop({ ...baseArgs, provider, signal: makeSignal(), execute }),
     );
 
-    // execute was called with name + input
+    // execute was called with name + input + signal
     expect(execute).toHaveBeenCalledOnce();
-    expect(execute).toHaveBeenCalledWith("tap", { x: 1, y: 2 });
+    expect(execute).toHaveBeenCalledWith("tap", { x: 1, y: 2 }, expect.any(AbortSignal));
 
     // tool_result event yielded
     const trEvent = events.find((e) => e.type === "tool_result");

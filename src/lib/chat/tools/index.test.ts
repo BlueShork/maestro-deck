@@ -3,6 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useRunStore } from "@/stores/runStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { WorkspaceNode } from "@/types";
 
@@ -16,6 +17,7 @@ vi.mock("@/lib/ipc", () => ({
     writeWorkspaceFile: vi.fn(),
     listWorkspace: vi.fn(),
     runFlow: vi.fn(),
+    stopFlow: vi.fn(),
   },
 }));
 
@@ -97,7 +99,85 @@ describe("Tool registry", () => {
     }
   });
 
-  // Test 5: executeTool("list_flows") with stubbed workspace returns sorted relative paths
+  // Test 5: run_flow aborts cleanly when signal fires mid-run
+  describe("run_flow abort handling", () => {
+    let prevRunState: ReturnType<typeof useRunStore.getState>;
+
+    beforeEach(async () => {
+      prevRunState = useRunStore.getState();
+    });
+
+    afterEach(() => {
+      // Restore run store to pre-test state
+      useRunStore.setState({
+        running: prevRunState.running,
+        starting: prevRunState.starting,
+        pid: prevRunState.pid,
+        exitCode: prevRunState.exitCode,
+        stopRequested: prevRunState.stopRequested,
+        logs: prevRunState.logs,
+        steps: prevRunState.steps,
+        runTarget: prevRunState.runTarget,
+      });
+    });
+
+    it("calls stopFlow and resolves with stoppedByUser:true when signal aborts mid-run", async () => {
+      const { ipc } = await import("@/lib/ipc");
+      const stopFlowMock = vi.mocked(ipc.stopFlow);
+      stopFlowMock.mockResolvedValue(undefined as never);
+
+      const readMock = vi.mocked(ipc.readWorkspaceFile);
+      readMock.mockResolvedValue("appId: com.example\n---\n- launchApp:\n    appId: com.example");
+
+      const runFlowMock = vi.mocked(ipc.runFlow);
+      runFlowMock.mockResolvedValue(123);
+
+      // Set workspace so the tool doesn't throw
+      const prevWs = useWorkspaceStore.getState().folderPath;
+      useWorkspaceStore.setState({ folderPath: "/ws" });
+
+      const ac = new AbortController();
+
+      // Start the tool; after setRunning fires, abort the signal, then simulate runner exit
+      const toolPromise = executeTool("run_flow", { path: "test.yaml" }, ac.signal);
+
+      // Wait until the store shows running with pid 123, then abort and simulate stop
+      await new Promise<void>((resolve) => {
+        const unsub = useRunStore.subscribe((s) => {
+          if (s.running && s.pid === 123) {
+            unsub();
+            resolve();
+          }
+        });
+        // Check immediately in case already set
+        if (useRunStore.getState().running && useRunStore.getState().pid === 123) {
+          unsub();
+          resolve();
+        }
+      });
+
+      // Abort the signal — triggers stopFlow + bounded wait
+      ac.abort();
+
+      // Give the abort handler a tick to register, then simulate the runner stopping
+      await Promise.resolve();
+      useRunStore.getState().setStopped(1);
+
+      const result = await toolPromise;
+      expect(result.isError).toBe(false);
+      const parsed = JSON.parse(result.content as string) as {
+        exitCode: number | null;
+        stoppedByUser: boolean;
+        tail: string;
+      };
+      expect(parsed.stoppedByUser).toBe(true);
+      expect(stopFlowMock).toHaveBeenCalledWith(123);
+
+      useWorkspaceStore.setState({ folderPath: prevWs });
+    });
+  });
+
+  // Test 6: executeTool("list_flows") with stubbed workspace returns sorted relative paths
   describe("list_flows with stubbed workspace", () => {
     let prevFolderPath: string | null;
     let prevTree: WorkspaceNode | null;

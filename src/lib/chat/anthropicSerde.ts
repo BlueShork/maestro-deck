@@ -100,6 +100,33 @@ function messageToTurns(msg: ChatMessage): ApiTurn[] {
   return splitBlocksToTurns(msg.content);
 }
 
+/** Normalize a turn's content to an array of block objects (never a plain string). */
+function normalizeContent(content: unknown): unknown[] {
+  if (typeof content === "string") {
+    return [{ type: "text", text: content }];
+  }
+  return content as unknown[];
+}
+
+/**
+ * Merge adjacent turns with the same role by concatenating their content
+ * arrays. This prevents consecutive same-role turns that the API rejects
+ * (e.g. a tool_result user turn immediately followed by a new user message).
+ */
+function mergeAdjacentTurns(turns: ApiTurn[]): ApiTurn[] {
+  if (turns.length === 0) return turns;
+  const merged: ApiTurn[] = [];
+  for (const turn of turns) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.role === turn.role) {
+      prev.content = [...normalizeContent(prev.content), ...normalizeContent(turn.content)];
+    } else {
+      merged.push({ role: turn.role, content: turn.content });
+    }
+  }
+  return merged;
+}
+
 export interface ToAnthropicBodyOpts {
   /** When true: include `anthropic_version`, omit `model` (Vertex Claude). */
   vertex: boolean;
@@ -134,8 +161,11 @@ export function toAnthropicBody(
     ? [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }]
     : undefined;
 
-  // Non-system messages → API turns
-  const apiTurns = messages.filter((m) => m.role !== "system").flatMap(messageToTurns);
+  // Non-system messages → API turns (merge adjacent same-role turns so we
+  // never send consecutive user or assistant entries to the API).
+  const apiTurns = mergeAdjacentTurns(
+    messages.filter((m) => m.role !== "system").flatMap(messageToTurns),
+  );
 
   // Tools → Anthropic format (omit entirely when empty)
   const apiTools =

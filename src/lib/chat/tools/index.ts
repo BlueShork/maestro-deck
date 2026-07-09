@@ -10,7 +10,7 @@ import { tools as screenTools } from "./screen";
 
 interface ToolImpl {
   spec: ToolSpec;
-  execute: (input: never) => Promise<string | ImagePart>;
+  execute: (input: never, signal?: AbortSignal) => Promise<string | ImagePart>;
 }
 
 const registry = new Map<string, ToolImpl>(
@@ -27,11 +27,12 @@ export const ALL_TOOLS: ToolSpec[] = [...registry.values()].map((t) => t.spec);
 export async function executeTool(
   name: string,
   input: unknown,
+  signal?: AbortSignal,
 ): Promise<{ content: string | ImagePart; isError: boolean }> {
   const tool = registry.get(name);
   if (!tool) return { content: `Unknown tool: ${name}`, isError: true };
   try {
-    const content = await tool.execute((input ?? {}) as never);
+    const content = await tool.execute((input ?? {}) as never, signal);
     return { content, isError: false };
   } catch (err) {
     return { content: err instanceof Error ? err.message : String(err), isError: true };

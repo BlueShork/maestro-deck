@@ -156,6 +156,49 @@ describe("toGeminiBody", () => {
     const body = toGeminiBody(messages, []) as Record<string, unknown>;
     expect(body.tools).toBeUndefined();
   });
+
+  it("merges adjacent same-role turns: tool_result user turn followed by next user message produces a single user turn", () => {
+    // Simulate a persisted assistant block ending in tool_result (which serializes to a
+    // trailing `user` turn), followed by a plain user string message.
+    const messages: ChatMessage[] = [
+      {
+        id: "a",
+        role: "assistant",
+        content: [
+          { type: "text", text: "Running the flow." },
+          { type: "tool_use", id: "call_0", name: "run_flow", input: { path: "test.yaml" } },
+          {
+            type: "tool_result",
+            toolUseId: "call_0",
+            name: "run_flow",
+            content: '{"exitCode":0,"stoppedByUser":false,"tail":""}',
+          },
+        ],
+        createdAt: 1,
+      },
+      // Next user send — without merging this becomes a second consecutive `user` turn.
+      { id: "u2", role: "user", content: "Great, now run the next flow.", createdAt: 2 },
+    ];
+
+    const body = toGeminiBody(messages, []) as Record<string, unknown>;
+    const contents = body.contents as Array<{ role: string; parts: unknown[] }>;
+
+    // Should be: model (text+functionCall), user (functionResponse + new text) — no adjacent user turns
+    expect(contents).toHaveLength(2);
+    expect(contents[0].role).toBe("model");
+    expect(contents[1].role).toBe("user");
+
+    // The merged user turn must contain both the functionResponse AND the new user text part
+    const userParts = contents[1].parts;
+    const hasFunctionResponse = userParts.some(
+      (p) => (p as Record<string, unknown>).functionResponse !== undefined,
+    );
+    const hasUserText = userParts.some(
+      (p) => (p as Record<string, unknown>).text === "Great, now run the next flow.",
+    );
+    expect(hasFunctionResponse).toBe(true);
+    expect(hasUserText).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ export interface AgentLoopArgs {
   execute: (
     name: string,
     input: unknown,
+    signal?: AbortSignal,
   ) => Promise<{ content: string | ImagePart; isError: boolean }>;
 }
 
@@ -83,7 +84,7 @@ export async function* runAgentLoop(args: AgentLoopArgs): AsyncGenerator<AgentEv
     for (const tu of toolUses) {
       yield { type: "tool_use", block: tu };
       if (signal.aborted) return;
-      const { content, isError } = await execute(tu.name, tu.input);
+      const { content, isError } = await execute(tu.name, tu.input, signal);
       const result: ContentBlock = {
         type: "tool_result",
         toolUseId: tu.id,

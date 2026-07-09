@@ -156,6 +156,54 @@ describe("toAnthropicBody", () => {
     const body = toAnthropicBody(messages, [], { vertex: false }) as Record<string, unknown>;
     expect("anthropic_version" in body).toBe(false);
   });
+
+  it("merges adjacent same-role turns: tool_result user turn followed by next user message produces a single user turn", () => {
+    // Simulate a persisted assistant block ending in tool_result (which serializes to a
+    // trailing `user` turn), followed by a plain user string message — the classic
+    // consecutive same-role scenario.
+    const messages: ChatMessage[] = [
+      {
+        id: "a",
+        role: "assistant",
+        content: [
+          { type: "text", text: "Running the flow." },
+          { type: "tool_use", id: "tu1", name: "run_flow", input: { path: "test.yaml" } },
+          {
+            type: "tool_result",
+            toolUseId: "tu1",
+            name: "run_flow",
+            content: '{"exitCode":0,"stoppedByUser":false,"tail":""}',
+            isError: false,
+          },
+        ],
+        createdAt: 1,
+      },
+      // This plain user message comes from the NEXT send — would be a second `user` turn
+      // without merging.
+      { id: "u2", role: "user", content: "Great, now run the next flow.", createdAt: 2 },
+    ];
+
+    const body = toAnthropicBody(messages, [], { vertex: false }) as Record<string, unknown>;
+    const turns = body.messages as Array<{ role: string; content: unknown[] }>;
+
+    // Should be: assistant (text+tool_use), user (tool_result + new text) — NO adjacent user turns
+    expect(turns).toHaveLength(2);
+    expect(turns[0].role).toBe("assistant");
+    expect(turns[1].role).toBe("user");
+
+    // The merged user turn must contain both the tool_result block AND the new user text
+    const userContent = turns[1].content;
+    const hasToolResult = userContent.some(
+      (c) => (c as Record<string, unknown>).type === "tool_result",
+    );
+    const hasUserText = userContent.some(
+      (c) =>
+        (c as Record<string, unknown>).type === "text" &&
+        (c as Record<string, unknown>).text === "Great, now run the next flow.",
+    );
+    expect(hasToolResult).toBe(true);
+    expect(hasUserText).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
