@@ -107,6 +107,7 @@ pub fn run() {
             delete_credential,
             get_tool_paths,
             set_tool_paths,
+            env_check::environment_status,
         ])
         .setup(|app| {
             ipc::register_events(app)?;
