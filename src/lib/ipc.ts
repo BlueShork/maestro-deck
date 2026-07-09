@@ -99,6 +99,17 @@ export const ipc = {
     platform: Platform;
     ignoreStatusBar: boolean;
   }) => call<RunReport>("compare_screenshots", args),
+  compareScreenshotsAll: (args: {
+    workspace: string;
+    model: string;
+    width: number;
+    height: number;
+    tolerance: number;
+    threshold: number;
+    runId: string;
+    platform: Platform;
+    ignoreStatusBar: boolean;
+  }) => call<RunReport>("compare_screenshots_all", args),
   resolveComparison: (args: {
     workspace: string;
     runId: string;

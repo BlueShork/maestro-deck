@@ -13,6 +13,7 @@ import { SetupPopup } from "@/components/SetupPopup";
 import { TourOverlay } from "@/components/TourOverlay";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { Toaster } from "@/components/ui/Toast";
+import { summarizeBankReport } from "@/lib/bankReport";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
@@ -156,68 +157,37 @@ export default function App() {
           const target = useRunStore.getState().runTarget;
           const ws = useWorkspaceStore.getState().folderPath;
           const device = useDeviceStore.getState().current;
-          if (target?.kind === "all") {
-            appendLog(
-              "system",
-              "[bank] comparaison de banque ignorée pour Run All (non supporté dans cette version)",
-            );
-          } else if (target?.kind === "flow" && ws && device) {
+          if ((target?.kind === "all" || target?.kind === "flow") && ws && device) {
             const { tolerance, threshold } = effectiveThresholds();
             const runId = String(exitedPid ?? Date.now());
-            // Surface a persistent "checking…" toast so the review modal never
-            // pops out of nowhere — the user knows a bank comparison is running
-            // and gets a summary (or the review) when it finishes.
             const bankToastId = toast.loading(
               "Checking screenshot bank…",
               "Comparing captures against their baselines",
             );
             appendLog("system", "[bank] verifying screenshots against the bank…");
-            void ipc
-              .compareScreenshots({
-                workspace: ws,
-                flowPath: target.path,
-                model: device.model,
-                width: device.screen_width,
-                height: device.screen_height,
-                tolerance,
-                threshold,
-                runId,
-                platform: device.platform,
-                ignoreStatusBar: useVisualRegressionStore.getState().ignoreStatusBar,
-              })
+            const common = {
+              workspace: ws,
+              model: device.model,
+              width: device.screen_width,
+              height: device.screen_height,
+              tolerance,
+              threshold,
+              runId,
+              platform: device.platform,
+              ignoreStatusBar: useVisualRegressionStore.getState().ignoreStatusBar,
+            };
+            const compare =
+              target.kind === "all"
+                ? ipc.compareScreenshotsAll(common)
+                : ipc.compareScreenshots({ ...common, flowPath: target.path });
+            void compare
               .then((report) => {
                 toast.dismiss(bankToastId);
-                const comps = report.comparisons;
-                const reviewable = comps.filter(
-                  (c) => c.status === "changed" || c.status === "dimension_mismatch",
-                ).length;
-                const seeded = comps.filter((c) => c.status === "seeded").length;
-                const missing = comps.filter((c) => c.status === "missing").length;
-                const matched = comps.filter((c) => c.status === "match").length;
-                if (seeded > 0)
-                  appendLog("system", `[bank] ${seeded} reference screenshot(s) created`);
-                if (missing > 0)
-                  appendLog("system", `[bank] ${missing} expected screenshot(s) missing`);
-                appendLog(
-                  "system",
-                  `[bank] ${matched} match · ${reviewable} changed · ${seeded} new · ${missing} missing`,
-                );
-                if (reviewable > 0) {
-                  // The review modal is about to open — tell the user why.
-                  toast.info(
-                    "Screenshot changes detected",
-                    `${reviewable} screenshot(s) need review — opening…`,
-                  );
-                } else {
-                  const parts: string[] = [];
-                  if (matched > 0) parts.push(`${matched} match`);
-                  if (seeded > 0) parts.push(`${seeded} new`);
-                  if (missing > 0) parts.push(`${missing} missing`);
-                  toast.success(
-                    "Screenshot bank ✓",
-                    parts.length ? parts.join(" · ") : "No screenshots in this flow",
-                  );
-                }
+                const summary = summarizeBankReport(report);
+                summary.logLines.forEach((l) => appendLog("system", l));
+                if (summary.toast.kind === "info")
+                  toast.info(summary.toast.title, summary.toast.detail);
+                else toast.success(summary.toast.title, summary.toast.detail);
                 useReviewStore.getState().setReport(report);
               })
               .catch((err) => {

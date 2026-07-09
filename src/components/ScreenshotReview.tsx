@@ -193,6 +193,11 @@ export function ScreenshotReview() {
           <div className="flex items-center justify-between gap-3 pr-6">
             <DialogTitle className="flex items-center gap-2 text-base">
               Visual regression
+              {comp.flow && (
+                <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] font-normal text-emerald-600 dark:text-emerald-400">
+                  {comp.flow}
+                </span>
+              )}
               <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-normal">
                 {name}
               </code>

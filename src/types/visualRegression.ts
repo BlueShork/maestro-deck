@@ -5,6 +5,8 @@ export type ComparisonStatus = "seeded" | "match" | "changed" | "missing" | "dim
 
 export interface Comparison {
   name: string;
+  /** Flow file stem (Run All comparisons only). */
+  flow?: string;
   status: ComparisonStatus;
   changed_ratio: number;
   bbox: [number, number, number, number] | null;
@@ -17,6 +19,8 @@ export interface RunReport {
   run_id: string;
   device_key: string;
   comparisons: Comparison[];
+  /** Per-flow comparison failures (Run All only; absent when clean). */
+  flow_errors?: string[];
 }
 
 export interface BankImage {
