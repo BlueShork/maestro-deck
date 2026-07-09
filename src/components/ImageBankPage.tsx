@@ -29,7 +29,9 @@ import type { BankGroup, BankImage } from "@/types/visualRegression";
 function parseDeviceKey(key: string): { name: string; resolution: string; ios: boolean } {
   const m = key.match(/^(.*)_(\d+)x(\d+)$/);
   const name = (m ? m[1] : key).replace(/_/g, " ").trim();
-  const resolution = m ? `${m[2]}×${m[3]}` : "";
+  // Older iOS banks were keyed `_0x0` (device reported no resolution) — don't
+  // surface a meaningless "0×0".
+  const resolution = m && !(m[2] === "0" && m[3] === "0") ? `${m[2]}×${m[3]}` : "";
   const ios = /iphone|ipad|ipod|ios/i.test(name);
   return { name, resolution, ios };
 }
