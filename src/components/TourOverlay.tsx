@@ -1,11 +1,10 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import React, { useCallback, useEffect, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { TOUR_STEPS } from "@/lib/tourSteps";
-import { cn } from "@/lib/utils";
 import { usePanelsStore } from "@/stores/panelsStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTourStore } from "@/stores/tourStore";
@@ -115,7 +114,7 @@ export function TourOverlay() {
     : null;
 
   // Bubble position: below/right of the ring when there's room, else centered.
-  const bubbleStyle: React.CSSProperties = ring
+  const bubbleStyle: CSSProperties = ring
     ? {
         top: Math.min(ring.top + ring.height + 12, window.innerHeight - 220),
         left: Math.min(Math.max(12, ring.left), window.innerWidth - 372),
@@ -123,7 +122,7 @@ export function TourOverlay() {
     : { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
 
   return (
-    <div className={cn("fixed inset-0 z-[100]")}>
+    <div className="fixed inset-0 z-[100]">
       {/* Dim layer. When we have a ring, a box-shadow "punches" the spotlight
           hole; otherwise a flat dim covers everything. */}
       {ring ? (

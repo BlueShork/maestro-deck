@@ -27,8 +27,8 @@ import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast, useToastStore } from "@/stores/toastStore";
-import { useUpdateStore } from "@/stores/updateStore";
 import { useTourStore } from "@/stores/tourStore";
+import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 /**
