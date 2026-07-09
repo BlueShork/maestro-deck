@@ -92,7 +92,7 @@ function Thumb({
 
   return (
     <div
-      className="group animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/5"
+      className="group animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-lg"
       style={{ animationDelay: `${Math.min(index, 14) * 35}ms` }}
     >
       {/* Screen mat */}
@@ -420,7 +420,7 @@ export function ImageBankPage() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500 ring-1 ring-emerald-500/20">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-foreground ring-1 ring-border">
           <Layers className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -510,7 +510,7 @@ export function ImageBankPage() {
                   )}
                 >
                   {active && (
-                    <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-emerald-500" />
+                    <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground/40" />
                   )}
                   <span
                     className={cn(
@@ -530,7 +530,7 @@ export function ImageBankPage() {
                     className={cn(
                       "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
                       active
-                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        ? "bg-foreground/10 text-foreground"
                         : "bg-muted text-muted-foreground",
                     )}
                   >

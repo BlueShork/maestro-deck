@@ -509,7 +509,7 @@ function TreeItem({
             onContextMenu={(e) => e.stopPropagation()}
           >
             {isActive && (
-              <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-emerald-500" />
+              <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground/40" />
             )}
             <button
               type="button"
@@ -524,7 +524,7 @@ function TreeItem({
               <FileCode2
                 className={cn(
                   "h-3.5 w-3.5 shrink-0",
-                  isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+                  isActive ? "text-foreground" : "text-muted-foreground",
                 )}
               />
               <span className="truncate">{node.name}</span>
