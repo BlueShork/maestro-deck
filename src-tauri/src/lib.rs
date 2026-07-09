@@ -8,6 +8,7 @@ pub mod avf_capture;
 pub mod bank;
 pub mod credentials;
 pub mod device;
+mod env_check;
 mod env_shim;
 pub mod error;
 pub mod hierarchy;

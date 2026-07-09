@@ -1072,7 +1072,7 @@ pub fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult
 }
 
 /// Extract the first `x.y.z` semver from arbitrary `maestro --version` output.
-fn parse_maestro_version(out: &str) -> Option<String> {
+pub(crate) fn parse_maestro_version(out: &str) -> Option<String> {
     let bytes = out.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
