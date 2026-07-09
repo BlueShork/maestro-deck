@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { ChatMessage as ChatMessageT } from "@/types/chat";
+import { messageText } from "@/lib/chat/content";
 
 import { CodeBlock } from "./CodeBlock";
 
@@ -44,7 +45,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
-          {message.content}
+          {messageText(message)}
         </div>
       </div>
     );
@@ -57,7 +58,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
         <div className="mb-1 text-[11px] font-medium text-muted-foreground">Billy</div>
-        {message.content ? (
+        {messageText(message) ? (
           <div className="text-sm leading-relaxed text-foreground">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -151,7 +152,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
                 ),
               }}
             >
-              {message.content}
+              {messageText(message)}
             </ReactMarkdown>
           </div>
         ) : (
