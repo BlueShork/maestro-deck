@@ -54,7 +54,7 @@ export function GeneralSettings() {
                   type="button"
                   onClick={() => setTheme(value)}
                   className={cn(
-                    "flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
+                    "flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     active
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
@@ -85,7 +85,7 @@ export function GeneralSettings() {
             value={inspectKey}
             maxLength={1}
             onChange={(e) => setInspectKey(e.currentTarget.value.toLowerCase() || "i")}
-            className="w-12 rounded border border-border bg-background px-2 py-1 text-center font-mono text-xs"
+            className="w-12 rounded border border-border bg-background px-2 py-1 text-center font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
       </SettingsSubgroup>
@@ -98,7 +98,7 @@ export function GeneralSettings() {
             value={appId}
             placeholder="com.example.app"
             onChange={(e) => setAppId(e.currentTarget.value)}
-            className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+            className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <span className="text-xs text-muted-foreground">
             Passed to maestro as <code>-e APP_ID=…</code> on every run, so flows that reference{" "}

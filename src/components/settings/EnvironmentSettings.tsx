@@ -35,7 +35,11 @@ export function EnvironmentSettings() {
         ) : (
           checks.map((c) => (
             <div key={c.id} className="flex items-start gap-2 text-xs">
-              <span className={c.status === "ok" ? "text-green-600" : "text-destructive"}>
+              <span
+                className={
+                  c.status === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                }
+              >
                 {c.status === "ok" ? "✓" : "✗"}
               </span>
               <span className="flex-1">
@@ -53,7 +57,7 @@ export function EnvironmentSettings() {
             type="button"
             onClick={() => void refresh()}
             disabled={checking}
-            className="rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+            className="rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {checking ? "Checking…" : "Re-check"}
           </button>

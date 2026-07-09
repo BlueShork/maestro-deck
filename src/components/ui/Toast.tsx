@@ -79,7 +79,7 @@ export function Toaster() {
             ) : null}
           </div>
           {t.variant !== "success" && t.variant !== "action" ? (
-            <ToastPrimitive.Close className="opacity-60 transition-opacity hover:opacity-100">
+            <ToastPrimitive.Close className="opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <X className="h-3.5 w-3.5" />
             </ToastPrimitive.Close>
           ) : null}

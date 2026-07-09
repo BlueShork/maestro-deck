@@ -65,7 +65,7 @@ function CheckRow({
             type="button"
             onClick={() => void install(check.id as "maestro" | "java")}
             disabled={installingId !== null}
-            className="rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+            className="rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Install
           </button>
@@ -76,7 +76,7 @@ function CheckRow({
             title={MANUAL_COMMANDS[check.id]}
             aria-label={`Copy install command for ${check.id}`}
             onClick={() => void navigator.clipboard.writeText(MANUAL_COMMANDS[check.id] ?? "")}
-            className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Copy className="h-3 w-3" />
           </button>
@@ -159,7 +159,7 @@ export function SetupPopup() {
         type="button"
         data-setup-popup
         onClick={() => setCollapsed(false)}
-        className="fixed bottom-4 right-4 z-[70] flex items-center gap-2 rounded-full border border-amber-500/40 bg-card px-3 py-1.5 text-xs shadow-lg"
+        className="fixed bottom-4 right-4 z-[70] flex items-center gap-2 rounded-full border border-amber-500/40 bg-card px-3 py-1.5 text-xs shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="text-amber-500">⚠</span>
         Setup incomplete ({okCount}/{blockingChecks.length})
@@ -184,7 +184,7 @@ export function SetupPopup() {
               type="button"
               aria-label="Collapse"
               onClick={() => setCollapsed(true)}
-              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              className="rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
@@ -211,7 +211,7 @@ export function SetupPopup() {
               type="button"
               onClick={() => void refresh()}
               disabled={checking}
-              className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+              className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {checking ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               Re-check

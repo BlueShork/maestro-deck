@@ -141,7 +141,7 @@ export function TourOverlay() {
       )}
 
       <div
-        className="pointer-events-auto absolute w-[360px] rounded-lg border border-border bg-background p-4 shadow-xl"
+        className="pointer-events-auto absolute w-[360px] rounded-lg border border-border bg-popover p-4 shadow-xl"
         style={bubbleStyle}
       >
         <div className="mb-1 text-xs font-medium text-muted-foreground">
@@ -153,7 +153,7 @@ export function TourOverlay() {
           <button
             type="button"
             onClick={skip}
-            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Skip tour
           </button>
