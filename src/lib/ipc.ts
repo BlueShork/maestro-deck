@@ -288,4 +288,12 @@ export const events = {
           height: e.payload.height,
         }),
     ),
+  onWebStatus: (
+    handler: (p: { stage: "info" | "warn" | "error"; message: string }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ stage: "info" | "warn" | "error"; message: string }>("web:status", (e) =>
+      handler(e.payload),
+    ),
+  onWebTapFallback: (handler: () => void): Promise<UnlistenFn> =>
+    listen<null>("web:tap_fallback", () => handler()),
 };

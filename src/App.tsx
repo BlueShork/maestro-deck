@@ -199,6 +199,16 @@ export default function App() {
         }
       }),
       events.onDeviceDisconnected(() => markDisconnected()),
+      events.onWebStatus((p) => {
+        if (p.stage === "error") toast.error("Web browser", p.message);
+        else toast.info("Web browser", p.message);
+      }),
+      events.onWebTapFallback(() => {
+        toast.info(
+          "Tap sent as coordinates",
+          "The page snapshot wasn't available — the tap may be less precise.",
+        );
+      }),
       events.onMetricsSample((p) =>
         appendSample({
           ts: p.ts,
