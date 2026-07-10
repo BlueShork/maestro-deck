@@ -45,8 +45,17 @@ struct AxElement {
 
 /// XCUIElement.ElementType raw values (subset) considered tappable.
 /// Heuristic for `clickable`, since iOS has no clickable flag.
+///
+/// Text-input types (45 searchField, 49 textField, 50 secureTextField,
+/// 52 textView) are included: an EMPTY input exposes no label/value/id at
+/// all (verified against a live RN sheet), so without the clickable flag it
+/// carries zero signal and downstream consumers (Billy's compacted
+/// get_screen) prune it — making form fields invisible to the agent.
 fn is_interactive(element_type: i64) -> bool {
-    matches!(element_type, 9 | 10 | 12 | 13 | 33 | 34 | 35 | 53 | 56 | 58)
+    matches!(
+        element_type,
+        9 | 10 | 12 | 13 | 33 | 34 | 35 | 45 | 49 | 50 | 52 | 53 | 56 | 58
+    )
 }
 
 /// Human-readable class name for a subset of XCUIElement.ElementType values.
@@ -172,6 +181,32 @@ mod tests {
     use crate::hierarchy::walk;
 
     const FIXTURE: &str = include_str!("../../tests/fixtures/ios_hierarchy.json");
+
+    /// An EMPTY text field exposes no label/value/identifier at all (verified
+    /// against a live RN login sheet). The clickable flag from its element
+    /// type is then its only signal — without it, compaction-style consumers
+    /// prune the field and form inputs become invisible.
+    #[test]
+    fn empty_text_inputs_are_clickable() {
+        let json = r#"{"axElement":{"elementType":4,"frame":{"X":0,"Y":0,"Width":402,"Height":874},"children":[
+            {"elementType":49,"frame":{"X":34,"Y":545,"Width":334,"Height":24}},
+            {"elementType":50,"frame":{"X":34,"Y":604,"Width":334,"Height":22}}
+        ]}}"#;
+        let tree = parse_ios_axelement(json, None).expect("parse");
+        let root = tree.root.as_ref().expect("root");
+        assert_eq!(root.children.len(), 2);
+        let field = &root.children[0];
+        assert_eq!(field.class_name, "TextField");
+        assert_eq!(field.text, None);
+        assert_eq!(field.resource_id, None);
+        assert!(field.clickable, "empty TextField (49) must be clickable");
+        let secure = &root.children[1];
+        assert_eq!(secure.class_name, "SecureTextField");
+        assert!(
+            secure.clickable,
+            "empty SecureTextField (50) must be clickable"
+        );
+    }
 
     #[test]
     fn maps_axelement_fields_to_uinode() {
