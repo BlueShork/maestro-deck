@@ -277,6 +277,14 @@ pub async fn spawn_web_runner(
             }
         };
         RUNNERS.lock().await.remove(&pid);
+        // Run finished — let inspect/tap re-spawn the web keeper again.
+        {
+            use tauri::Manager;
+            app_exit
+                .state::<crate::state::AppState>()
+                .web_run_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
         let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
     });
 

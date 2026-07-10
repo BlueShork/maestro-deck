@@ -493,6 +493,14 @@ async fn ensure_web_keeper(
     app: Option<&AppHandle>,
     state: &AppState,
 ) -> AppResult<std::sync::Arc<crate::web_session::WebStudioKeeper>> {
+    use std::sync::atomic::Ordering::SeqCst;
+    if state.web_run_active.load(SeqCst) {
+        return Err(AppError::Other(
+            "a web flow run is in progress — wait for it to finish before \
+             inspecting or interacting"
+                .into(),
+        ));
+    }
     let mut slot = state.web_driver.lock().await;
     let alive = match slot.as_ref() {
         Some(k) => k.http().is_alive().await,
@@ -502,10 +510,25 @@ async fn ensure_web_keeper(
         if let Some(existing) = slot.take() {
             existing.stop().await;
         }
-        let keeper =
-            crate::web_session::WebStudioKeeper::start(crate::web_session::STUDIO_PORT, url, app)
-                .await?;
-        *slot = Some(keeper);
+        // Exponential backoff after consecutive start failures so a broken
+        // maestro install doesn't get hammered in a respawn loop.
+        let fails = state.web_respawn_fails.load(SeqCst);
+        if fails > 0 {
+            let delay = 1u64 << (fails - 1).min(2); // 1 s, 2 s, 4 s (capped)
+            tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+        }
+        match crate::web_session::WebStudioKeeper::start(crate::web_session::STUDIO_PORT, url, app)
+            .await
+        {
+            Ok(keeper) => {
+                state.web_respawn_fails.store(0, SeqCst);
+                *slot = Some(keeper);
+            }
+            Err(e) => {
+                state.web_respawn_fails.fetch_add(1, SeqCst);
+                return Err(e);
+            }
+        }
     }
     Ok(slot.as_ref().unwrap().clone())
 }
@@ -994,7 +1017,19 @@ pub async fn run_flow(
         // flow's `url:` header. Pause the studio keeper so its browser doesn't
         // contend with the one `maestro test` launches.
         teardown_web(state.inner()).await;
-        return runner::spawn_web_runner(app, &file_path, app_id).await;
+        // Mark the run active so inspect/tap can't re-spawn a competing keeper
+        // (and a second Chromium) mid-run. Cleared by the runner's exit task —
+        // or here if the spawn itself fails.
+        state
+            .web_run_active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let spawned = runner::spawn_web_runner(app, &file_path, app_id).await;
+        if spawned.is_err() {
+            state
+                .web_run_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+        return spawned;
     }
 
     if device.platform == crate::device::Platform::Ios {

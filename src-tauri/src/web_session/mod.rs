@@ -494,4 +494,14 @@ mod tests {
             PortOwnerKind::Foreign
         ));
     }
+
+    #[test]
+    fn web_run_flag_defaults_off_and_toggles() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let state = crate::state::AppState::default();
+        assert!(!state.web_run_active.load(SeqCst));
+        state.web_run_active.store(true, SeqCst);
+        assert!(state.web_run_active.load(SeqCst));
+        assert_eq!(state.web_respawn_fails.load(SeqCst), 0);
+    }
 }
