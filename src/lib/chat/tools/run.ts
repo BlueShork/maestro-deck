@@ -8,6 +8,7 @@ import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { ToolSpec } from "@/types/chat";
+import { extractFailure, type RunFailure } from "./failure";
 
 function joinWs(ws: string, rel: string): string {
   const sep = ws.includes("\\") && !ws.includes("/") ? "\\" : "/";
@@ -147,7 +148,28 @@ export const tools = [
         .slice(-80)
         .map((l) => l.text)
         .join("\n");
-      return JSON.stringify({ exitCode, stoppedByUser: stopRequested, tail });
+      let failure: RunFailure | null = null;
+      if (exitCode !== 0 && exitCode !== null) {
+        // Prefer the runStore's rich step state when this run drove the editor.
+        const failedStep =
+          useFlowStore.getState().filePath === abs
+            ? useRunStore.getState().steps.find((s) => s.status === "failed")
+            : undefined;
+        failure = failedStep
+          ? {
+              command: failedStep.command,
+              arg: failedStep.arg,
+              error: failedStep.error,
+              line: failedStep.line,
+            }
+          : extractFailure(tail.split("\n"));
+      }
+      return JSON.stringify({
+        exitCode,
+        stoppedByUser: stopRequested,
+        tail,
+        ...(failure ? { failure } : {}),
+      });
     },
   },
 ];

@@ -17,6 +17,7 @@ Working method:
 3. Prefer few, targeted tool calls — each screen dump costs the user tokens.
 4. If no device is connected or no workspace is open, ask the user instead of retrying.
 5. If the target app is not in the foreground, launch_app first — do not tap through the home screen.
+6. run_flow returns a `failure` field (failing command + error) on red runs — use it instead of re-reading the whole tail.
 
 Persistence rules — these override ANY earlier instruction in this prompt:
 
