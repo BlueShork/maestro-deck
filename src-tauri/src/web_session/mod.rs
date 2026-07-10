@@ -51,6 +51,8 @@ pub struct DeviceScreen {
 pub struct WebStudioClient {
     base: String,
     client: reqwest::Client,
+    /// Connect-timeout only — no total timeout, for held SSE connections.
+    sse_client: reqwest::Client,
 }
 
 impl WebStudioClient {
@@ -60,9 +62,14 @@ impl WebStudioClient {
             .timeout(Duration::from_secs(15))
             .build()
             .map_err(|e| AppError::Other(format!("web client build: {e}")))?;
+        let sse_client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(1))
+            .build()
+            .map_err(|e| AppError::Other(format!("web sse client build: {e}")))?;
         Ok(Self {
             base: format!("http://127.0.0.1:{port}"),
             client,
+            sse_client,
         })
     }
 
@@ -98,6 +105,18 @@ impl WebStudioClient {
         Err(AppError::Other(
             "device-screen/sse closed before delivering an event".into(),
         ))
+    }
+
+    /// Open (and keep open) the device-screen SSE stream. The caller reads
+    /// chunks until abort/EOF; Studio pushes a `data:` event per frame.
+    pub async fn open_screen_stream(&self) -> AppResult<reqwest::Response> {
+        self.sse_client
+            .get(self.url("api/device-screen/sse"))
+            .send()
+            .await
+            .map_err(|e| AppError::Other(format!("device-screen/sse: {e}")))?
+            .error_for_status()
+            .map_err(|e| AppError::Other(format!("device-screen/sse: {e}")))
     }
 
     /// Fetch PNG bytes for a screenshot path returned by `device_screen`.
@@ -164,6 +183,39 @@ fn extract_sse_data(buf: &[u8]) -> Option<String> {
     let start = s.find("data: ")? + "data: ".len();
     let rel_end = s[start..].find('\n')?;
     Some(s[start..start + rel_end].trim().to_string())
+}
+
+/// Incremental SSE parser for a held `/api/device-screen/sse` connection.
+/// `push` appends raw bytes; `latest_event` drains every *complete* event
+/// (`data: …\n`) accumulated so far and returns only the newest — frames we
+/// fell behind on are intentionally skipped (coalescing), so the preview
+/// always shows the current page, never a backlog replay.
+#[derive(Default)]
+struct SseBuffer {
+    buf: Vec<u8>,
+}
+
+impl SseBuffer {
+    fn push(&mut self, chunk: &[u8]) {
+        self.buf.extend_from_slice(chunk);
+    }
+
+    fn latest_event(&mut self) -> Option<String> {
+        let s = String::from_utf8_lossy(&self.buf).into_owned();
+        let mut latest = None;
+        let mut consumed = 0;
+        for line in s.split_inclusive('\n') {
+            if !line.ends_with('\n') {
+                break; // trailing partial line — keep for the next push
+            }
+            consumed += line.len();
+            if let Some(data) = line.strip_prefix("data: ") {
+                latest = Some(data.trim().to_string());
+            }
+        }
+        self.buf.drain(..consumed);
+        latest
+    }
 }
 
 /// Classify who (if anyone) is holding the web studio port.
@@ -379,7 +431,6 @@ impl WebStudioKeeper {
     }
 }
 
-const SCREENSHOT_INTERVAL_MS: u64 = 350;
 const WEB_FRAME_EVENT: &str = "web_frame";
 
 #[derive(Debug, Clone, Serialize)]
@@ -392,42 +443,97 @@ pub struct WebFramePayload {
     pub height: u32,
 }
 
-/// Poll `/api/device-screen` -> fetch the PNG -> emit `web_frame` until aborted.
+/// Hold the device-screen SSE stream open and emit a `web_frame` per new
+/// screenshot until aborted. Near-real-time (no fixed poll interval): frames
+/// arrive as Studio pushes them; if we fall behind, `SseBuffer` coalesces to
+/// the newest. The screenshot URL is a per-frame UUID — we download the PNG
+/// only when it changes. Connection drops reconnect with backoff
+/// (500 ms → 5 s); the keeper's own `is_alive` handles full respawns.
 pub fn spawn_screenshot_poller(
     app: AppHandle,
     keeper: Arc<WebStudioKeeper>,
 ) -> oneshot::Sender<()> {
     let (abort_tx, mut abort_rx) = oneshot::channel::<()>();
     tokio::spawn(async move {
-        loop {
-            tokio::select! {
+        let mut reconnect_ms: u64 = 500;
+        let mut last_shot: Option<String> = None;
+        'session: loop {
+            let resp = tokio::select! {
                 biased;
-                _ = &mut abort_rx => {
-                    info!("web screenshot poller aborted");
-                    return;
+                _ = &mut abort_rx => break 'session,
+                r = keeper.http().open_screen_stream() => r,
+            };
+            let mut resp = match resp {
+                Ok(r) => {
+                    reconnect_ms = 500;
+                    r
                 }
-                screen = keeper.http().device_screen() => {
-                    match screen {
-                        Ok(s) => match keeper.http().screenshot_png(&s.screenshot).await {
+                Err(e) => {
+                    warn!(error = %e, "web screen stream connect failed; retrying");
+                    tokio::select! {
+                        biased;
+                        _ = &mut abort_rx => break 'session,
+                        _ = sleep(Duration::from_millis(reconnect_ms)) => {}
+                    }
+                    reconnect_ms = (reconnect_ms * 2).min(5_000);
+                    continue 'session;
+                }
+            };
+            let mut sse = SseBuffer::default();
+            loop {
+                let chunk = tokio::select! {
+                    biased;
+                    _ = &mut abort_rx => break 'session,
+                    c = resp.chunk() => c,
+                };
+                match chunk {
+                    Ok(Some(bytes)) => {
+                        sse.push(&bytes);
+                        let Some(json) = sse.latest_event() else {
+                            continue;
+                        };
+                        let screen: DeviceScreen = match serde_json::from_str(&json) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                warn!(error = %e, "web sse event parse failed");
+                                continue;
+                            }
+                        };
+                        // Same page render → same UUID URL → skip the fetch.
+                        if last_shot.as_deref() == Some(screen.screenshot.as_str()) {
+                            continue;
+                        }
+                        match keeper.http().screenshot_png(&screen.screenshot).await {
                             Ok(data) => {
                                 use base64::Engine as _;
+                                last_shot = Some(screen.screenshot.clone());
                                 let payload = WebFramePayload {
                                     data: base64::engine::general_purpose::STANDARD.encode(&data),
-                                    width: s.width,
-                                    height: s.height,
+                                    width: screen.width,
+                                    height: screen.height,
                                 };
                                 if let Err(e) = app.emit(WEB_FRAME_EVENT, &payload) {
                                     warn!(error = %e, "failed to emit web_frame");
                                 }
                             }
                             Err(e) => warn!(error = %e, "web screenshot fetch failed"),
-                        },
-                        Err(e) => warn!(error = %e, "web device-screen poll failed"),
+                        }
                     }
-                    sleep(Duration::from_millis(SCREENSHOT_INTERVAL_MS)).await;
+                    Ok(None) | Err(_) => {
+                        // Stream ended (studio restart/kill) — reconnect loop.
+                        warn!("web screen stream closed; reconnecting");
+                        tokio::select! {
+                            biased;
+                            _ = &mut abort_rx => break 'session,
+                            _ = sleep(Duration::from_millis(reconnect_ms)) => {}
+                        }
+                        reconnect_ms = (reconnect_ms * 2).min(5_000);
+                        continue 'session;
+                    }
                 }
             }
         }
+        info!("web screenshot poller aborted");
     });
     abort_tx
 }
@@ -503,5 +609,33 @@ mod tests {
         state.web_run_active.store(true, SeqCst);
         assert!(state.web_run_active.load(SeqCst));
         assert_eq!(state.web_respawn_fails.load(SeqCst), 0);
+    }
+
+    #[test]
+    fn sse_buffer_yields_last_complete_event_and_drains() {
+        let mut b = SseBuffer::default();
+        b.push(b"data: {\"a\":1}\n\ndata: {\"a\":2}\n\n");
+        // Two complete events buffered -> coalesce to the newest.
+        assert_eq!(b.latest_event().as_deref(), Some("{\"a\":2}"));
+        // Drained: nothing left until more data arrives.
+        assert_eq!(b.latest_event(), None);
+    }
+
+    #[test]
+    fn sse_buffer_handles_chunked_events() {
+        let mut b = SseBuffer::default();
+        b.push(b"data: {\"a\"");
+        assert_eq!(b.latest_event(), None); // incomplete — wait for more
+        b.push(b":1}\n\nda");
+        assert_eq!(b.latest_event().as_deref(), Some("{\"a\":1}"));
+        b.push(b"ta: {\"a\":2}\n\n");
+        assert_eq!(b.latest_event().as_deref(), Some("{\"a\":2}"));
+    }
+
+    #[test]
+    fn sse_buffer_ignores_comment_lines() {
+        let mut b = SseBuffer::default();
+        b.push(b":keepalive\n\ndata: {\"x\":1}\n\n");
+        assert_eq!(b.latest_event().as_deref(), Some("{\"x\":1}"));
     }
 }
