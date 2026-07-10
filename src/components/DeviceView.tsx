@@ -325,7 +325,7 @@ export function DeviceView() {
     x: number;
     y: number;
     node: UINode;
-    selector: Selector | null;
+    selectors: Selector[];
   } | null>(null);
 
   // Dark-mode toggle is an Android-only `adb` feature; hidden for iOS and web.
@@ -512,7 +512,7 @@ export function DeviceView() {
           x: e.clientX,
           y: e.clientY,
           node,
-          selector: selectors[0] ?? null,
+          selectors,
         });
       } catch (err) {
         toast.error("Inspect failed", err instanceof Error ? err.message : String(err));
@@ -793,7 +793,7 @@ export function DeviceView() {
           x={actionMenu.x}
           y={actionMenu.y}
           node={actionMenu.node}
-          selector={actionMenu.selector}
+          selectors={actionMenu.selectors}
           onClose={() => setActionMenu(null)}
         />
       ) : null}
