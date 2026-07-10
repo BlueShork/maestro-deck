@@ -201,6 +201,7 @@ export default function App() {
       events.onDeviceDisconnected(() => markDisconnected()),
       events.onWebStatus((p) => {
         if (p.stage === "error") toast.error("Web browser", p.message);
+        // toastStore has no warn variant — "warn" renders as info.
         else toast.info("Web browser", p.message);
       }),
       events.onWebTapFallback(() => {
