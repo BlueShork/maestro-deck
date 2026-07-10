@@ -63,6 +63,10 @@ pub struct AppState {
     /// run, or after a transient driver failure — restores the user's page
     /// instead of navigating to Studio's own SPA.
     pub web_last_url: RwLock<Option<String>>,
+    /// Abort handle of the CDP run mirror (live view of a headless web run).
+    /// Fired by the runner's exit task — or by teardown if the user
+    /// disconnects mid-run.
+    pub web_run_mirror_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
 
     /// Set once the user has confirmed quitting (or opted out of the prompt).
     /// The window-close / app-exit handlers prevent the first quit to show the

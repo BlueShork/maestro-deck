@@ -6,6 +6,8 @@
 //! The web analogue of `ios_session`. Screen + hierarchy come from one
 //! device-screen call; input goes through run-command.
 
+pub mod run_mirror;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -679,7 +681,7 @@ impl WebStudioKeeper {
     }
 }
 
-const WEB_FRAME_EVENT: &str = "web_frame";
+pub(crate) const WEB_FRAME_EVENT: &str = "web_frame";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

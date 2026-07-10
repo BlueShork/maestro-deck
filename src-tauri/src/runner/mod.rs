@@ -278,13 +278,29 @@ pub async fn spawn_web_runner(
             }
         };
         RUNNERS.lock().await.remove(&pid);
-        // Run finished — let inspect/tap re-spawn the web keeper again.
+        // Run finished — release the keeper, stop the CDP mirror and hand
+        // the canvas back to the (still-warm) studio preview.
         {
             use tauri::Manager;
-            app_exit
-                .state::<crate::state::AppState>()
+            let state = app_exit.state::<crate::state::AppState>();
+            state
                 .web_run_active
                 .store(false, std::sync::atomic::Ordering::SeqCst);
+            if let Some(mirror) = state.web_run_mirror_abort.lock().await.take() {
+                let _ = mirror.send(());
+            }
+            // Resume the studio preview poller (only if none is running —
+            // e.g. the user disconnected mid-run and teardown already ran).
+            let keeper = state.web_driver.lock().await.clone();
+            if let Some(keeper) = keeper {
+                let mut slot = state.web_screenshot_abort.lock().await;
+                if slot.is_none() {
+                    *slot = Some(crate::web_session::spawn_screenshot_poller(
+                        app_exit.clone(),
+                        keeper,
+                    ));
+                }
+            }
         }
         let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
     });

@@ -553,10 +553,14 @@ async fn ensure_web_keeper(
     Ok(slot.as_ref().unwrap().clone())
 }
 
-/// Tear down the web session: stop the poller and kill the studio process.
+/// Tear down the web session: stop the poller, the run mirror (if a run is
+/// in flight) and kill the studio process.
 async fn teardown_web(state: &AppState) {
     if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
         let _ = abort.send(());
+    }
+    if let Some(mirror) = state.web_run_mirror_abort.lock().await.take() {
+        let _ = mirror.send(());
     }
     if let Some(keeper) = state.web_driver.lock().await.take() {
         keeper.stop().await;
@@ -1038,20 +1042,29 @@ pub async fn run_flow(
 
     if device.platform == crate::device::Platform::Web {
         // Web flows run with no `--udid`; maestro targets the browser via the
-        // flow's `url:` header. Pause the studio keeper so its browser doesn't
-        // contend with the one `maestro test` launches.
-        teardown_web(state.inner()).await;
-        // Mark the run active so inspect/tap can't re-spawn a competing keeper
-        // (and a second Chromium) mid-run. Cleared by the runner's exit task —
-        // or here if the spawn itself fails.
+        // flow's `url:` header, in its own HEADLESS Chrome — which coexists
+        // fine with the studio keeper's hidden browser (verified live). Keep
+        // the keeper warm for instant post-run recovery; pause only its
+        // preview poller and mirror the run's Chrome over CDP instead, so the
+        // canvas shows the test executing live.
+        if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
+            let _ = abort.send(());
+        }
+        // Mark the run active so inspect/tap don't touch the keeper mid-run.
+        // Cleared by the runner's exit task — or here if the spawn fails.
         state
             .web_run_active
             .store(true, std::sync::atomic::Ordering::SeqCst);
+        let mirror = crate::web_session::run_mirror::spawn_run_mirror(app.clone());
+        *state.web_run_mirror_abort.lock().await = Some(mirror);
         let spawned = runner::spawn_web_runner(app, &file_path, app_id).await;
         if spawned.is_err() {
             state
                 .web_run_active
                 .store(false, std::sync::atomic::Ordering::SeqCst);
+            if let Some(m) = state.web_run_mirror_abort.lock().await.take() {
+                let _ = m.send(());
+            }
         }
         return spawned;
     }
