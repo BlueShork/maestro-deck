@@ -76,6 +76,7 @@ pub struct DeviceListEntry {
 }
 
 pub mod adb;
+pub mod avd;
 pub mod ios;
 pub mod web;
 
