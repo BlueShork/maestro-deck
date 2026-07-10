@@ -68,7 +68,7 @@ export const ipc = {
   appVersion: () => call<string>("app_version"),
   listDevices: () => call<Device[]>("list_devices"),
   connectDevice: (serial: string, streamEnabled: boolean, platform: Platform, url?: string) =>
-    call<void>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
+    call<Device>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
   disconnectDevice: () => call<void>("disconnect_device"),
   // Tear down all sessions and exit. Called once the user confirms the quit
   // dialog (or has opted out of it). The app process exits, so this never

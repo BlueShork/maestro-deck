@@ -52,6 +52,18 @@ pub fn list_devices() -> AppResult<Vec<Device>> {
         Ok(ios) => devices.extend(ios),
         Err(e) => warn!(error = ?e, "ios device discovery failed"),
     }
+    // Shutdown AVDs, launchable on demand. Running emulators are excluded —
+    // they're already in the adb list above. Same independent-degradation
+    // rule: no SDK or a flaky `emulator` binary must not hide real devices.
+    let emulator_serials: Vec<String> = devices
+        .iter()
+        .filter(|d| d.serial.starts_with("emulator-"))
+        .map(|d| d.serial.clone())
+        .collect();
+    match crate::device::avd::list_shutdown_avds(&emulator_serials) {
+        Ok(avds) => devices.extend(avds),
+        Err(e) => warn!(error = ?e, "avd discovery failed"),
+    }
     // Web is always available as a synthetic target; connect-time errors
     // surface if maestro/Chromium can't start.
     devices.push(crate::device::web::synthetic_target());
@@ -66,7 +78,7 @@ pub async fn connect_device(
     url: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> AppResult<()> {
+) -> AppResult<Device> {
     use crate::device::Platform;
     // A previous disconnect may have left a simulator keeper warm for fast
     // reconnect. If we're now connecting something that isn't an iOS device,
@@ -79,6 +91,14 @@ pub async fn connect_device(
     }
     match platform {
         Platform::Android => {
+            // A shutdown AVD is addressed as `avd:<name>`. Boot it first and
+            // continue with the real `emulator-<port>` serial adb assigned —
+            // the returned Device carries that real serial so the frontend's
+            // `current` never holds the synthetic one.
+            let serial = match serial.strip_prefix(crate::device::avd::AVD_SERIAL_PREFIX) {
+                Some(name) => crate::device::avd::launch_avd(name).await?,
+                None => serial,
+            };
             let device = adb::get_device_info(&serial)?;
             info!(
                 serial = %serial,
@@ -86,7 +106,7 @@ pub async fn connect_device(
                 stream = stream_enabled,
                 "device connected",
             );
-            *state.connected_device.write() = Some(device);
+            *state.connected_device.write() = Some(device.clone());
 
             // Defensive cleanup: any leftover scrcpy server from a previous run holds
             // the abstract socket name and would block start_server with EADDRINUSE.
@@ -97,11 +117,11 @@ pub async fn connect_device(
                 // they go through the scrcpy control channel, but inspect (Maestro
                 // hierarchy) and run (maestro test) operate independently of the
                 // stream.
-                return Ok(());
+                return Ok(device);
             }
 
             setup_scrcpy(&serial, app, state.inner()).await;
-            Ok(())
+            Ok(device)
         }
         Platform::Ios => {
             // Resolve model/OS for display (simctl, fast). Screen size is unknown
@@ -112,7 +132,7 @@ pub async fn connect_device(
                 .find(|d| d.serial == serial)
                 .ok_or(AppError::NoDevice)?;
             info!(udid = %serial, model = %device.model, stream = stream_enabled, "iOS device connected");
-            *state.connected_device.write() = Some(device);
+            *state.connected_device.write() = Some(device.clone());
 
             // Boot the sim + spawn the driver WITHOUT blocking on readiness.
             let keeper = ensure_ios_keeper(&serial, state.inner()).await?;
@@ -129,7 +149,7 @@ pub async fn connect_device(
             tokio::spawn(async move {
                 keeper.wait_until_ready().await;
             });
-            Ok(())
+            Ok(device)
         }
         Platform::Web => {
             // `url` is read from the open flow's `url:` header on the frontend
@@ -141,12 +161,12 @@ pub async fn connect_device(
                 device.screen_height = s.height;
             }
             info!(stream = stream_enabled, "web browser connected");
-            *state.connected_device.write() = Some(device);
+            *state.connected_device.write() = Some(device.clone());
             if stream_enabled {
                 let abort = crate::web_session::spawn_screenshot_poller(app, keeper);
                 *state.web_screenshot_abort.lock().await = Some(abort);
             }
-            Ok(())
+            Ok(device)
         }
     }
 }

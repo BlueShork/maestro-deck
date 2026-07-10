@@ -95,16 +95,24 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       error: null,
     });
     try {
-      await ipc.connectDevice(serial, streamEnabled, device?.platform ?? "android", url);
+      // The backend returns the device it actually connected — for an AVD
+      // (`avd:<name>` serial) that's the real `emulator-<port>` entry, so
+      // `current` never holds the synthetic serial.
+      const connected = await ipc.connectDevice(
+        serial,
+        streamEnabled,
+        device?.platform ?? "android",
+        url,
+      );
       set({
-        current: device ?? null,
+        current: connected,
         connecting: false,
         pendingSerial: null,
         pendingAction: null,
       });
       toast.success(
         "Device connected",
-        streamEnabled ? (device?.model ?? serial) : `${device?.model ?? serial} · stream off`,
+        streamEnabled ? connected.model : `${connected.model} · stream off`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
