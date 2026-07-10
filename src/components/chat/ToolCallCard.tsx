@@ -67,6 +67,18 @@ function toolLabel(use: ToolUse, result?: ToolResult): string {
       return `Run ${path}${suffix}`;
     }
 
+    case "launch_app":
+      return `Lance ${input.appId ?? "l'app"}`;
+
+    case "stop_app":
+      return `Stoppe ${input.appId ?? "l'app"}`;
+
+    case "inspect_element": {
+      const x = input.x ?? "?";
+      const y = input.y ?? "?";
+      return `Inspecte (${x}, ${y})`;
+    }
+
     default:
       return use.name;
   }
