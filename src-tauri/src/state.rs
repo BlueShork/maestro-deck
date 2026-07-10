@@ -58,6 +58,11 @@ pub struct AppState {
     /// Consecutive `WebStudioKeeper::start` failures — drives the exponential
     /// respawn backoff (1 s / 2 s / 4 s) in `ensure_web_keeper`, reset on success.
     pub web_respawn_fails: std::sync::atomic::AtomicU32,
+    /// Last real page URL seen in the web session (from SSE events; never a
+    /// Studio-local page). Survives keeper teardown so a respawn — after a
+    /// run, or after a transient driver failure — restores the user's page
+    /// instead of navigating to Studio's own SPA.
+    pub web_last_url: RwLock<Option<String>>,
 
     /// Set once the user has confirmed quitting (or opted out of the prompt).
     /// The window-close / app-exit handlers prevent the first quit to show the

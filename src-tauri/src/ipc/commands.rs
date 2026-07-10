@@ -153,10 +153,18 @@ pub async fn connect_device(
         }
         Platform::Web => {
             // `url` is read from the open flow's `url:` header on the frontend
-            // and navigated to on a fresh studio spawn.
+            // and navigated to on a fresh studio spawn. Seed the remembered
+            // page so an early respawn restores it even before the first SSE
+            // event lands.
+            if let Some(u) = url.as_deref() {
+                *state.web_last_url.write() = Some(u.to_string());
+            }
             let keeper = ensure_web_keeper(url.as_deref(), Some(&app), state.inner()).await?;
             let mut device = crate::device::web::synthetic_target();
-            if let Ok(s) = keeper.http().device_screen().await {
+            if let Ok(s) = keeper
+                .snapshot(std::time::Duration::from_millis(1500))
+                .await
+            {
                 device.screen_width = s.width;
                 device.screen_height = s.height;
             }
@@ -502,8 +510,12 @@ async fn ensure_web_keeper(
         ));
     }
     let mut slot = state.web_driver.lock().await;
+    // Liveness = the Studio HTTP API answering (sub-second), NOT a
+    // device-screen SSE event: the SSE stream stalls on busy/navigating
+    // pages, and treating that as "dead" tore down the whole session
+    // (Chrome relaunch + reload onto Studio's SPA) on every hiccup.
     let alive = match slot.as_ref() {
-        Some(k) => k.http().is_alive().await,
+        Some(k) => k.http().api_ready().await,
         None => false,
     };
     if !alive {
@@ -517,8 +529,16 @@ async fn ensure_web_keeper(
             let delay = 1u64 << (fails - 1).min(2); // 1 s, 2 s, 4 s (capped)
             tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
         }
-        match crate::web_session::WebStudioKeeper::start(crate::web_session::STUDIO_PORT, url, app)
-            .await
+        // Respawn on the page the user was on: explicit url (connect) wins,
+        // else the last real page seen by the poller — never Studio's SPA.
+        let remembered = state.web_last_url.read().clone();
+        let effective = url.or(remembered.as_deref());
+        match crate::web_session::WebStudioKeeper::start(
+            crate::web_session::STUDIO_PORT,
+            effective,
+            app,
+        )
+        .await
         {
             Ok(keeper) => {
                 state.web_respawn_fails.store(0, SeqCst);
@@ -598,7 +618,11 @@ pub async fn enter_inspect_mode(
     }
     if device.platform == crate::device::Platform::Web {
         let keeper = ensure_web_keeper(None, Some(&app), state.inner()).await?;
-        let screen = keeper.http().device_screen().await?;
+        // Reuse the poller's fresh event instead of opening a second SSE
+        // consumer and waiting for one — inspect becomes near-instant.
+        let screen = keeper
+            .snapshot(std::time::Duration::from_millis(1500))
+            .await?;
         let tree = crate::hierarchy::web::parse_device_screen_hierarchy(
             &screen.elements,
             (screen.width, screen.height),
@@ -819,7 +843,7 @@ pub async fn send_input(
         }
         crate::device::Platform::Web => {
             let keeper = ensure_web_keeper(None, Some(&app), state.inner()).await?;
-            input::web::send(&event, keeper.http(), screen_w, screen_h, &app).await
+            input::web::send(&event, &keeper, screen_w, screen_h, &app).await
         }
     }
 }

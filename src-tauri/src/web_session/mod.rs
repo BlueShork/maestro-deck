@@ -45,6 +45,18 @@ pub struct DeviceScreen {
     /// is assumed to be `elements`.
     #[serde(rename = "elements")]
     pub elements: serde_json::Value,
+    /// Current page URL, present on every SSE event. Remembered so a
+    /// respawned keeper can restore the user's page.
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+/// True for Studio's own pages (`http://127.0.0.1:<port>/…`, `localhost`).
+/// Those must never be "remembered" as the user's page — restoring to them
+/// on respawn is exactly the bug: the browser reloads onto the Studio SPA.
+fn is_studio_local_url(url: &str, port: u16) -> bool {
+    url.starts_with(&format!("http://127.0.0.1:{port}"))
+        || url.starts_with(&format!("http://localhost:{port}"))
 }
 
 /// Typed client for the Maestro Studio web API.
@@ -328,6 +340,10 @@ pub struct WebStudioKeeper {
     http: WebStudioClient,
     studio_child: AsyncMutex<Option<Child>>,
     port: u16,
+    /// Latest device-screen event seen by the persistent poller, timestamped.
+    /// Tap/inspect reuse it when fresh instead of opening a second SSE
+    /// consumer and waiting (up to 15 s on a busy page) for an event.
+    latest_screen: std::sync::Mutex<Option<(std::time::Instant, DeviceScreen)>>,
 }
 
 impl WebStudioKeeper {
@@ -336,6 +352,42 @@ impl WebStudioKeeper {
     }
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    /// Record a device-screen event (called by the poller on every event).
+    pub fn note_screen(&self, screen: &DeviceScreen) {
+        *self.latest_screen.lock().unwrap() = Some((std::time::Instant::now(), screen.clone()));
+    }
+
+    /// The latest poller event if it is younger than `max_age`.
+    pub fn recent_screen(&self, max_age: Duration) -> Option<DeviceScreen> {
+        self.latest_screen
+            .lock()
+            .unwrap()
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() < max_age)
+            .map(|(_, s)| s.clone())
+    }
+
+    /// A screen snapshot for tap/inspect: the poller's cache when fresh,
+    /// otherwise one fresh single-shot fetch.
+    pub async fn snapshot(&self, max_age: Duration) -> AppResult<DeviceScreen> {
+        if let Some(s) = self.recent_screen(max_age) {
+            return Ok(s);
+        }
+        let s = self.http.device_screen().await?;
+        self.note_screen(&s);
+        Ok(s)
+    }
+
+    #[cfg(test)]
+    fn stub_for_tests() -> Self {
+        Self {
+            http: WebStudioClient::new(9999).unwrap(),
+            studio_child: AsyncMutex::new(None),
+            port: 9999,
+            latest_screen: std::sync::Mutex::new(None),
+        }
     }
 
     pub async fn start(
@@ -405,6 +457,7 @@ impl WebStudioKeeper {
             http: WebStudioClient::new(port)?,
             studio_child: AsyncMutex::new(Some(studio)),
             port,
+            latest_screen: std::sync::Mutex::new(None),
         });
 
         // Phase 1: wait for the Studio HTTP API (fast — no browser involved).
@@ -571,6 +624,19 @@ pub fn spawn_screenshot_poller(
                                 continue;
                             }
                         };
+                        // Cache the event for tap/inspect and remember the
+                        // page URL so a later respawn restores it (never
+                        // Studio's own SPA).
+                        keeper.note_screen(&screen);
+                        if let Some(u) = screen
+                            .url
+                            .as_deref()
+                            .filter(|u| !is_studio_local_url(u, keeper.port()))
+                        {
+                            use tauri::Manager;
+                            *app.state::<crate::state::AppState>().web_last_url.write() =
+                                Some(u.to_string());
+                        }
                         // Same page render → same UUID URL → skip the fetch.
                         if last_shot.as_deref() == Some(screen.screenshot.as_str()) {
                             continue;
@@ -627,6 +693,34 @@ mod tests {
         assert_eq!(s.width, 1200);
         assert_eq!(s.screenshot, "/screenshot/abc.png");
         assert!(s.elements.is_array());
+        // The current page URL rides on every event — it's how a respawned
+        // keeper restores the user's page instead of Studio's own SPA.
+        assert_eq!(s.url.as_deref(), Some("https://x"));
+    }
+
+    #[test]
+    fn studio_local_urls_are_never_remembered() {
+        // Remembering Studio's own pages would "restore" the browser to the
+        // localhost SPA on respawn — the exact bug this exists to prevent.
+        assert!(is_studio_local_url("http://127.0.0.1:9999/interact", 9999));
+        assert!(is_studio_local_url("http://localhost:9999/", 9999));
+        assert!(!is_studio_local_url("https://www.bouyguestelecom.fr", 9999));
+        assert!(!is_studio_local_url("http://127.0.0.1:8080/app", 9999));
+    }
+
+    #[test]
+    fn recent_screen_respects_freshness_window() {
+        let keeper = WebStudioKeeper::stub_for_tests();
+        assert!(keeper.recent_screen(Duration::from_secs(2)).is_none());
+        let screen: DeviceScreen = serde_json::from_str(
+            r#"{"screenshot":"/screenshot/a.png","width":10,"height":10,"url":"https://x","elements":[]}"#,
+        )
+        .unwrap();
+        keeper.note_screen(&screen);
+        // Just stored → fresh.
+        assert!(keeper.recent_screen(Duration::from_secs(2)).is_some());
+        // Zero-age window → always stale.
+        assert!(keeper.recent_screen(Duration::ZERO).is_none());
     }
 
     #[test]

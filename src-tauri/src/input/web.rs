@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use super::InputEvent;
 use crate::error::AppResult;
-use crate::web_session::WebStudioClient;
+use crate::web_session::WebStudioKeeper;
 
 /// Clamp a 0..=100 percentage with one decimal of precision.
 fn pct(coord: f32, span: u16) -> f32 {
@@ -71,10 +71,11 @@ fn element_selector_at(elements: &serde_json::Value, cx: i32, cy: i32) -> Option
 }
 
 /// Resolve the best `tapOn` command for a click at screenshot-pixel `(x, y)`.
-/// Prefers an element selector (from a fresh screen snapshot); falls back to a
-/// percentage point tap when no element resolves or the snapshot is unavailable.
+/// Prefers an element selector (from the poller's cached snapshot — no
+/// second SSE consumer, no wait); falls back to a percentage point tap when
+/// no element resolves or no snapshot is available.
 async fn tap_command(
-    http: &WebStudioClient,
+    keeper: &WebStudioKeeper,
     x: f32,
     y: f32,
     screen_w: u16,
@@ -88,7 +89,11 @@ async fn tap_command(
             degraded: false,
         };
     }
-    match http.device_screen().await.ok() {
+    match keeper
+        .snapshot(std::time::Duration::from_millis(1500))
+        .await
+        .ok()
+    {
         Some(s) => resolve_tap(
             Some(&s.elements),
             (s.width, s.height),
@@ -161,15 +166,16 @@ pub(crate) fn resolve_tap(
 
 pub async fn send(
     event: &InputEvent,
-    http: &WebStudioClient,
+    keeper: &WebStudioKeeper,
     screen_w: u16,
     screen_h: u16,
     app: &tauri::AppHandle,
 ) -> AppResult<()> {
     use tauri::Emitter;
+    let http = keeper.http();
     match event {
         InputEvent::Tap { x, y } => {
-            let tap = tap_command(http, *x, *y, screen_w, screen_h).await;
+            let tap = tap_command(keeper, *x, *y, screen_w, screen_h).await;
             if tap.degraded {
                 let _ = app.emit("web:tap_fallback", ());
             }
