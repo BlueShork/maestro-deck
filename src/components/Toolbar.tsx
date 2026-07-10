@@ -212,7 +212,9 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
             )}
           </div>
 
-          <DropdownMenu>
+          {/* Non-modal: modal mode inert-marks the whole app (canvas, editor)
+              on open/close — visible jank. See ModelPicker for details. */}
+          <DropdownMenu modal={false}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
