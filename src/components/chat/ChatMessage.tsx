@@ -154,7 +154,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
           {messageText(message)}
         </div>
@@ -211,7 +211,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
  *  a narrow chat panel. */
 function AssistantShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
       <div className="mb-1.5 flex items-center gap-2">
         <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/80 to-primary/40 text-primary-foreground ring-1 ring-primary/20">
           <Sparkles className="h-3 w-3" />
@@ -226,9 +226,9 @@ function AssistantShell({ children }: { children: ReactNode }) {
 function PulseDots() {
   return (
     <div className="flex h-5 items-center gap-1 text-muted-foreground">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:150ms]" />
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:300ms]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-bounce" />
+      <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-bounce [animation-delay:120ms]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-bounce [animation-delay:240ms]" />
     </div>
   );
 }

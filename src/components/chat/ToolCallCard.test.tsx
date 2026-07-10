@@ -40,6 +40,11 @@ describe("ToolCallCard", () => {
     expect(html).toMatch(/animate-pulse/);
     // no result glyph
     expect(html).not.toMatch(/✓|✗/);
+    // collapsed by default: aria-expanded="false" and grid-rows:0fr wrapper
+    expect(html).toMatch(/aria-expanded="false"/);
+    expect(html).toMatch(/\[grid-template-rows:0fr\]/);
+    // entrance animation class present
+    expect(html).toMatch(/motion-safe:animate-in/);
   });
 
   it("renders ✗ with red classes on isError result; ✓ with green on success", () => {
@@ -100,19 +105,21 @@ describe("ChatMessage with block content", () => {
     createdAt: 0,
   };
 
-  it("renders markdown text AND a <details> card when content is block array", () => {
+  it("renders markdown text AND a tool card when content is block array", () => {
     const html = renderToStaticMarkup(<ChatMessage message={assistantBlockMessage} />);
     // markdown paragraph rendered
     expect(html).toMatch(/Hello/);
-    // details card present
-    expect(html).toMatch(/<details/);
+    // button-based tool card present (no details element)
+    expect(html).not.toMatch(/<details/);
+    expect(html).toMatch(/aria-expanded/);
   });
 
   it("renders string content exactly as before (markdown paragraph present)", () => {
     const html = renderToStaticMarkup(<ChatMessage message={assistantStringMessage} />);
     expect(html).toMatch(/Hello/);
-    // no details card for string content
+    // no tool card for string content
     expect(html).not.toMatch(/<details/);
+    expect(html).not.toMatch(/aria-expanded/);
   });
 });
 

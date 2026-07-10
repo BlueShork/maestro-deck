@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 
+import { cn } from "@/lib/utils";
 import type { ContentBlock } from "@/types/chat";
 
 type ToolUse = Extract<ContentBlock, { type: "tool_use" }>;
@@ -92,13 +93,19 @@ function GlyphEl({ glyph }: { glyph: StatusGlyph }): ReactElement {
   }
   if (glyph.kind === "error") {
     return (
-      <span className="text-red-600 dark:text-red-400" aria-label="Erreur">
+      <span
+        className="text-red-600 motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200 dark:text-red-400"
+        aria-label="Erreur"
+      >
         ✗
       </span>
     );
   }
   return (
-    <span className="text-emerald-600 dark:text-emerald-400" aria-label="Succès">
+    <span
+      className="text-emerald-600 motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200 dark:text-emerald-400"
+      aria-label="Succès"
+    >
       ✓
     </span>
   );
@@ -148,34 +155,49 @@ function formatInput(use: ToolUse): string {
 }
 
 export function ToolCallCard({ use, result }: ToolCallCardProps): ReactElement {
+  const [open, setOpen] = useState(false);
   const glyph = statusGlyph(result);
   const label = toolLabel(use, result);
   const inputJson = formatInput(use);
 
   return (
-    <details className="my-1 rounded-lg border border-border bg-muted/40 text-xs">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <div className="my-1 rounded-lg border border-border bg-muted/40 text-xs motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <GlyphEl glyph={glyph} />
         <span className="text-muted-foreground">{label}</span>
-      </summary>
+      </button>
 
-      <div className="border-t border-border px-3 py-2">
-        <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
-          Input
-        </div>
-        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px] text-foreground">
-          {inputJson}
-        </pre>
-
-        {result && (
-          <>
-            <div className="mb-1 mt-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
-              Result
-            </div>
-            <ResultBody result={result} />
-          </>
+      <div
+        className={cn(
+          "grid motion-safe:transition-[grid-template-rows] motion-safe:duration-200",
+          open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]",
         )}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-border px-3 py-2">
+            <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
+              Input
+            </div>
+            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px] text-foreground">
+              {inputJson}
+            </pre>
+
+            {result && (
+              <>
+                <div className="mb-1 mt-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
+                  Result
+                </div>
+                <ResultBody result={result} />
+              </>
+            )}
+          </div>
+        </div>
       </div>
-    </details>
+    </div>
   );
 }
