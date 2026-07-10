@@ -80,12 +80,15 @@ async fn tap_command(
     screen_w: u16,
     screen_h: u16,
 ) -> TapResolution {
-    let snapshot = if screen_w > 0 && screen_h > 0 {
-        http.device_screen().await.ok()
-    } else {
-        None
-    };
-    match snapshot {
+    if screen_w == 0 || screen_h == 0 {
+        // No usable screen dims — a selector was never on the table; a raw
+        // point tap here is normal, not a degradation.
+        return TapResolution {
+            yaml: tap_yaml(pct(x, screen_w), pct(y, screen_h)),
+            degraded: false,
+        };
+    }
+    match http.device_screen().await.ok() {
         Some(s) => resolve_tap(
             Some(&s.elements),
             (s.width, s.height),
@@ -264,6 +267,16 @@ mod tests {
             "swipe: {start: \"50%,50%\", end: \"50%,20%\", duration: 400}"
         );
         assert!(!sw.starts_with("- "));
+    }
+
+    #[test]
+    fn zero_screen_dims_yields_normal_point_tap() {
+        // Guard in tap_command: no dims -> raw point tap, degraded=false, no
+        // web:tap_fallback. The yaml it emits is the 0% point tap:
+        assert_eq!(
+            tap_yaml(pct(100.0, 0), pct(100.0, 0)),
+            "tapOn: {point: \"0%,0%\"}"
+        );
     }
 
     #[test]
