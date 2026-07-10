@@ -3,6 +3,7 @@
 
 import type { ImagePart, ToolSpec } from "@/types/chat";
 
+import { tools as appControlTools } from "./appControl";
 import { tools as fileTools } from "./files";
 import { tools as inputTools } from "./input";
 import { tools as runTools } from "./run";
@@ -14,7 +15,7 @@ interface ToolImpl {
 }
 
 const registry = new Map<string, ToolImpl>(
-  [...screenTools, ...inputTools, ...fileTools, ...runTools].map((t) => [
+  [...screenTools, ...inputTools, ...fileTools, ...runTools, ...appControlTools].map((t) => [
     t.spec.name,
     t as ToolImpl,
   ]),

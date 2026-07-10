@@ -37,10 +37,13 @@ pub mod yaml;
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{fmt, EnvFilter};
 
+use app_control::{launch_app, stop_app};
 use credentials::{delete_credential, get_credential, save_credential};
 use ipc::commands::*;
 use tool_paths::{get_tool_paths, set_tool_paths};
 use vertex::vertex_get_access_token;
+
+pub mod app_control;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -90,6 +93,8 @@ pub fn run() {
             get_dark_mode,
             run_flow,
             stop_flow,
+            launch_app,
+            stop_app,
             bank::ipc::compare_screenshots,
             bank::ipc::compare_screenshots_all,
             bank::ipc::resolve_comparison,

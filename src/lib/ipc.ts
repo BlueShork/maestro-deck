@@ -87,6 +87,8 @@ export const ipc = {
   runFlow: (filePath: string, appId?: string) =>
     call<number>("run_flow", { filePath, appId: appId?.trim() || null }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
+  launchAppOnDevice: (appId: string) => call<void>("launch_app", { appId }),
+  stopAppOnDevice: (appId: string) => call<void>("stop_app", { appId }),
   compareScreenshots: (args: {
     workspace: string;
     flowPath: string;

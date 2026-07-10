@@ -18,6 +18,8 @@ vi.mock("@/lib/ipc", () => ({
     listWorkspace: vi.fn(),
     runFlow: vi.fn(),
     stopFlow: vi.fn(),
+    launchAppOnDevice: vi.fn(),
+    stopAppOnDevice: vi.fn(),
   },
 }));
 
@@ -47,11 +49,13 @@ const EXPECTED_TOOL_NAMES = [
   "read_flow",
   "write_flow",
   "run_flow",
+  "launch_app",
+  "stop_app",
 ];
 
 describe("Tool registry", () => {
-  // Test 1: ALL_TOOLS contains exactly the 9 expected tools
-  it("ALL_TOOLS contains exactly the 9 expected tool names, no duplicates", () => {
+  // Test 1: ALL_TOOLS contains exactly the 11 expected tools
+  it("ALL_TOOLS contains exactly the 11 expected tool names, no duplicates", () => {
     const names = ALL_TOOLS.map((t) => t.name);
     expect(names).toHaveLength(EXPECTED_TOOL_NAMES.length);
     expect(new Set(names).size).toBe(names.length); // no duplicates
@@ -99,7 +103,21 @@ describe("Tool registry", () => {
     }
   });
 
-  // Test 5: run_flow aborts cleanly when signal fires mid-run
+  // Test 5: executeTool("launch_app", {}) with no device → isError true, message mentions "No device"
+  it('executeTool("launch_app", {}) with no device → isError true mentioning "No device"', async () => {
+    const { useDeviceStore } = await import("@/stores/deviceStore");
+    const prev = useDeviceStore.getState().current;
+    useDeviceStore.setState({ current: null });
+    try {
+      const result = await executeTool("launch_app", {});
+      expect(result.isError).toBe(true);
+      expect(result.content).toMatch(/No device/i);
+    } finally {
+      useDeviceStore.setState({ current: prev });
+    }
+  });
+
+  // Test 7: run_flow aborts cleanly when signal fires mid-run
   describe("run_flow abort handling", () => {
     let prevRunState: ReturnType<typeof useRunStore.getState>;
 
@@ -177,7 +195,7 @@ describe("Tool registry", () => {
     });
   });
 
-  // Test 6: executeTool("list_flows") with stubbed workspace returns sorted relative paths
+  // Test 8: executeTool("list_flows") with stubbed workspace returns sorted relative paths
   describe("list_flows with stubbed workspace", () => {
     let prevFolderPath: string | null;
     let prevTree: WorkspaceNode | null;
