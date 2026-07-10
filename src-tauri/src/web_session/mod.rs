@@ -503,7 +503,12 @@ pub fn spawn_screenshot_poller(
                         if last_shot.as_deref() == Some(screen.screenshot.as_str()) {
                             continue;
                         }
-                        match keeper.http().screenshot_png(&screen.screenshot).await {
+                        let png = tokio::select! {
+                            biased;
+                            _ = &mut abort_rx => break 'session,
+                            r = keeper.http().screenshot_png(&screen.screenshot) => r,
+                        };
+                        match png {
                             Ok(data) => {
                                 use base64::Engine as _;
                                 last_shot = Some(screen.screenshot.clone());
