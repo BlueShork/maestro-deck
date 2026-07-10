@@ -1,8 +1,18 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Globe, Loader2, Play, Plug, PlugZap, RefreshCw, Stethoscope } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Globe,
+  Loader2,
+  Play,
+  Plug,
+  PlugZap,
+  RefreshCw,
+  Stethoscope,
+} from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
 
@@ -22,6 +32,10 @@ import { isHealthReportClean } from "@/types";
 // list, hence the explicit `!d.physical` guard. Module-level so it's a stable
 // reference across renders.
 const isShutdownSim = (d: Device) => d.platform === "ios" && !d.booted && !d.physical;
+
+// Shutdown Android AVDs are synthetic entries the backend tags with an
+// `avd:` serial prefix; booting one swaps it for the real emulator serial.
+const isShutdownAvd = (d: Device) => d.serial.startsWith("avd:");
 
 interface DeviceRowProps {
   device: Device;
@@ -120,7 +134,11 @@ const DeviceRow = memo(function DeviceRow({
                 : d.platform === "web"
                   ? "Chromium"
                   : isSim
-                    ? `iOS ${d.os_version} · tap to launch`
+                    ? d.platform === "ios"
+                      ? `iOS ${d.os_version} · tap to launch`
+                      : d.os_version
+                        ? `Android ${d.os_version} · tap to launch`
+                        : "tap to launch"
                     : d.platform === "ios"
                       ? `${d.serial} · iOS ${d.os_version} · ${d.physical ? "device" : "simulator"}`
                       : `${d.serial} · Android ${d.os_version}`}
@@ -186,21 +204,20 @@ export function DeviceSelector() {
 
   // Only recompute the split/sort when the inputs actually change, so an
   // unrelated store update doesn't re-filter and re-sort the whole list.
-  const { rows, shutdownSims } = useMemo(() => {
+  const { rows, iosSims, androidAvds } = useMemo(() => {
     const isHiddenWeb = (d: Device) =>
       d.platform === "web" && !webBrowserEnabled && currentSerial !== d.serial;
-    const rows = devices.filter((d) => !isShutdownSim(d) && !isHiddenWeb(d));
-    const shutdownSims = devices
-      .filter(isShutdownSim)
-      .sort(
-        (a, b) =>
-          a.model.localeCompare(b.model) ||
-          a.os_version.localeCompare(b.os_version, undefined, { numeric: true }),
-      );
-    return { rows, shutdownSims };
+    const rows = devices.filter((d) => !isShutdownSim(d) && !isShutdownAvd(d) && !isHiddenWeb(d));
+    const bySimOrder = (a: Device, b: Device) =>
+      a.model.localeCompare(b.model) ||
+      a.os_version.localeCompare(b.os_version, undefined, { numeric: true });
+    const iosSims = devices.filter(isShutdownSim).sort(bySimOrder);
+    const androidAvds = devices.filter(isShutdownAvd).sort(bySimOrder);
+    return { rows, iosSims, androidAvds };
   }, [devices, webBrowserEnabled, currentSerial]);
 
-  const bootingSim = connecting && shutdownSims.some((d) => d.serial === pendingSerial);
+  const bootingIos = connecting && iosSims.some((d) => d.serial === pendingSerial);
+  const bootingAvd = connecting && androidAvds.some((d) => d.serial === pendingSerial);
 
   const [checkingSerial, setCheckingSerial] = useState<string | null>(null);
   const [report, setReport] = useState<HealthReport | null>(null);
@@ -243,7 +260,7 @@ export function DeviceSelector() {
       device={d}
       active={currentSerial === d.serial}
       pending={pendingSerial === d.serial ? pendingAction : null}
-      isSim={isShutdownSim(d)}
+      isSim={isShutdownSim(d) || isShutdownAvd(d)}
       busy={connecting}
       checking={checkingSerial === d.serial}
       onConnect={connect}
@@ -287,18 +304,14 @@ export function DeviceSelector() {
 
           <ul className="flex flex-col gap-1.5">{rows.map(row)}</ul>
 
-          {shutdownSims.length > 0 ? (
-            <div className="flex flex-col gap-1.5">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                iOS Simulators
-              </div>
-              <ul className="flex flex-col gap-1.5">{shutdownSims.map(row)}</ul>
-              {bootingSim ? (
-                <div className="text-[11px] text-muted-foreground">
-                  Booting simulator &amp; starting driver… (can take a minute)
-                </div>
-              ) : null}
-            </div>
+          {iosSims.length > 0 || androidAvds.length > 0 ? (
+            <SimulatorsSection
+              iosSims={iosSims}
+              androidAvds={androidAvds}
+              bootingIos={bootingIos}
+              bootingAvd={bootingAvd}
+              row={row}
+            />
           ) : null}
         </div>
       </div>
@@ -311,6 +324,121 @@ export function DeviceSelector() {
           report={report}
         />
       )}
+    </div>
+  );
+}
+
+type SimView = "root" | "ios" | "android";
+
+function SimulatorGroupEntry({
+  icon: Icon,
+  label,
+  count,
+  onClick,
+}: {
+  icon: typeof AppleLogo;
+  label: string;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className="group flex w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left transition-colors hover:border-border hover:bg-accent/40"
+      >
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">{label}</span>
+        <span className="font-mono text-[10px] text-muted-foreground">{count}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />
+      </button>
+    </li>
+  );
+}
+
+/**
+ * The SIMULATORS area: a root view with one drill-in entry per platform,
+ * sliding to the platform's device list (back row on top). Local state only —
+ * the 3s device poll updates counts/lists without resetting the view, and an
+ * emptied group (everything launched / SDK gone) falls back to the root.
+ */
+function SimulatorsSection({
+  iosSims,
+  androidAvds,
+  bootingIos,
+  bootingAvd,
+  row,
+}: {
+  iosSims: Device[];
+  androidAvds: Device[];
+  bootingIos: boolean;
+  bootingAvd: boolean;
+  row: (d: Device) => ReactElement;
+}) {
+  const [view, setView] = useState<SimView>("root");
+
+  useEffect(() => {
+    if (view === "ios" && iosSims.length === 0) setView("root");
+    if (view === "android" && androidAvds.length === 0) setView("root");
+  }, [view, iosSims.length, androidAvds.length]);
+
+  if (view === "root") {
+    return (
+      <div
+        key="root"
+        className="flex flex-col gap-1.5 overflow-x-hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-left-4 motion-safe:duration-200"
+      >
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Simulators
+        </div>
+        <ul className="flex flex-col gap-1.5">
+          {iosSims.length > 0 ? (
+            <SimulatorGroupEntry
+              icon={AppleLogo}
+              label="iOS Simulators"
+              count={iosSims.length}
+              onClick={() => setView("ios")}
+            />
+          ) : null}
+          {androidAvds.length > 0 ? (
+            <SimulatorGroupEntry
+              icon={AndroidLogo}
+              label="Android Simulators"
+              count={androidAvds.length}
+              onClick={() => setView("android")}
+            />
+          ) : null}
+        </ul>
+      </div>
+    );
+  }
+
+  const isIos = view === "ios";
+  return (
+    <div
+      key={view}
+      className="flex flex-col gap-1.5 overflow-x-hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-4 motion-safe:duration-200"
+    >
+      <button
+        type="button"
+        onClick={() => setView("root")}
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+        {isIos ? "iOS Simulators" : "Android Simulators"}
+      </button>
+      <ul className="flex flex-col gap-1.5">{(isIos ? iosSims : androidAvds).map(row)}</ul>
+      {isIos && bootingIos ? (
+        <div className="text-[11px] text-muted-foreground">
+          Booting simulator &amp; starting driver… (can take a minute)
+        </div>
+      ) : null}
+      {!isIos && bootingAvd ? (
+        <div className="text-[11px] text-muted-foreground">
+          Booting emulator… (can take a minute or two)
+        </div>
+      ) : null}
     </div>
   );
 }
