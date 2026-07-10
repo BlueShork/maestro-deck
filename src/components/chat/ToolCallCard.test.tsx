@@ -145,3 +145,10 @@ describe("ToolCallCard input formatting", () => {
     expect(html).toContain("&quot;x&quot;: 1");
   });
 });
+
+describe("ToolCallCard accessibility", () => {
+  it("hides the collapsed body from assistive tech", () => {
+    const html = renderToStaticMarkup(<ToolCallCard use={use("get_screen")} />);
+    expect(html).toContain('aria-hidden="true"');
+  });
+});

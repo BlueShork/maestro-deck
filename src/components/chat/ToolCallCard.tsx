@@ -172,7 +172,11 @@ export function ToolCallCard({ use, result }: ToolCallCardProps): ReactElement {
         <span className="text-muted-foreground">{label}</span>
       </button>
 
+      {/* aria-hidden: the 0fr grid hides the body visually but NOT from
+          screen readers — without this, collapsed YAML/result payloads are
+          announced in the AT reading flow (the old <details> hid them). */}
       <div
+        aria-hidden={!open}
         className={cn(
           "grid motion-safe:transition-[grid-template-rows] motion-safe:duration-200",
           open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]",
