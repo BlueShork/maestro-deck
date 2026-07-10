@@ -174,6 +174,43 @@ impl WebStudioClient {
     pub async fn is_alive(&self) -> bool {
         self.device_screen().await.is_ok()
     }
+
+    /// Cheap API-readiness probe: `/api/banner-message` answers 200 as soon as
+    /// the Studio HTTP server is up — no browser needed. (The device-screen SSE
+    /// stays silent until Chromium launches, so it can't be the API probe.)
+    pub async fn api_ready(&self) -> bool {
+        self.client
+            .get(self.url("api/banner-message"))
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+    }
+
+    /// Navigate the automated browser. The FIRST navigation after a studio
+    /// spawn is what launches Chromium and can take tens of seconds (cold
+    /// start may download the driver) — use a generous per-request timeout
+    /// overriding the client's 15 s default.
+    pub async fn trigger_navigation(&self, url: &str) -> AppResult<()> {
+        let yaml = format!("openLink: {url}");
+        let resp = self
+            .client
+            .post(self.url("api/run-command"))
+            .timeout(Duration::from_secs(90))
+            .json(&serde_json::json!({ "yaml": yaml, "dryRun": false }))
+            .send()
+            .await
+            .map_err(|e| AppError::Other(format!("run-command: {e}")))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let detail = resp.text().await.unwrap_or_default();
+            return Err(AppError::Other(format!(
+                "openLink {status}: {} | sent url: {url}",
+                detail.trim()
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// Extract the JSON payload of the first complete `data: …` line in an SSE
@@ -265,6 +302,13 @@ fn studio_args() -> Vec<String> {
         "studio".to_string(),
         "--no-window".to_string(),
     ]
+}
+
+/// Where to point the browser when the flow has no `url:` — Studio's own
+/// interact page. Local, always reachable, and `openLink` requires an
+/// http(s) URL (about:blank / chrome:// are rejected with 400).
+fn default_trigger_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}/interact")
 }
 
 /// Kill orphaned Chromium automation processes left behind by
@@ -363,27 +407,13 @@ impl WebStudioKeeper {
             port,
         });
 
-        emit_status(app, "info", "Starting Chromium…");
+        // Phase 1: wait for the Studio HTTP API (fast — no browser involved).
+        emit_status(app, "info", "Starting the web driver…");
+        let mut api_up = false;
         for attempt in 0..READY_ATTEMPTS {
-            if keeper.http.is_alive().await {
-                info!(port, "web studio ready");
-                emit_status(app, "info", "Web browser ready");
-                if let Some(u) = url {
-                    let yaml = format!("openLink: {u}");
-                    if let Err(e) = keeper
-                        .http
-                        .run_command(serde_json::json!({ "yaml": yaml }))
-                        .await
-                    {
-                        warn!(error = %e, "web navigate failed (continuing on current page)");
-                        emit_status(
-                            app,
-                            "warn",
-                            "Couldn't open the flow's url — the browser stays on its current page.",
-                        );
-                    }
-                }
-                return Ok(keeper);
+            if keeper.http.api_ready().await {
+                api_up = true;
+                break;
             }
             // A studio that died (bad install, port race we lost) will never become
             // ready — surface its exit immediately instead of waiting out the budget.
@@ -399,25 +429,67 @@ impl WebStudioKeeper {
                 )));
             }
             if attempt % 10 == 0 {
-                info!(port, attempt, "waiting for web studio...");
+                info!(port, attempt, "waiting for web studio api...");
+            }
+            sleep(Duration::from_millis(READY_BACKOFF_MS)).await;
+        }
+        if !api_up {
+            keeper.stop().await;
+            return Err(AppError::Other(
+                "maestro studio -p web did not bring up the API on :9999 in time. \
+                 Run `maestro -p web studio` in a terminal to check it works."
+                    .into(),
+            ));
+        }
+
+        // Phase 2: launch Chromium. Studio starts the browser only on the first
+        // command — without this the device-screen SSE never emits and readiness
+        // below would time out (the historical connect flakiness).
+        emit_status(app, "info", "Starting Chromium…");
+        let target = url
+            .map(str::to_string)
+            .unwrap_or_else(|| default_trigger_url(port));
+        if let Err(e) = keeper.http.trigger_navigation(&target).await {
+            warn!(error = %e, "web navigate failed (continuing — browser may still come up)");
+            emit_status(
+                app,
+                "warn",
+                "Couldn't open the flow's url — the browser stays on its current page.",
+            );
+        }
+
+        // Phase 3: first device-screen event = browser is actually up.
+        for attempt in 0..READY_ATTEMPTS {
+            if keeper.http.is_alive().await {
+                info!(port, "web studio ready");
+                emit_status(app, "info", "Web browser ready");
+                return Ok(keeper);
+            }
+            // A studio that died (bad install, port race we lost) will never become
+            // ready — surface its exit immediately instead of waiting out the budget.
+            let exited = {
+                let mut guard = keeper.studio_child.lock().await;
+                guard.as_mut().and_then(|c| c.try_wait().ok().flatten())
+            };
+            if let Some(status) = exited {
+                keeper.stop().await;
+                return Err(AppError::Other(format!(
+                    "maestro studio -p web exited during startup ({status}). \
+                     Run `maestro -p web studio` in a terminal to see its error."
+                )));
             }
             if attempt == 20 {
-                // 10 s in: on a cold start maestro may be downloading Chromium.
                 emit_status(
                     app,
                     "info",
                     "Still starting — first run may download Chromium…",
                 );
             }
-            if attempt + 1 < READY_ATTEMPTS {
-                sleep(Duration::from_millis(READY_BACKOFF_MS)).await;
-            }
+            sleep(Duration::from_millis(READY_BACKOFF_MS)).await;
         }
         keeper.stop().await;
         Err(AppError::Other(
-            "maestro studio -p web did not bring up the API on :9999 in time. \
-             Run `maestro -p web studio` in a terminal to check it works."
-                .into(),
+            "the web browser did not become ready. Run `maestro -p web studio` in a terminal to check it works.".into(),
         ))
     }
 
@@ -566,6 +638,11 @@ mod tests {
             Some("{\"a\":1}")
         );
         assert!(extract_sse_data(b":comment\n").is_none());
+    }
+
+    #[test]
+    fn default_trigger_is_local_studio_page() {
+        assert_eq!(default_trigger_url(9999), "http://127.0.0.1:9999/interact");
     }
 
     #[test]
