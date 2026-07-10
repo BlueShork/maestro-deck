@@ -18,9 +18,17 @@ use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::error::{AppError, AppResult};
+use crate::process_ext::CommandExtNoWindow;
 
 /// Default port the Maestro Studio HTTP server binds to.
 pub const STUDIO_PORT: u16 = 9999;
+
+/// Command-line needles (ordered substrings) identifying a **web** maestro
+/// studio — the `-p web` needle is what keeps a mobile studio session safe
+/// from this sweep. Matched against the JVM's full command line.
+pub(crate) const WEB_STUDIO_NEEDLES: &[&str] = &["maestro", "-p web", "studio"];
+const CHROMEDRIVER_NEEDLES: &[&str] = &["selenium", "chromedriver"];
+const WEBDRIVER_CHROME_NEEDLES: &[&str] = &["test-type=webdriver"];
 
 /// Parsed `GET /api/device-screen` response.
 /// VERIFY (Task 1): field names/screenshot encoding against the captured fixture.
@@ -176,37 +184,15 @@ fn studio_args() -> Vec<String> {
 
 /// Kill orphaned Chromium automation processes left behind by
 /// `maestro studio -p web`. Maestro drives Chrome through a Selenium-managed
-/// `chromedriver`; SIGKILLing the `maestro studio` JVM (our teardown path, via
-/// `kill_on_drop`/`stop`) reaps neither the driver nor the browser it spawned,
-/// so headed Chrome windows pile up across sessions. We match the Selenium
-/// chromedriver and the `--test-type=webdriver` Chrome it launches — markers a
-/// user's normal Chrome never carries, so personal browsing is untouched. Like
-/// [`kill_orphan_studios_pub`], this is a coarse machine-wide sweep: it would
-/// also catch another tool's Selenium session, which is acceptable for V1.
-#[cfg(unix)]
+/// `chromedriver`; killing the studio JVM reaps neither the driver nor the
+/// browser, so headed Chrome windows pile up across sessions. We match the
+/// Selenium chromedriver and the `--test-type=webdriver` Chrome it launches —
+/// markers a user's normal Chrome never carries. Cross-platform via
+/// `prockill` (`ps`+`kill` / PowerShell+`taskkill`).
 async fn kill_orphan_web_browsers() {
-    // chromedriver lives under the Selenium cache; the driven Chrome carries
-    // the webdriver test-type flag. Killing both closes the window and frees
-    // the driver port.
-    for pattern in ["selenium/chromedriver", "test-type=webdriver"] {
-        let Ok(output) = Command::new("pgrep").args(["-f", pattern]).output().await else {
-            continue;
-        };
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            let Ok(pid) = line.trim().parse::<u32>() else {
-                continue;
-            };
-            warn!(pid, pattern, "SIGKILL orphan web automation process");
-            let _ = Command::new("kill")
-                .args(["-9", &pid.to_string()])
-                .output()
-                .await;
-        }
-    }
+    crate::prockill::kill_matching(CHROMEDRIVER_NEEDLES, "orphan chromedriver").await;
+    crate::prockill::kill_matching(WEBDRIVER_CHROME_NEEDLES, "orphan webdriver Chrome").await;
 }
-
-#[cfg(not(unix))]
-async fn kill_orphan_web_browsers() {}
 
 /// Keeps `maestro studio -p web` alive and owns the HTTP client for the session.
 pub struct WebStudioKeeper {
@@ -224,15 +210,15 @@ impl WebStudioKeeper {
     }
 
     pub async fn start(port: u16, url: Option<&str>) -> AppResult<Arc<Self>> {
-        // Cull any orphan studio from a crashed prior session (mirrors the
-        // Android StudioKeeper orphan-kill). Reuse the existing helper, then
-        // sweep the browsers a dead studio leaves behind so a fresh session
-        // doesn't add yet another Chrome window to a growing pile.
-        crate::hierarchy::studio::kill_orphan_studios_pub().await;
+        // Cull any orphan studio from a crashed prior session. Scoped: only web studios;
+        // a live iOS/Android studio session belonging to this app (or anything else)
+        // is never touched.
+        crate::prockill::kill_matching(WEB_STUDIO_NEEDLES, "orphan web studio").await;
         kill_orphan_web_browsers().await;
 
         let maestro = crate::tool_paths::maestro_bin();
         let studio = Command::new(&maestro)
+            .no_window()
             .args(studio_args())
             .kill_on_drop(true)
             .spawn()
@@ -377,5 +363,15 @@ mod tests {
         assert_eq!(a[0], "-p");
         assert_eq!(a[1], "web");
         assert_eq!(a[2], "studio");
+    }
+
+    #[test]
+    fn web_sweep_needles_are_scoped_to_web_studios() {
+        // Regression: the old sweep (`pgrep maestro.*studio`) killed the iOS
+        // simulator studio session. The scoped needles must not.
+        let ios = "java -classpath /opt/homebrew/Cellar/maestro/2.5.1/libexec/lib/* maestro.cli.AppKt --device ABC studio --no-window";
+        let web = "java -classpath /opt/homebrew/Cellar/maestro/2.5.1/libexec/lib/* maestro.cli.AppKt -p web studio --no-window";
+        assert!(crate::prockill::cmdline_matches(web, WEB_STUDIO_NEEDLES));
+        assert!(!crate::prockill::cmdline_matches(ios, WEB_STUDIO_NEEDLES));
     }
 }
