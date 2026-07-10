@@ -21,6 +21,7 @@ pub mod ipc;
 pub mod maestro_health;
 pub mod metrics;
 pub mod process_ext;
+pub mod prockill;
 pub mod runner;
 pub mod scrcpy;
 pub mod selector;
