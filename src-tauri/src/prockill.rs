@@ -9,6 +9,9 @@
 
 use tracing::warn;
 
+// Only the Windows subprocess calls need the no-window flag; on Unix the
+// import would be unused and trip `-D warnings`.
+#[cfg(windows)]
 use crate::process_ext::CommandExtNoWindow;
 
 /// True if every needle appears in `cmdline`, in order. Substrings, not
