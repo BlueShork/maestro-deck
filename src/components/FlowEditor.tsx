@@ -217,7 +217,14 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
           if (v.selectionSet) {
             const head = v.state.selection.main.head;
             const line = v.state.doc.lineAt(head);
-            setCursor(line.number, head - line.from + 1);
+            // Only user gestures (click, keyboard move, typing, deleting)
+            // count as "placing" the cursor — mount focus and store sync
+            // dispatches must not flip cursorPlaced.
+            const userDriven = v.transactions.some(
+              (tr) =>
+                tr.isUserEvent("select") || tr.isUserEvent("input") || tr.isUserEvent("delete"),
+            );
+            setCursor(line.number, head - line.from + 1, userDriven);
           }
         }),
       ],
