@@ -79,20 +79,23 @@ async fn tap_command(
     y: f32,
     screen_w: u16,
     screen_h: u16,
-) -> String {
-    if screen_w > 0 && screen_h > 0 {
-        if let Ok(screen) = http.device_screen().await {
-            if screen.width > 0 && screen.height > 0 {
-                // Map screenshot-pixel coords into the element CSS-pixel space.
-                let cx = (x / screen_w as f32 * screen.width as f32) as i32;
-                let cy = (y / screen_h as f32 * screen.height as f32) as i32;
-                if let Some(sel) = element_selector_at(&screen.elements, cx, cy) {
-                    return sel;
-                }
-            }
-        }
+) -> TapResolution {
+    let snapshot = if screen_w > 0 && screen_h > 0 {
+        http.device_screen().await.ok()
+    } else {
+        None
+    };
+    match snapshot {
+        Some(s) => resolve_tap(
+            Some(&s.elements),
+            (s.width, s.height),
+            x,
+            y,
+            screen_w,
+            screen_h,
+        ),
+        None => resolve_tap(None, (0, 0), x, y, screen_w, screen_h),
     }
-    tap_yaml(pct(x, screen_w), pct(y, screen_h))
 }
 
 /// Build the run-command body. Maestro Studio expects `{ "yaml": "<command>",
@@ -111,16 +114,63 @@ fn swipe_yaml(x1: f32, y1: f32, x2: f32, y2: f32, duration_ms: u32) -> String {
     format!("swipe: {{start: \"{x1}%,{y1}%\", end: \"{x2}%,{y2}%\", duration: {duration_ms}}}")
 }
 
+pub(crate) struct TapResolution {
+    pub yaml: String,
+    /// True when we *wanted* an element selector but the screen snapshot was
+    /// unavailable — the tap degrades to raw coordinates and may be less
+    /// precise. Surfaced to the user via `web:tap_fallback`.
+    pub degraded: bool,
+}
+
+/// Pure resolver: `elements` is `Some` when the snapshot succeeded (with the
+/// screen's CSS dims), `None` when it failed.
+pub(crate) fn resolve_tap(
+    elements: Option<&serde_json::Value>,
+    css_dims: (u32, u32),
+    x: f32,
+    y: f32,
+    screen_w: u16,
+    screen_h: u16,
+) -> TapResolution {
+    if let Some(els) = elements {
+        let (cw, ch) = css_dims;
+        if cw > 0 && ch > 0 && screen_w > 0 && screen_h > 0 {
+            let cx = (x / screen_w as f32 * cw as f32) as i32;
+            let cy = (y / screen_h as f32 * ch as f32) as i32;
+            if let Some(sel) = element_selector_at(els, cx, cy) {
+                return TapResolution {
+                    yaml: sel,
+                    degraded: false,
+                };
+            }
+        }
+        // Snapshot fine, just nothing selectable under the cursor.
+        return TapResolution {
+            yaml: tap_yaml(pct(x, screen_w), pct(y, screen_h)),
+            degraded: false,
+        };
+    }
+    TapResolution {
+        yaml: tap_yaml(pct(x, screen_w), pct(y, screen_h)),
+        degraded: true,
+    }
+}
+
 pub async fn send(
     event: &InputEvent,
     http: &WebStudioClient,
     screen_w: u16,
     screen_h: u16,
+    app: &tauri::AppHandle,
 ) -> AppResult<()> {
+    use tauri::Emitter;
     match event {
         InputEvent::Tap { x, y } => {
-            let yaml = tap_command(http, *x, *y, screen_w, screen_h).await;
-            http.run_command(command_body(yaml)).await
+            let tap = tap_command(http, *x, *y, screen_w, screen_h).await;
+            if tap.degraded {
+                let _ = app.emit("web:tap_fallback", ());
+            }
+            http.run_command(command_body(tap.yaml)).await
         }
         InputEvent::Swipe {
             x1,
@@ -214,5 +264,24 @@ mod tests {
             "swipe: {start: \"50%,50%\", end: \"50%,20%\", duration: 400}"
         );
         assert!(!sw.starts_with("- "));
+    }
+
+    #[test]
+    fn resolution_flags_degraded_only_on_snapshot_failure() {
+        let els = serde_json::json!([
+            {"bounds":{"x":0,"y":0,"width":100,"height":100},"resourceId":"Btn"}
+        ]);
+        // Snapshot OK + element found → selector, not degraded.
+        let r = resolve_tap(Some(&els), (1200, 800), 50.0, 50.0, 1200, 800);
+        assert_eq!(r.yaml, "tapOn: {id: \"Btn\"}");
+        assert!(!r.degraded);
+        // Snapshot OK + nothing under the point → point tap, NOT degraded.
+        let r = resolve_tap(Some(&els), (1200, 800), 600.0, 600.0, 1200, 800);
+        assert!(r.yaml.starts_with("tapOn: {point:"));
+        assert!(!r.degraded);
+        // Snapshot FAILED → point tap, degraded.
+        let r = resolve_tap(None, (0, 0), 600.0, 600.0, 1200, 800);
+        assert!(r.yaml.starts_with("tapOn: {point:"));
+        assert!(r.degraded);
     }
 }

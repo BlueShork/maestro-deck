@@ -819,7 +819,7 @@ pub async fn send_input(
         }
         crate::device::Platform::Web => {
             let keeper = ensure_web_keeper(None, Some(&app), state.inner()).await?;
-            input::web::send(&event, keeper.http(), screen_w, screen_h).await
+            input::web::send(&event, keeper.http(), screen_w, screen_h, &app).await
         }
     }
 }
