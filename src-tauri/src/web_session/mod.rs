@@ -388,13 +388,20 @@ async fn hide_window(_pid: u32) -> bool {
     false // No portable window control on Linux; the window stays visible.
 }
 
-/// Background task: hide the driven Chrome's window once it appears. The
-/// window can pop slightly after the first device-screen event, so retry
-/// for a few seconds; on macOS a refusal usually means the Accessibility
-/// permission is missing — surface that once.
+/// Background task: hide the driven Chrome's window as soon as it appears.
+/// Spawned right BEFORE the browser is triggered, polling fast (200 ms) so
+/// the window is caught within a blink of existing — waiting for full
+/// readiness left it on screen for the whole page load. A cold start may
+/// download Chromium, hence the generous overall budget. On macOS a refusal
+/// means the Automation/Accessibility permission is missing — surface that.
 fn spawn_window_hider(app: Option<AppHandle>) {
     tokio::spawn(async move {
-        for _ in 0..12 {
+        // A refusal on an EXISTING process can be transient (Chrome not yet
+        // scriptable right after spawn) — only after several consecutive
+        // refusals do we conclude the OS permission is missing.
+        let mut refusals = 0u32;
+        let mut denied = false;
+        for _ in 0..300 {
             let mains: Vec<u32> = crate::prockill::pids_matching(WEBDRIVER_CHROME_NEEDLES)
                 .await
                 .into_iter()
@@ -410,18 +417,26 @@ fn spawn_window_hider(app: Option<AppHandle>) {
                     info!("driven Chrome window hidden");
                     return;
                 }
+                refusals += 1;
+                if refusals >= 10 {
+                    denied = true;
+                    break;
+                }
             }
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(200)).await;
         }
         #[cfg(target_os = "macos")]
-        emit_status(
-            app.as_ref(),
-            "warn",
-            "Couldn't hide the Chrome window — allow Maestro Deck under \
-             System Settings > Privacy & Security > Accessibility.",
-        );
+        if denied {
+            emit_status(
+                app.as_ref(),
+                "warn",
+                "Couldn't hide the Chrome window — allow Maestro Deck under \
+                 System Settings > Privacy & Security > Automation (System \
+                 Events), then reconnect.",
+            );
+        }
         #[cfg(not(target_os = "macos"))]
-        let _ = app;
+        let _ = (app, denied);
     });
 }
 
@@ -603,6 +618,10 @@ impl WebStudioKeeper {
         // command — without this the device-screen SSE never emits and readiness
         // below would time out (the historical connect flakiness).
         emit_status(app, "info", "Starting Chromium…");
+        // Arm the window hider BEFORE the browser exists: it polls fast and
+        // hides the window within a blink of it appearing. Hiding only after
+        // readiness left the window on screen for the whole page load.
+        spawn_window_hider(app.cloned());
         let target = url
             .map(str::to_string)
             .unwrap_or_else(|| default_trigger_url(port));
@@ -620,9 +639,6 @@ impl WebStudioKeeper {
             if keeper.http.is_alive().await {
                 info!(port, "web studio ready");
                 emit_status(app, "info", "Web browser ready");
-                // Keep the driven Chrome off the user's screen — the in-app
-                // preview is the UI. Best-effort, non-blocking.
-                spawn_window_hider(app.cloned());
                 return Ok(keeper);
             }
             // A studio that died (bad install, port race we lost) will never become
