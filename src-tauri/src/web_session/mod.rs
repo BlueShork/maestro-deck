@@ -327,7 +327,7 @@ impl WebStudioKeeper {
                         emit_status(
                             app,
                             "warn",
-                            "Couldn't open the flow's url: — the browser stays on its current page.",
+                            "Couldn't open the flow's url — the browser stays on its current page.",
                         );
                     }
                 }
@@ -335,14 +335,16 @@ impl WebStudioKeeper {
             }
             // A studio that died (bad install, port race we lost) will never become
             // ready — surface its exit immediately instead of waiting out the budget.
-            if let Some(child) = keeper.studio_child.lock().await.as_mut() {
-                if let Ok(Some(status)) = child.try_wait() {
-                    keeper.stop().await;
-                    return Err(AppError::Other(format!(
-                        "maestro studio -p web exited during startup ({status}). \
-                         Run `maestro -p web studio` in a terminal to see its error."
-                    )));
-                }
+            let exited = {
+                let mut guard = keeper.studio_child.lock().await;
+                guard.as_mut().and_then(|c| c.try_wait().ok().flatten())
+            };
+            if let Some(status) = exited {
+                keeper.stop().await;
+                return Err(AppError::Other(format!(
+                    "maestro studio -p web exited during startup ({status}). \
+                     Run `maestro -p web studio` in a terminal to see its error."
+                )));
             }
             if attempt % 10 == 0 {
                 info!(port, attempt, "waiting for web studio...");
