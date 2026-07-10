@@ -3,6 +3,7 @@
 
 //! Maestro Deck — source-available visual IDE for Maestro mobile tests.
 
+pub mod app_control;
 #[cfg(target_os = "macos")]
 pub mod avf_capture;
 pub mod bank;
@@ -42,8 +43,6 @@ use credentials::{delete_credential, get_credential, save_credential};
 use ipc::commands::*;
 use tool_paths::{get_tool_paths, set_tool_paths};
 use vertex::vertex_get_access_token;
-
-pub mod app_control;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
