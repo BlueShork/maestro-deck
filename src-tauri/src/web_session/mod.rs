@@ -166,7 +166,40 @@ fn extract_sse_data(buf: &[u8]) -> Option<String> {
     Some(s[start..start + rel_end].trim().to_string())
 }
 
-const READY_ATTEMPTS: u32 = 120;
+/// Classify who (if anyone) is holding the web studio port.
+#[derive(Debug)]
+pub(crate) enum PortOwnerKind {
+    /// A leftover `maestro -p web studio` — safe to kill (our sweep does).
+    OrphanWebStudio,
+    /// A mobile (iOS/Android) studio — belongs to a live session, never kill.
+    MobileStudio,
+    /// Anything else (another tool squatting the port).
+    Foreign,
+}
+
+pub(crate) fn classify_port_owner(cmdline: &str) -> PortOwnerKind {
+    if crate::prockill::cmdline_matches(cmdline, WEB_STUDIO_NEEDLES) {
+        PortOwnerKind::OrphanWebStudio
+    } else if crate::prockill::cmdline_matches(cmdline, &["maestro", "studio"]) {
+        PortOwnerKind::MobileStudio
+    } else {
+        PortOwnerKind::Foreign
+    }
+}
+
+/// Connect-progress event consumed by the frontend toast layer.
+const WEB_STATUS_EVENT: &str = "web:status";
+
+fn emit_status(app: Option<&AppHandle>, stage: &str, message: &str) {
+    if let Some(app) = app {
+        let _ = app.emit(
+            WEB_STATUS_EVENT,
+            serde_json::json!({ "stage": stage, "message": message }),
+        );
+    }
+}
+
+const READY_ATTEMPTS: u32 = 240;
 const READY_BACKOFF_MS: u64 = 500;
 
 fn studio_args() -> Vec<String> {
@@ -209,7 +242,49 @@ impl WebStudioKeeper {
         self.port
     }
 
-    pub async fn start(port: u16, url: Option<&str>) -> AppResult<Arc<Self>> {
+    pub async fn start(
+        port: u16,
+        url: Option<&str>,
+        app: Option<&AppHandle>,
+    ) -> AppResult<Arc<Self>> {
+        // Pre-flight: :9999 is Studio's only possible port. Fail fast with a
+        // nameable culprit instead of burning the 60 s ready budget in silence.
+        if let Some(owner) = crate::prockill::port_owner(port).await {
+            match classify_port_owner(&owner.cmdline) {
+                PortOwnerKind::OrphanWebStudio => {
+                    // The sweep below reaps it before we spawn ours.
+                }
+                PortOwnerKind::MobileStudio => {
+                    // `connect_device` retires the iOS keeper before a web connect,
+                    // but its stop() is async — give the port a moment to free.
+                    let mut freed = false;
+                    for _ in 0..15 {
+                        sleep(Duration::from_millis(200)).await;
+                        if crate::prockill::port_owner(port).await.is_none() {
+                            freed = true;
+                            break;
+                        }
+                    }
+                    if !freed {
+                        return Err(AppError::Other(format!(
+                            "Studio port :{port} is still held by a mobile maestro \
+                             studio session (pid {}). Disconnect the simulator, then \
+                             retry the web connect.",
+                            owner.pid
+                        )));
+                    }
+                }
+                PortOwnerKind::Foreign => {
+                    return Err(AppError::Other(format!(
+                        "Studio port :{port} is taken by another process (pid {}: {}). \
+                         Stop it, then retry the web connect.",
+                        owner.pid,
+                        owner.cmdline.chars().take(120).collect::<String>()
+                    )));
+                }
+            }
+        }
+
         // Cull any orphan studio from a crashed prior session. Scoped: only web studios;
         // a live iOS/Android studio session belonging to this app (or anything else)
         // is never touched.
@@ -236,14 +311,12 @@ impl WebStudioKeeper {
             port,
         });
 
+        emit_status(app, "info", "Starting Chromium…");
         for attempt in 0..READY_ATTEMPTS {
             if keeper.http.is_alive().await {
                 info!(port, "web studio ready");
-                // Best-effort navigate the automated browser to the flow's url.
-                // VERIFY (Task 1): the exact command — assumed an openLink. If
-                // studio ignores it, navigation may instead need a studio arg.
+                emit_status(app, "info", "Web browser ready");
                 if let Some(u) = url {
-                    // Single command, no leading `- ` (Studio rejects flows).
                     let yaml = format!("openLink: {u}");
                     if let Err(e) = keeper
                         .http
@@ -251,12 +324,36 @@ impl WebStudioKeeper {
                         .await
                     {
                         warn!(error = %e, "web navigate failed (continuing on current page)");
+                        emit_status(
+                            app,
+                            "warn",
+                            "Couldn't open the flow's url: — the browser stays on its current page.",
+                        );
                     }
                 }
                 return Ok(keeper);
             }
+            // A studio that died (bad install, port race we lost) will never become
+            // ready — surface its exit immediately instead of waiting out the budget.
+            if let Some(child) = keeper.studio_child.lock().await.as_mut() {
+                if let Ok(Some(status)) = child.try_wait() {
+                    keeper.stop().await;
+                    return Err(AppError::Other(format!(
+                        "maestro studio -p web exited during startup ({status}). \
+                         Run `maestro -p web studio` in a terminal to see its error."
+                    )));
+                }
+            }
             if attempt % 10 == 0 {
                 info!(port, attempt, "waiting for web studio...");
+            }
+            if attempt == 20 {
+                // 10 s in: on a cold start maestro may be downloading Chromium.
+                emit_status(
+                    app,
+                    "info",
+                    "Still starting — first run may download Chromium…",
+                );
             }
             if attempt + 1 < READY_ATTEMPTS {
                 sleep(Duration::from_millis(READY_BACKOFF_MS)).await;
@@ -264,7 +361,9 @@ impl WebStudioKeeper {
         }
         keeper.stop().await;
         Err(AppError::Other(
-            "maestro studio -p web did not bring up the API on :9999 in time".into(),
+            "maestro studio -p web did not bring up the API on :9999 in time. \
+             Run `maestro -p web studio` in a terminal to check it works."
+                .into(),
         ))
     }
 
@@ -373,5 +472,24 @@ mod tests {
         let web = "java -classpath /opt/homebrew/Cellar/maestro/2.5.1/libexec/lib/* maestro.cli.AppKt -p web studio --no-window";
         assert!(crate::prockill::cmdline_matches(web, WEB_STUDIO_NEEDLES));
         assert!(!crate::prockill::cmdline_matches(ios, WEB_STUDIO_NEEDLES));
+    }
+
+    #[test]
+    fn preflight_classifies_port_owners() {
+        let web = "java -cp maestro/lib maestro.cli.AppKt -p web studio --no-window";
+        let ios = "java -cp maestro/lib maestro.cli.AppKt --device ABC studio --no-window";
+        let foreign = "/usr/bin/python3 -m http.server 9999";
+        assert!(matches!(
+            classify_port_owner(web),
+            PortOwnerKind::OrphanWebStudio
+        ));
+        assert!(matches!(
+            classify_port_owner(ios),
+            PortOwnerKind::MobileStudio
+        ));
+        assert!(matches!(
+            classify_port_owner(foreign),
+            PortOwnerKind::Foreign
+        ));
     }
 }

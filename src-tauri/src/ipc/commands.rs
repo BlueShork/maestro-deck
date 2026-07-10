@@ -154,7 +154,7 @@ pub async fn connect_device(
         Platform::Web => {
             // `url` is read from the open flow's `url:` header on the frontend
             // and navigated to on a fresh studio spawn.
-            let keeper = ensure_web_keeper(url.as_deref(), state.inner()).await?;
+            let keeper = ensure_web_keeper(url.as_deref(), Some(&app), state.inner()).await?;
             let mut device = crate::device::web::synthetic_target();
             if let Ok(s) = keeper.http().device_screen().await {
                 device.screen_width = s.width;
@@ -305,7 +305,7 @@ pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResu
             if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
                 let _ = abort.send(());
             }
-            let keeper = ensure_web_keeper(None, state.inner()).await?;
+            let keeper = ensure_web_keeper(None, None, state.inner()).await?;
             let abort = crate::web_session::spawn_screenshot_poller(app, keeper);
             *state.web_screenshot_abort.lock().await = Some(abort);
         }
@@ -490,6 +490,7 @@ async fn teardown_ios(state: &AppState, keep_sim_warm: bool) {
 /// keeper has died. `url` is navigated to on a fresh spawn (from the open flow).
 async fn ensure_web_keeper(
     url: Option<&str>,
+    app: Option<&AppHandle>,
     state: &AppState,
 ) -> AppResult<std::sync::Arc<crate::web_session::WebStudioKeeper>> {
     let mut slot = state.web_driver.lock().await;
@@ -502,7 +503,7 @@ async fn ensure_web_keeper(
             existing.stop().await;
         }
         let keeper =
-            crate::web_session::WebStudioKeeper::start(crate::web_session::STUDIO_PORT, url)
+            crate::web_session::WebStudioKeeper::start(crate::web_session::STUDIO_PORT, url, app)
                 .await?;
         *slot = Some(keeper);
     }
@@ -573,7 +574,7 @@ pub async fn enter_inspect_mode(
         return finalize_hierarchy(tree, state.inner()).await;
     }
     if device.platform == crate::device::Platform::Web {
-        let keeper = ensure_web_keeper(None, state.inner()).await?;
+        let keeper = ensure_web_keeper(None, Some(&app), state.inner()).await?;
         let screen = keeper.http().device_screen().await?;
         let tree = crate::hierarchy::web::parse_device_screen_hierarchy(
             &screen.elements,
@@ -763,6 +764,7 @@ pub async fn send_input(
     event: InputEvent,
     screen_w: u16,
     screen_h: u16,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<()> {
     // The caller knows which coordinate system its (x, y) values are in
@@ -793,7 +795,7 @@ pub async fn send_input(
             input::ios::send(&event, keeper.http(), screen_w, screen_h, pt_w, pt_h).await
         }
         crate::device::Platform::Web => {
-            let keeper = ensure_web_keeper(None, state.inner()).await?;
+            let keeper = ensure_web_keeper(None, Some(&app), state.inner()).await?;
             input::web::send(&event, keeper.http(), screen_w, screen_h).await
         }
     }
