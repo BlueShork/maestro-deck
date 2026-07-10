@@ -11,6 +11,8 @@ import type { WorkspaceNode } from "@/types";
 vi.mock("@/lib/ipc", () => ({
   ipc: {
     enterInspectMode: vi.fn(),
+    queryElement: vi.fn(),
+    suggestSelectors: vi.fn(),
     sendInput: vi.fn(),
     iosPressHome: vi.fn(),
     readWorkspaceFile: vi.fn(),
@@ -51,11 +53,12 @@ const EXPECTED_TOOL_NAMES = [
   "run_flow",
   "launch_app",
   "stop_app",
+  "inspect_element",
 ];
 
 describe("Tool registry", () => {
-  // Test 1: ALL_TOOLS contains exactly the 11 expected tools
-  it("ALL_TOOLS contains exactly the 11 expected tool names, no duplicates", () => {
+  // Test 1: ALL_TOOLS contains exactly the 12 expected tools
+  it("ALL_TOOLS contains exactly the 12 expected tool names, no duplicates", () => {
     const names = ALL_TOOLS.map((t) => t.name);
     expect(names).toHaveLength(EXPECTED_TOOL_NAMES.length);
     expect(new Set(names).size).toBe(names.length); // no duplicates
@@ -96,6 +99,20 @@ describe("Tool registry", () => {
     useDeviceStore.setState({ current: null });
     try {
       const result = await executeTool("tap", { x: 1, y: 2 });
+      expect(result.isError).toBe(true);
+      expect(result.content).toMatch(/No device/i);
+    } finally {
+      useDeviceStore.setState({ current: prev });
+    }
+  });
+
+  // Test 5a: executeTool("inspect_element", ...) with no device → isError true, message mentions "No device"
+  it('executeTool("inspect_element", {x:100,y:200}) with no device → isError true mentioning "No device"', async () => {
+    const { useDeviceStore } = await import("@/stores/deviceStore");
+    const prev = useDeviceStore.getState().current;
+    useDeviceStore.setState({ current: null });
+    try {
+      const result = await executeTool("inspect_element", { x: 100, y: 200 });
       expect(result.isError).toBe(true);
       expect(result.content).toMatch(/No device/i);
     } finally {
