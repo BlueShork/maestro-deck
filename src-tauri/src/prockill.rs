@@ -84,6 +84,17 @@ async fn kill_pid(pid: u32) {
         .await;
 }
 
+/// `(pid, command line)` of every process matching `needles` (in order),
+/// excluding our own. Best-effort: an unreadable process table yields empty.
+pub async fn pids_matching(needles: &[&str]) -> Vec<(u32, String)> {
+    let me = std::process::id();
+    list_processes()
+        .await
+        .into_iter()
+        .filter(|(pid, cmdline)| *pid != me && cmdline_matches(cmdline, needles))
+        .collect()
+}
+
 /// Kill every process whose command line matches `needles` (in order).
 /// Skips our own process. Best-effort: listing or kill failures are ignored.
 pub async fn kill_matching(needles: &[&str], reason: &str) {

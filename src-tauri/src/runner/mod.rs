@@ -201,17 +201,18 @@ pub async fn spawn_runner(
     Ok(pid)
 }
 
-/// Spawn `maestro test <flow>` for the web platform — no `--udid`, since
-/// Maestro targets the browser via the flow's `url:` header, and no adb
-/// emulator-ghost preamble (irrelevant to web). Streams stdout/stderr and
-/// emits `runner:exit` exactly like [`spawn_runner`].
+/// Spawn `maestro test --headless <flow>` for the web platform — no `--udid`,
+/// since Maestro targets the browser via the flow's `url:` header, and no adb
+/// emulator-ghost preamble (irrelevant to web). `--headless` keeps the run's
+/// Chromium off-screen (web-only flag; the console output is the run's UI).
+/// Streams stdout/stderr and emits `runner:exit` exactly like [`spawn_runner`].
 pub async fn spawn_web_runner(
     app: AppHandle,
     flow_path: &str,
     app_id: Option<&str>,
 ) -> AppResult<u32> {
     let bin = maestro_bin();
-    info!(bin = %bin, flow = %flow_path, "spawning maestro (web)");
+    info!(bin = %bin, flow = %flow_path, "spawning maestro (web, headless)");
     let env_args = app_id_env_args(app_id);
     let flow_dir = std::path::Path::new(flow_path)
         .parent()
@@ -221,7 +222,7 @@ pub async fn spawn_web_runner(
     let mut child = Command::new(&bin)
         .no_window()
         // `-p web` is a global flag and must precede the `test` subcommand.
-        .args(["-p", "web", "test"])
+        .args(["-p", "web", "test", "--headless"])
         .args(&env_args)
         .arg(flow_path)
         .current_dir(&flow_dir)

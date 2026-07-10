@@ -308,12 +308,28 @@ fn studio_args() -> Vec<String> {
     // (`maestro -p web studio …`); placing it after `studio` is rejected
     // ("Unknown options: '-p', 'web'") on maestro 2.5.1. `--no-window`
     // suppresses Studio's own UI tab — we render our own canvas.
+    // `--no-ansi` keeps the stdout banner parseable (see `parse_studio_port`).
     vec![
         "-p".to_string(),
         "web".to_string(),
         "studio".to_string(),
         "--no-window".to_string(),
+        "--no-ansi".to_string(),
     ]
+}
+
+/// Extract the port from Studio's startup banner. Studio **auto-increments**
+/// its port when the default is busy (e.g. a mobile studio session on
+/// :9999) — assuming the default would silently talk to the wrong server.
+/// Banner line (inside a box-drawing frame):
+/// `│   Maestro Studio is running at http://localhost:10000   │`
+fn parse_studio_port(line: &str) -> Option<u16> {
+    let idx = line.find("running at http://localhost:")?;
+    let digits: String = line[idx + "running at http://localhost:".len()..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
 }
 
 /// Where to point the browser when the flow has no `url:` — Studio's own
@@ -321,6 +337,92 @@ fn studio_args() -> Vec<String> {
 /// http(s) URL (about:blank / chrome:// are rejected with 400).
 fn default_trigger_url(port: u16) -> String {
     format!("http://127.0.0.1:{port}/interact")
+}
+
+/// True for the driven Chrome's MAIN process: it carries the webdriver
+/// marker but no `--type=` (helpers/renderers/GPU children do). The main
+/// process is the one owning the window we want to hide.
+fn is_main_browser_process(cmdline: &str) -> bool {
+    cmdline.contains("test-type=webdriver") && !cmdline.contains("--type=")
+}
+
+/// Hide a process's window(s) at the OS level. `maestro studio` has no
+/// headless mode (Selenium factory is hardcoded headed for studio), so the
+/// only way to keep the driven Chrome off the user's screen is to hide it
+/// after launch. Chrome keeps rendering while hidden — it is launched with
+/// `--disable-backgrounding-occluded-windows`, so the SSE preview stays live.
+#[cfg(target_os = "macos")]
+async fn hide_window(pid: u32) -> bool {
+    // Requires the app to be allowed under System Settings > Privacy &
+    // Security > Accessibility (System Events scripting).
+    let script =
+        format!("tell application \"System Events\" to set visible of (first process whose unix id is {pid}) to false");
+    Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+async fn hide_window(pid: u32) -> bool {
+    // SW_HIDE (0) on the process's main window via user32.
+    let ps = format!(
+        "$sig='[DllImport(\"user32.dll\")]public static extern bool ShowWindowAsync(IntPtr h,int n);';\
+         Add-Type -MemberDefinition $sig -Name W -Namespace N;\
+         $p=Get-Process -Id {pid} -ErrorAction SilentlyContinue;\
+         if ($p -and $p.MainWindowHandle -ne 0) {{ [N.W]::ShowWindowAsync($p.MainWindowHandle,0) }} else {{ $false }}"
+    );
+    Command::new("powershell")
+        .no_window()
+        .args(["-NoProfile", "-Command", &ps])
+        .output()
+        .await
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("True"))
+        .unwrap_or(false)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+async fn hide_window(_pid: u32) -> bool {
+    false // No portable window control on Linux; the window stays visible.
+}
+
+/// Background task: hide the driven Chrome's window once it appears. The
+/// window can pop slightly after the first device-screen event, so retry
+/// for a few seconds; on macOS a refusal usually means the Accessibility
+/// permission is missing — surface that once.
+fn spawn_window_hider(app: Option<AppHandle>) {
+    tokio::spawn(async move {
+        for _ in 0..12 {
+            let mains: Vec<u32> = crate::prockill::pids_matching(WEBDRIVER_CHROME_NEEDLES)
+                .await
+                .into_iter()
+                .filter(|(_, cmd)| is_main_browser_process(cmd))
+                .map(|(pid, _)| pid)
+                .collect();
+            if !mains.is_empty() {
+                let mut all_hidden = true;
+                for pid in mains {
+                    all_hidden &= hide_window(pid).await;
+                }
+                if all_hidden {
+                    info!("driven Chrome window hidden");
+                    return;
+                }
+            }
+            sleep(Duration::from_millis(500)).await;
+        }
+        #[cfg(target_os = "macos")]
+        emit_status(
+            app.as_ref(),
+            "warn",
+            "Couldn't hide the Chrome window — allow Maestro Deck under \
+             System Settings > Privacy & Security > Accessibility.",
+        );
+        #[cfg(not(target_os = "macos"))]
+        let _ = app;
+    });
 }
 
 /// Kill orphaned Chromium automation processes left behind by
@@ -395,42 +497,17 @@ impl WebStudioKeeper {
         url: Option<&str>,
         app: Option<&AppHandle>,
     ) -> AppResult<Arc<Self>> {
-        // Pre-flight: :9999 is Studio's only possible port. Fail fast with a
-        // nameable culprit instead of burning the 60 s ready budget in silence.
+        // Pre-flight (informational): Studio auto-increments its port when
+        // the default is busy, and we parse the actual one from its banner
+        // below — a busy port is no longer fatal, but knowing who holds it
+        // helps debugging (e.g. a live mobile studio session).
         if let Some(owner) = crate::prockill::port_owner(port).await {
-            match classify_port_owner(&owner.cmdline) {
-                PortOwnerKind::OrphanWebStudio => {
-                    // The sweep below reaps it before we spawn ours.
-                }
-                PortOwnerKind::MobileStudio => {
-                    // `connect_device` retires the iOS keeper before a web connect,
-                    // but its stop() is async — give the port a moment to free.
-                    let mut freed = false;
-                    for _ in 0..15 {
-                        sleep(Duration::from_millis(200)).await;
-                        if crate::prockill::port_owner(port).await.is_none() {
-                            freed = true;
-                            break;
-                        }
-                    }
-                    if !freed {
-                        return Err(AppError::Other(format!(
-                            "Studio port :{port} is still held by a mobile maestro \
-                             studio session (pid {}). Disconnect the simulator, then \
-                             retry the web connect.",
-                            owner.pid
-                        )));
-                    }
-                }
-                PortOwnerKind::Foreign => {
-                    return Err(AppError::Other(format!(
-                        "Studio port :{port} is taken by another process (pid {}: {}). \
-                         Stop it, then retry the web connect.",
-                        owner.pid,
-                        owner.cmdline.chars().take(120).collect::<String>()
-                    )));
-                }
-            }
+            info!(
+                port,
+                pid = owner.pid,
+                kind = ?classify_port_owner(&owner.cmdline),
+                "default studio port busy — studio will pick the next free one"
+            );
         }
 
         // Cull any orphan studio from a crashed prior session. Scoped: only web studios;
@@ -440,9 +517,10 @@ impl WebStudioKeeper {
         kill_orphan_web_browsers().await;
 
         let maestro = crate::tool_paths::maestro_bin();
-        let studio = Command::new(&maestro)
+        let mut studio = Command::new(&maestro)
             .no_window()
             .args(studio_args())
+            .stdout(std::process::Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| {
@@ -453,12 +531,39 @@ impl WebStudioKeeper {
                 }
             })?;
 
+        // Learn the ACTUAL port from the startup banner — Studio silently
+        // auto-increments when the default is busy, and probing the default
+        // would then talk to whatever else lives there (a stale or mobile
+        // studio) instead of ours.
+        let mut actual_port = port;
+        if let Some(out) = studio.stdout.take() {
+            use tokio::io::AsyncBufReadExt;
+            let mut lines = tokio::io::BufReader::new(out).lines();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+            // On EOF or 60 s without a banner the loop ends and we fall back
+            // to the default port; the API probe below still guards readiness.
+            while let Ok(Ok(Some(line))) =
+                tokio::time::timeout_at(deadline, lines.next_line()).await
+            {
+                if let Some(p) = parse_studio_port(&line) {
+                    if p != port {
+                        info!(requested = port, actual = p, "studio picked another port");
+                    }
+                    actual_port = p;
+                    break;
+                }
+            }
+            // Keep draining so the child never blocks on a full stdout pipe.
+            tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
+        }
+
         let keeper = Arc::new(Self {
-            http: WebStudioClient::new(port)?,
+            http: WebStudioClient::new(actual_port)?,
             studio_child: AsyncMutex::new(Some(studio)),
-            port,
+            port: actual_port,
             latest_screen: std::sync::Mutex::new(None),
         });
+        let port = actual_port;
 
         // Phase 1: wait for the Studio HTTP API (fast — no browser involved).
         emit_status(app, "info", "Starting the web driver…");
@@ -488,11 +593,10 @@ impl WebStudioKeeper {
         }
         if !api_up {
             keeper.stop().await;
-            return Err(AppError::Other(
-                "maestro studio -p web did not bring up the API on :9999 in time. \
+            return Err(AppError::Other(format!(
+                "maestro studio -p web did not bring up the API on :{port} in time. \
                  Run `maestro -p web studio` in a terminal to check it works."
-                    .into(),
-            ));
+            )));
         }
 
         // Phase 2: launch Chromium. Studio starts the browser only on the first
@@ -516,6 +620,9 @@ impl WebStudioKeeper {
             if keeper.http.is_alive().await {
                 info!(port, "web studio ready");
                 emit_status(app, "info", "Web browser ready");
+                // Keep the driven Chrome off the user's screen — the in-app
+                // preview is the UI. Best-effort, non-blocking.
+                spawn_window_hider(app.cloned());
                 return Ok(keeper);
             }
             // A studio that died (bad install, port race we lost) will never become
@@ -706,6 +813,35 @@ mod tests {
         assert!(is_studio_local_url("http://localhost:9999/", 9999));
         assert!(!is_studio_local_url("https://www.bouyguestelecom.fr", 9999));
         assert!(!is_studio_local_url("http://127.0.0.1:8080/app", 9999));
+    }
+
+    #[test]
+    fn parses_port_from_studio_banner() {
+        // Real banner line (2026-07-10, maestro 2.5.1, --no-ansi) — Studio
+        // auto-increments when the default port is busy.
+        let line = "│   Maestro Studio is running at http://localhost:10000   │";
+        assert_eq!(parse_studio_port(line), Some(10000));
+        assert_eq!(
+            parse_studio_port("Maestro Studio is running at http://localhost:9999"),
+            Some(9999)
+        );
+        assert_eq!(
+            parse_studio_port("Navigate to http://localhost:9999 in your browser"),
+            None
+        );
+        assert_eq!(parse_studio_port("random noise"), None);
+    }
+
+    #[test]
+    fn window_hider_targets_only_the_main_browser_process() {
+        // Real command lines captured 2026-07-10. Only the main process owns
+        // the window; helpers carry `--type=` and must not be targeted.
+        let main = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --allow-pre-commit-input --enable-automation --test-type=webdriver --user-data-dir=/tmp/x data:,";
+        let helper = "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/149.0/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer) --type=renderer --enable-automation --test-type=webdriver";
+        let personal = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        assert!(is_main_browser_process(main));
+        assert!(!is_main_browser_process(helper));
+        assert!(!is_main_browser_process(personal));
     }
 
     #[test]
