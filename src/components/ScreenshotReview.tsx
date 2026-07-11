@@ -29,7 +29,10 @@ function maskRatios(
   deviceKey: string,
   on: boolean,
 ): { top: number; bottom: number; right: number } {
-  if (!on) return { top: 0, bottom: 0, right: 0 };
+  // Web captures have no status/nav bars or reserved scrollbar band —
+  // mirrors status_bar_ratio("web") = 0 in Rust (nothing is masked there).
+  const web = /web|chromium/i.test(deviceKey);
+  if (!on || web) return { top: 0, bottom: 0, right: 0 };
   const ios = /iphone|ipad|ipod/i.test(deviceKey);
   return ios
     ? { top: 0.06, bottom: 0.04, right: 0.02 }
