@@ -70,7 +70,7 @@ async fn list_processes() -> Vec<(u32, String)> {
         .collect()
 }
 
-async fn kill_pid(pid: u32) {
+pub(crate) async fn kill_pid(pid: u32) {
     #[cfg(unix)]
     let _ = tokio::process::Command::new("kill")
         .args(["-9", &pid.to_string()])

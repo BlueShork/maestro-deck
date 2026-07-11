@@ -1055,6 +1055,10 @@ pub async fn run_flow(
         state
             .web_run_active
             .store(true, std::sync::atomic::Ordering::SeqCst);
+        // A leftover headless Chrome from the previous run would win the
+        // mirror's discovery race and freeze the canvas on the old run's
+        // final frame — reap it before attaching to the new run.
+        crate::web_session::run_mirror::kill_stale_run_chromes().await;
         let mirror = crate::web_session::run_mirror::spawn_run_mirror(app.clone());
         *state.web_run_mirror_abort.lock().await = Some(mirror);
         // Pin the headless run's viewport to the interactive session's, so

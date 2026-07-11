@@ -72,6 +72,24 @@ async fn page_ws_url(port: u16) -> Option<String> {
         .and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string))
 }
 
+/// Kill headless run Chromes left over from a PREVIOUS run. maestro doesn't
+/// always reap its browser on exit, and a lingering one would win the
+/// mirror's discovery race: the canvas would show the last run's final frame
+/// instead of the new run executing. The studio's browser is headed, so it
+/// never matches; a stale chromedriver (browserless) is harmless and gets
+/// swept at the next keeper start.
+pub async fn kill_stale_run_chromes() {
+    for (pid, cmd) in crate::prockill::pids_matching(&["test-type=webdriver"]).await {
+        if is_headless_run_chrome(&cmd) {
+            warn!(
+                pid,
+                "killing stale headless run Chrome (previous run leftover)"
+            );
+            crate::prockill::kill_pid(pid).await;
+        }
+    }
+}
+
 /// Attach to the run's Chrome and re-emit screencast frames until aborted.
 /// CDP pushes a frame only when the page actually changes — ideal cadence
 /// for a live test view, and `data` is already base64 PNG (zero re-encode).
