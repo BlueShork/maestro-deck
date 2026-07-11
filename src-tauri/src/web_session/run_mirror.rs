@@ -102,9 +102,13 @@ pub fn spawn_run_mirror(app: AppHandle) -> oneshot::Sender<()> {
                 continue 'attach;
             };
             info!(%ws_url, "run mirror attached (CDP screencast)");
+            // JPEG q75: ~10× smaller than PNG per frame (and much faster for
+            // Chrome to encode) — the difference between a slideshow and a
+            // real-time feel. The frontend sniffs the 0xFFD8 magic and types
+            // the blob accordingly.
             let _ = ws
                 .send(Message::Text(
-                    r#"{"id":1,"method":"Page.startScreencast","params":{"format":"png","everyNthFrame":1,"maxWidth":1600,"maxHeight":1600}}"#.into(),
+                    r#"{"id":1,"method":"Page.startScreencast","params":{"format":"jpeg","quality":75,"everyNthFrame":1,"maxWidth":1600,"maxHeight":1600}}"#.into(),
                 ))
                 .await;
             loop {
