@@ -201,19 +201,35 @@ pub async fn spawn_runner(
     Ok(pid)
 }
 
+/// `--screen-size WxH` args matching the interactive session's viewport, so
+/// a headless run renders the SAME responsive layout the flow was authored
+/// against (maestro's headless default is 1024x768 — a narrower breakpoint
+/// where site content can differ or disappear). Empty when dims are unknown.
+fn web_screen_size_args(screen_size: Option<(u32, u32)>) -> Vec<String> {
+    match screen_size {
+        Some((w, h)) if w > 0 && h > 0 => {
+            vec!["--screen-size".to_string(), format!("{w}x{h}")]
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// Spawn `maestro test --headless <flow>` for the web platform — no `--udid`,
 /// since Maestro targets the browser via the flow's `url:` header, and no adb
 /// emulator-ghost preamble (irrelevant to web). `--headless` keeps the run's
-/// Chromium off-screen (web-only flag; the console output is the run's UI).
+/// Chromium off-screen (web-only flag; the console output is the run's UI);
+/// `--screen-size` pins the viewport to the interactive session's.
 /// Streams stdout/stderr and emits `runner:exit` exactly like [`spawn_runner`].
 pub async fn spawn_web_runner(
     app: AppHandle,
     flow_path: &str,
     app_id: Option<&str>,
+    screen_size: Option<(u32, u32)>,
 ) -> AppResult<u32> {
     let bin = maestro_bin();
-    info!(bin = %bin, flow = %flow_path, "spawning maestro (web, headless)");
+    info!(bin = %bin, flow = %flow_path, ?screen_size, "spawning maestro (web, headless)");
     let env_args = app_id_env_args(app_id);
+    let size_args = web_screen_size_args(screen_size);
     let flow_dir = std::path::Path::new(flow_path)
         .parent()
         .map(|p| p.to_path_buf())
@@ -223,6 +239,7 @@ pub async fn spawn_web_runner(
         .no_window()
         // `-p web` is a global flag and must precede the `test` subcommand.
         .args(["-p", "web", "test", "--headless"])
+        .args(&size_args)
         .args(&env_args)
         .arg(flow_path)
         .current_dir(&flow_dir)
@@ -548,6 +565,17 @@ pub async fn kill_runner(pid: u32) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn web_screen_size_args_pin_the_interactive_viewport() {
+        assert_eq!(
+            web_screen_size_args(Some((1200, 762))),
+            vec!["--screen-size".to_string(), "1200x762".to_string()]
+        );
+        // Unknown or degenerate dims → let maestro use its default.
+        assert!(web_screen_size_args(Some((0, 762))).is_empty());
+        assert!(web_screen_size_args(None).is_empty());
+    }
 
     #[tokio::test]
     async fn kill_unknown_pid_errors() {

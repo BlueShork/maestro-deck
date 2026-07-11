@@ -1057,7 +1057,20 @@ pub async fn run_flow(
             .store(true, std::sync::atomic::Ordering::SeqCst);
         let mirror = crate::web_session::run_mirror::spawn_run_mirror(app.clone());
         *state.web_run_mirror_abort.lock().await = Some(mirror);
-        let spawned = runner::spawn_web_runner(app, &file_path, app_id).await;
+        // Pin the headless run's viewport to the interactive session's, so
+        // the flow sees the same responsive layout it was authored against
+        // (maestro's headless default is a narrower 1024x768). Prefer the
+        // keeper's live dims; fall back to the dims captured at connect.
+        let screen_size = {
+            let keeper = state.web_driver.lock().await.clone();
+            keeper
+                .and_then(|k| {
+                    k.recent_screen(std::time::Duration::from_secs(10))
+                        .map(|s| (s.width, s.height))
+                })
+                .or(Some((device.screen_width, device.screen_height)))
+        };
+        let spawned = runner::spawn_web_runner(app, &file_path, app_id, screen_size).await;
         if spawned.is_err() {
             state
                 .web_run_active
