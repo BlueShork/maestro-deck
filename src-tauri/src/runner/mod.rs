@@ -201,14 +201,26 @@ pub async fn spawn_runner(
     Ok(pid)
 }
 
-/// `--screen-size WxH` args matching the interactive session's viewport, so
-/// a headless run renders the SAME responsive layout the flow was authored
-/// against (maestro's headless default is 1024x768 — a narrower breakpoint
-/// where site content can differ or disappear). Empty when dims are unknown.
+/// Vertical window-chrome allowance for headless web runs. Selenium applies
+/// `--screen-size` to the OUTER window, and Chrome (even headless=new)
+/// reserves ~143 px of virtual UI — the resulting viewport is that much
+/// shorter. Measured live (2026-07-11, Chrome 149: 1200x762 requested →
+/// 1200x619 viewport; 1200x905 requested → exactly 1200x762). If Chrome ever
+/// changes this, the bank will surface it as a visible dimension mismatch.
+const HEADLESS_CHROME_UI_PX: u32 = 143;
+
+/// `--screen-size WxH` args yielding a headless VIEWPORT that matches the
+/// interactive session's, so a run renders the SAME responsive layout the
+/// flow was authored against (maestro's headless default is 1024x768 — a
+/// narrower breakpoint where site content can differ or disappear) and bank
+/// captures line up with what the user sees. Empty when dims are unknown.
 fn web_screen_size_args(screen_size: Option<(u32, u32)>) -> Vec<String> {
     match screen_size {
         Some((w, h)) if w > 0 && h > 0 => {
-            vec!["--screen-size".to_string(), format!("{w}x{h}")]
+            vec![
+                "--screen-size".to_string(),
+                format!("{w}x{}", h + HEADLESS_CHROME_UI_PX),
+            ]
         }
         _ => Vec::new(),
     }
@@ -568,9 +580,12 @@ mod tests {
 
     #[test]
     fn web_screen_size_args_pin_the_interactive_viewport() {
+        // Height is padded by the window-chrome allowance so the resulting
+        // VIEWPORT (not the outer window) matches the interactive session:
+        // requesting 1200x905 yields a 1200x762 viewport (measured live).
         assert_eq!(
             web_screen_size_args(Some((1200, 762))),
-            vec!["--screen-size".to_string(), "1200x762".to_string()]
+            vec!["--screen-size".to_string(), "1200x905".to_string()]
         );
         // Unknown or degenerate dims → let maestro use its default.
         assert!(web_screen_size_args(Some((0, 762))).is_empty());
