@@ -6,8 +6,6 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
-  type CompletionContext,
-  type CompletionResult,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
@@ -51,8 +49,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
+import { clearIndentOnBlankLine } from "@/lib/editorCommands";
+import { maestroCompletions } from "@/lib/editorCompletions";
 import { parseFlow } from "@/lib/flowAst";
-import maestroCommands from "@/lib/maestro-commands.json";
 
 import { Button } from "@/components/ui/Button";
 import { themeExtensions } from "@/lib/editor-theme";
@@ -64,20 +63,6 @@ import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-
-function maestroCompletions(ctx: CompletionContext): CompletionResult | null {
-  const word = ctx.matchBefore(/[\w-]*/);
-  if (!word || (word.from === word.to && !ctx.explicit)) return null;
-  return {
-    from: word.from,
-    options: maestroCommands.map(({ label, info }) => ({
-      label,
-      type: "keyword",
-      detail: "maestro",
-      description: info,
-    })) as unknown as CompletionResult["options"],
-  };
-}
 
 function renderCompletionDescription(completion: { description?: string }): Node | null {
   if (!completion.description) return null;
@@ -200,6 +185,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
         }),
         keymap.of([
           ...closeBracketsKeymap,
+          { key: "Enter", run: clearIndentOnBlankLine },
           ...defaultKeymap,
           ...historyKeymap,
           ...completionKeymap,
