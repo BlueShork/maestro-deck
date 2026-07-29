@@ -51,6 +51,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
   const running = useRunStore((s) => s.running);
   const exitCode = useRunStore((s) => s.exitCode);
   const logs = useRunStore((s) => s.logs);
+  const truncatedCount = useRunStore((s) => s.truncatedCount);
   const clearConsole = useRunStore((s) => s.clearConsole);
 
   const metricsOpen = usePanelsStore((s) => s.visible.metrics);
@@ -163,18 +164,25 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
               No output yet. Press Run to execute the current flow.
             </div>
           ) : (
-            logs.map((l) => (
-              <div
-                key={l.id}
-                className={cn(
-                  "whitespace-pre-wrap",
-                  l.stream === "stderr" && "text-red-600 dark:text-red-400",
-                  l.stream === "system" && "text-muted-foreground italic",
-                )}
-              >
-                {renderAnsi(l.text)}
-              </div>
-            ))
+            <>
+              {truncatedCount > 0 ? (
+                <div className="italic text-muted-foreground">
+                  [{truncatedCount} older lines dropped — console keeps the last 2000]
+                </div>
+              ) : null}
+              {logs.map((l) => (
+                <div
+                  key={l.id}
+                  className={cn(
+                    "whitespace-pre-wrap",
+                    l.stream === "stderr" && "text-red-600 dark:text-red-400",
+                    l.stream === "system" && "text-muted-foreground italic",
+                  )}
+                >
+                  {renderAnsi(l.text)}
+                </div>
+              ))}
+            </>
           )
         ) : (
           <SimpleConsoleBody

@@ -338,4 +338,18 @@ describe("runStore.steps", () => {
       expect(statuses()).toEqual(["done", "running", "pending"]);
     });
   });
+
+  describe("log truncation counter", () => {
+    it("counts dropped lines past the 2000 cap and resets on new run", () => {
+      const { setStarting, appendLog } = useRunStore.getState();
+      setStarting();
+      for (let i = 0; i < 2005; i++) appendLog("stdout", `line ${i}`);
+      expect(useRunStore.getState().logs.length).toBe(2000);
+      expect(useRunStore.getState().truncatedCount).toBe(5);
+      expect(useRunStore.getState().logs[0].text).toBe("line 5");
+      setStarting();
+      expect(useRunStore.getState().truncatedCount).toBe(0);
+      expect(useRunStore.getState().logs.length).toBe(0);
+    });
+  });
 });

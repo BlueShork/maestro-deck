@@ -40,6 +40,7 @@ interface RunState {
   exitCode: number | null;
   stopRequested: boolean;
   logs: LogLine[];
+  truncatedCount: number;
   steps: StepRunState[];
   runTarget: { path: string; kind: "flow" | "all" } | null;
   /** Flow display name to gate on for Run All (config `name:` or file stem).
@@ -193,6 +194,7 @@ export const useRunStore = create<RunState>((set) => ({
   exitCode: null,
   stopRequested: false,
   logs: [],
+  truncatedCount: 0,
   steps: [],
   runTarget: null,
   expectedFlow: null,
@@ -201,7 +203,8 @@ export const useRunStore = create<RunState>((set) => ({
   // Posted immediately on the Run click so the toolbar reacts instantly,
   // before the (potentially slow) backend round-trip returns the PID. Clears
   // logs here — the earliest point — so early runner stdout isn't dropped.
-  setStarting: () => set({ starting: true, exitCode: null, stopRequested: false, logs: [] }),
+  setStarting: () =>
+    set({ starting: true, exitCode: null, stopRequested: false, logs: [], truncatedCount: 0 }),
   startFailed: () => set({ starting: false }),
   setRunning: (pid) =>
     set({ running: true, starting: false, pid, exitCode: null, stopRequested: false }),
@@ -220,9 +223,13 @@ export const useRunStore = create<RunState>((set) => ({
       const entry = { id: nextId++, stream, text, timestamp: Date.now() };
       const MAX = 2000;
       if (s.logs.length < MAX) return { logs: [...s.logs, entry] };
-      return { logs: [...s.logs.slice(s.logs.length - MAX + 1), entry] };
+      return {
+        logs: [...s.logs.slice(s.logs.length - MAX + 1), entry],
+        truncatedCount: s.truncatedCount + (s.logs.length - MAX + 1),
+      };
     }),
-  clearConsole: () => set({ logs: [], steps: [], exitCode: null, stopRequested: false }),
+  clearConsole: () =>
+    set({ logs: [], steps: [], exitCode: null, stopRequested: false, truncatedCount: 0 }),
   initSteps: (steps) =>
     set({
       steps: steps.map((s) => ({
