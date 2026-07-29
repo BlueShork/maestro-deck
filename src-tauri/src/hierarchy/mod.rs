@@ -105,7 +105,16 @@ pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
         let attempt_start = std::time::Instant::now();
         let output = Command::new(&bin)
             .no_window()
-            .args(["--udid", serial, "hierarchy"])
+            // `--no-reinstall-driver`: by default maestro uninstalls +
+            // reinstalls the two driver APKs on every session open and
+            // uninstalls them on close (AndroidDriver.reinstallDriver=true).
+            // Each ADB install triggers MIUI/HyperOS's "Install via USB"
+            // Accept/Refuse popup on Xiaomi devices, so per-dump sessions
+            // turn inspect mode into a popup storm. With the flag, the
+            // driver installs once if missing and then persists; `maestro
+            // studio` (which has no such flag) still reinstalls on its own
+            // start, keeping the driver fresh after maestro upgrades.
+            .args(["--udid", serial, "hierarchy", "--no-reinstall-driver"])
             .output()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
