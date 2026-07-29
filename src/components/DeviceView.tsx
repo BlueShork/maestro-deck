@@ -22,6 +22,7 @@ import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
+import { useLocation } from "react-router-dom";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -79,10 +80,17 @@ function findSmallestAt(root: UINode, x: number, y: number): UINode | null {
   return bestTargetable ?? bestAny;
 }
 
-function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
+function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<VideoFrame | null>(null);
   const rafRef = useRef<number | null>(null);
+  const decoderRef = useRef<H264Decoder | null>(null);
+
+  // Pause/resume without recreating the decoder: the scrcpy config packet
+  // (SPS/PPS) only arrives once per stream, so the instance must survive.
+  useEffect(() => {
+    decoderRef.current?.setPaused(paused);
+  }, [paused]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -128,6 +136,7 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
         toast.error("Decoder error", err.message);
       },
     });
+    decoderRef.current = decoder;
 
     void events
       .onFrame((payload) => {
@@ -146,12 +155,13 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
         pendingRef.current.close();
         pendingRef.current = null;
       }
+      decoderRef.current = null;
       decoder.close();
     };
   }, [canvasRef, pushFrame]);
 }
 
-function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
+function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   // Hold the decoded bitmap plus the frame's *reported* dimensions. For iOS the
   // reported dims equal the bitmap's natural size, but for web the PNG is at
@@ -161,6 +171,8 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   // so overlay scaling and hit-testing use the right space.
   const pendingRef = useRef<{ bmp: ImageBitmap; w: number; h: number } | null>(null);
   const rafRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   useEffect(() => {
     const unlistens: Array<() => void> = [];
@@ -194,6 +206,7 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
     // iOS and web both deliver PNG screenshots; only the connected platform's
     // poller emits, so subscribing to both events is safe.
     const onShot = async (payload: { data: Uint8Array; width: number; height: number }) => {
+      if (pausedRef.current) return;
       try {
         // Copy the exact view region into a fresh buffer: robust if `data`
         // is ever a subarray, and yields a concrete-buffer typed array that
@@ -239,12 +252,18 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   }, [canvasRef, pushFrame]);
 }
 
-function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean) {
+function useNativePreviewStream(
+  canvasRef: RefObject<HTMLCanvasElement>,
+  enabled: boolean,
+  paused: boolean,
+) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<{ w: number; h: number; rgba: Uint8ClampedArray<ArrayBuffer> } | null>(
     null,
   );
   const rafRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   useEffect(() => {
     if (!enabled) return;
@@ -266,7 +285,7 @@ function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled
 
     const channel = new Channel<ArrayBuffer>();
     channel.onmessage = (buf) => {
-      if (cancelled || buf.byteLength < 8) return;
+      if (cancelled || pausedRef.current || buf.byteLength < 8) return;
       const view = new DataView(buf);
       const w = view.getUint32(0, true);
       const h = view.getUint32(4, true);
@@ -328,14 +347,19 @@ export function DeviceView() {
     selectors: Selector[];
   } | null>(null);
 
+  // Settings ("/settings/*") and Image Bank ("/image-bank") cover MainView
+  // (App keeps it mounted but CSS-hidden). Every other path redirects to "/",
+  // so `pathname !== "/"` is exactly "the mirror is invisible".
+  const mirrorPaused = useLocation().pathname !== "/";
+
   // Dark-mode toggle is an Android-only `adb` feature; hidden for iOS and web.
   const noDarkMode = current?.platform !== "android";
   // Both hooks mount unconditionally (Rules of Hooks). They listen to
   // different events (`frame` / `ios_frame` / `web_frame`), so only the
   // connected platform actually paints — the Android H.264 hook is unchanged.
-  useFrameStream(canvasRef);
-  useScreenshotStream(canvasRef);
-  useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled);
+  useFrameStream(canvasRef, mirrorPaused);
+  useScreenshotStream(canvasRef, mirrorPaused);
+  useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled, mirrorPaused);
 
   // Register this canvas in the module-level registry so non-React code
   // (e.g. Billy's take_screenshot tool) can capture frames without prop-drilling.
