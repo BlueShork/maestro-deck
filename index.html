@@ -67,37 +67,17 @@
         opacity: 0;
         pointer-events: none;
       }
-      #splash .icon-wrap {
-        width: 88px;
-        height: 88px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 22px;
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.02));
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        box-shadow: 0 18px 50px -12px rgba(15, 23, 42, 0.18);
+      #splash .logo-wrap {
         animation: pulse 1.6s ease-in-out infinite;
         color: hsl(222 30% 20%);
       }
-      html.dark #splash .icon-wrap {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        box-shadow: 0 18px 50px -12px rgba(0, 0, 0, 0.6);
+      html.dark #splash .logo-wrap {
         color: #ffffff;
       }
       #splash svg {
-        width: 56px;
-        height: 56px;
-      }
-      #splash .label {
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-        color: hsl(222 15% 45%);
-      }
-      html.dark #splash .label {
-        color: hsl(215 20% 65%);
+        width: 260px;
+        height: 65px;
+        display: block;
       }
       #splash .progress {
         width: 120px;
@@ -144,18 +124,36 @@
   </head>
   <body class="bg-background text-foreground antialiased">
     <div id="splash">
-      <div class="icon-wrap">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" aria-hidden="true">
-          <path
-            fill-rule="evenodd"
-            clip-rule="evenodd"
+      <div class="logo-wrap">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 1600 400"
+          role="img"
+          aria-label="Maestro Deck"
+          font-family="Inter, -apple-system, Helvetica, Arial, sans-serif"
+        >
+          <g transform="translate(40, 40) scale(0.3125)">
+            <path
+              fill-rule="evenodd"
+              clip-rule="evenodd"
+              fill="currentColor"
+              d="M256 64C150.02 64 64 150.02 64 256V768C64 873.98 150.02 960 256 960H768C873.98 960 960 873.98 960 768V256C960 150.02 873.98 64 768 64H256ZM320 256C284.654 256 256 284.654 256 320V704C256 739.346 284.654 768 320 768H704C739.346 768 768 739.346 768 704V320C768 284.654 739.346 256 704 256H320Z"
+            />
+            <rect x="336" y="336" width="352" height="352" rx="24" ry="24" fill="currentColor" />
+          </g>
+          <text
+            x="420"
+            y="200"
+            dominant-baseline="central"
+            font-size="180"
+            font-weight="700"
             fill="currentColor"
-            d="M256 64C150.02 64 64 150.02 64 256V768C64 873.98 150.02 960 256 960H768C873.98 960 960 873.98 960 768V256C960 150.02 873.98 64 768 64H256ZM320 256C284.654 256 256 284.654 256 320V704C256 739.346 284.654 768 320 768H704C739.346 768 768 739.346 768 704V320C768 284.654 739.346 256 704 256H320Z"
-          />
-          <rect x="336" y="336" width="352" height="352" rx="24" ry="24" fill="currentColor" />
+            letter-spacing="-4"
+          >
+            Maestro Deck
+          </text>
         </svg>
       </div>
-      <div class="label">Maestro Deck</div>
       <div class="progress"></div>
     </div>
     <div id="root"></div>
