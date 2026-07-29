@@ -50,7 +50,7 @@ describe("TourOverlay", () => {
   });
 
   it("labels the last step's advance button Finish", () => {
-    useTourStore.setState({ isActive: true, stepIndex: 4 });
+    useTourStore.setState({ isActive: true, stepIndex: 5 });
     const html = render();
     expect(html).toMatch(/Finish/);
   });

@@ -8,8 +8,15 @@ import { TOUR_STEPS } from "./tourSteps";
 const VALID_PANELS = ["workspace", "inspector", "device", "editor", "console", "metrics"];
 
 describe("tourSteps", () => {
-  it("has the five onboarding steps in order", () => {
-    expect(TOUR_STEPS.map((s) => s.id)).toEqual(["device", "mirror", "editor", "run", "chat"]);
+  it("has the six onboarding steps in order", () => {
+    expect(TOUR_STEPS.map((s) => s.id)).toEqual([
+      "device",
+      "mirror",
+      "editor",
+      "run",
+      "chat",
+      "image-bank",
+    ]);
   });
 
   it("has unique step ids", () => {

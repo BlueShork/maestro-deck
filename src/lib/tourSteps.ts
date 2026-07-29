@@ -59,4 +59,13 @@ export const TOUR_STEPS: TourStep[] = [
     placement: "bottom",
     informational: true,
   },
+  {
+    id: "image-bank",
+    target: "image-bank",
+    requiresPanel: [],
+    title: "Image bank",
+    body: "Save screenshots from your runs into a bank, then compare new captures against them to catch visual regressions.",
+    placement: "bottom",
+    informational: true,
+  },
 ];

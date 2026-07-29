@@ -267,6 +267,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
+                data-tour="image-bank"
                 size="icon"
                 variant="ghost"
                 onClick={() => navigate("/image-bank")}
