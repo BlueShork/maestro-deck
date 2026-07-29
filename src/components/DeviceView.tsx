@@ -5,6 +5,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
 import { Camera, House, Loader2, Moon, Smartphone, Sun } from "lucide-react";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -29,7 +30,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import type { Bounds, Selector, UINode } from "@/types";
+import type { Selector, UINode } from "@/types";
 
 function nodeArea(n: UINode): number {
   const w = n.bounds.right - n.bounds.left;
@@ -322,6 +323,44 @@ function useNativePreviewStream(
   }, [canvasRef, enabled, pushFrame]);
 }
 
+/**
+ * Hover highlight for inspect mode. Subscribes to `hovered` itself so that
+ * pointer moves re-render only this leaf, not the whole DeviceView subtree
+ * (canvas, control cluster, handlers).
+ */
+const InspectorOverlay = memo(function InspectorOverlay({
+  enabled,
+  canvasRect,
+  displayW,
+  displayH,
+  overlayScaleX,
+  overlayScaleY,
+  scale,
+}: {
+  enabled: boolean;
+  canvasRect: { width: number; height: number };
+  displayW: number;
+  displayH: number;
+  overlayScaleX: number;
+  overlayScaleY: number;
+  scale: number;
+}) {
+  const hovered = useInspectorStore((s) => s.hovered);
+  const bounds = hovered?.bounds ?? null;
+  if (!enabled || !bounds || scale <= 0) return null;
+  return (
+    <div
+      className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
+      style={{
+        left: (canvasRect.width - displayW) / 2 + bounds.left * overlayScaleX,
+        top: (canvasRect.height - displayH) / 2 + bounds.top * overlayScaleY,
+        width: (bounds.right - bounds.left) * overlayScaleX,
+        height: (bounds.bottom - bounds.top) * overlayScaleY,
+      }}
+    />
+  );
+});
+
 export function DeviceView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -334,7 +373,6 @@ export function DeviceView() {
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const tree = useInspectorStore((s) => s.tree);
-  const hovered = useInspectorStore((s) => s.hovered);
   const setHovered = useInspectorStore((s) => s.setHovered);
   const select = useInspectorStore((s) => s.select);
   const scheduleAutoRefresh = useInspectorStore((s) => s.scheduleAutoRefresh);
@@ -727,7 +765,10 @@ export function DeviceView() {
     [current, toDeviceCoords, wheelFlush],
   );
 
-  const overlayBounds: Bounds | null = hovered?.bounds ?? null;
+  const canvasStyle = useMemo(
+    () => ({ width: displayW || undefined, height: displayH || undefined }),
+    [displayW, displayH],
+  );
 
   return (
     <div
@@ -754,23 +795,18 @@ export function DeviceView() {
           !hasFrame && "hidden",
           inspectEnabled && "cursor-crosshair",
         )}
-        style={{
-          width: displayW || undefined,
-          height: displayH || undefined,
-        }}
+        style={canvasStyle}
       />
 
-      {inspectEnabled && overlayBounds && scale > 0 ? (
-        <div
-          className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
-          style={{
-            left: (canvasRect.width - displayW) / 2 + overlayBounds.left * overlayScaleX,
-            top: (canvasRect.height - displayH) / 2 + overlayBounds.top * overlayScaleY,
-            width: (overlayBounds.right - overlayBounds.left) * overlayScaleX,
-            height: (overlayBounds.bottom - overlayBounds.top) * overlayScaleY,
-          }}
-        />
-      ) : null}
+      <InspectorOverlay
+        enabled={inspectEnabled}
+        canvasRect={canvasRect}
+        displayW={displayW}
+        displayH={displayH}
+        overlayScaleX={overlayScaleX}
+        overlayScaleY={overlayScaleY}
+        scale={scale}
+      />
 
       {hasFrame ? (
         <div className="absolute right-3 top-3 z-10 flex gap-2">
