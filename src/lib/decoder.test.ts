@@ -131,3 +131,96 @@ describe("buildAvcc", () => {
     expect(() => buildAvcc(configPacket(shortSps, PPS))).toThrow(/SPS too short/);
   });
 });
+
+import { vi, beforeEach, afterEach } from "vitest";
+import { H264Decoder } from "./decoder";
+
+// Minimal Annex-B config packet: SPS (type 7) + PPS (type 8).
+const CONFIG = u8(0, 0, 0, 1, 0x67, 0x42, 0x00, 0x1f, 0, 0, 0, 1, 0x68, 0xce);
+const PICTURE = u8(0, 0, 0, 1, 0x41, 0x9a, 0x00);
+
+class FakeVideoDecoder {
+  static last: FakeVideoDecoder | null = null;
+  state = "unconfigured";
+  decodeQueueSize = 0;
+  decoded: Array<{ type: string }> = [];
+  constructor(_init: unknown) {
+    FakeVideoDecoder.last = this;
+  }
+  configure(_c: unknown) {
+    this.state = "configured";
+  }
+  decode(chunk: { type: string }) {
+    this.decoded.push(chunk);
+  }
+  close() {
+    this.state = "closed";
+  }
+}
+class FakeChunk {
+  type: string;
+  constructor(init: { type: string }) {
+    this.type = init.type;
+  }
+}
+
+describe("H264Decoder pause", () => {
+  beforeEach(() => {
+    vi.stubGlobal("VideoDecoder", FakeVideoDecoder);
+    vi.stubGlobal("EncodedVideoChunk", FakeChunk);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    FakeVideoDecoder.last = null;
+  });
+
+  const mk = () => {
+    const d = new H264Decoder({
+      onFrame: () => {},
+      onError: (e) => {
+        throw e;
+      },
+    });
+    d.feed({ ptsUs: 0, isConfig: true, isKey: false, data: CONFIG });
+    return { d, fake: FakeVideoDecoder.last! };
+  };
+  const key = (pts: number) => ({ ptsUs: pts, isConfig: false, isKey: true, data: PICTURE });
+  const delta = (pts: number) => ({ ptsUs: pts, isConfig: false, isKey: false, data: PICTURE });
+
+  it("drops all pictures while paused", () => {
+    const { d, fake } = mk();
+    d.feed(key(1));
+    expect(fake.decoded.length).toBe(1);
+    d.setPaused(true);
+    d.feed(key(2));
+    d.feed(delta(3));
+    expect(fake.decoded.length).toBe(1);
+  });
+
+  it("resyncs on the first keyframe after unpause", () => {
+    const { d, fake } = mk();
+    d.feed(key(1));
+    d.setPaused(true);
+    d.feed(delta(2));
+    d.setPaused(false);
+    d.feed(delta(3)); // unreferencable — must be dropped
+    expect(fake.decoded.length).toBe(1);
+    d.feed(key(4));
+    d.feed(delta(5));
+    expect(fake.decoded.length).toBe(3);
+  });
+
+  it("still accepts config packets while paused", () => {
+    const { d, fake } = mk();
+    d.setPaused(true);
+    d.feed({ ptsUs: 0, isConfig: true, isKey: false, data: CONFIG });
+    expect(fake.state).toBe("configured");
+  });
+
+  it("unpause without a prior pause is a no-op (no key-wait)", () => {
+    const { d, fake } = mk();
+    d.setPaused(false);
+    d.feed(delta(1));
+    expect(fake.decoded.length).toBe(1);
+  });
+});
