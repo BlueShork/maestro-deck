@@ -81,7 +81,7 @@ function findSmallestAt(root: UINode, x: number, y: number): UINode | null {
   return bestTargetable ?? bestAny;
 }
 
-function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>, paused: boolean) {
+function useFrameStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<VideoFrame | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -162,7 +162,7 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>, paused: boolean
   }, [canvasRef, pushFrame]);
 }
 
-function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>, paused: boolean) {
+function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   // Hold the decoded bitmap plus the frame's *reported* dimensions. For iOS the
   // reported dims equal the bitmap's natural size, but for web the PNG is at
@@ -254,7 +254,7 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>, paused: bo
 }
 
 function useNativePreviewStream(
-  canvasRef: RefObject<HTMLCanvasElement>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
   enabled: boolean,
   paused: boolean,
 ) {
