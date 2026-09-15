@@ -45,7 +45,7 @@ function ThresholdField({
         disabled={disabled}
         value={value ?? fallback}
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-        className="w-36 rounded border border-border bg-transparent px-2 py-1 text-sm tabular-nums outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed"
+        className="w-36 rounded border border-border bg-transparent px-2 py-1 text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
       />
       <span className="text-xs text-muted-foreground">{hint}</span>
     </label>
@@ -56,9 +56,11 @@ export function VisualRegressionSettings() {
   const enabled = useVisualRegressionStore((s) => s.enabled);
   const tolerance = useVisualRegressionStore((s) => s.tolerance);
   const threshold = useVisualRegressionStore((s) => s.threshold);
+  const ignoreStatusBar = useVisualRegressionStore((s) => s.ignoreStatusBar);
   const setEnabled = useVisualRegressionStore((s) => s.setEnabled);
   const setTolerance = useVisualRegressionStore((s) => s.setTolerance);
   const setThreshold = useVisualRegressionStore((s) => s.setThreshold);
+  const setIgnoreStatusBar = useVisualRegressionStore((s) => s.setIgnoreStatusBar);
   const reset = useVisualRegressionStore((s) => s.reset);
 
   const isCustomized = tolerance !== null || threshold !== null;
@@ -74,6 +76,12 @@ export function VisualRegressionSettings() {
           description="When off, flows run normally and no screenshot comparison happens."
           checked={enabled}
           onCheckedChange={setEnabled}
+        />
+        <ToggleRow
+          label="Ignore system chrome"
+          description="Exclude transient UI from comparison to avoid false positives: the top status bar (clock, notch, carrier), the bottom home indicator / navigation bar, and the right-edge scroll indicator."
+          checked={ignoreStatusBar}
+          onCheckedChange={setIgnoreStatusBar}
         />
         <ThresholdField
           label="Per-pixel tolerance"

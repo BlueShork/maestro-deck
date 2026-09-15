@@ -28,6 +28,7 @@ export function PanelShell({
   const hide = usePanelsStore((s) => s.hide);
   return (
     <div
+      data-tour={id}
       className={cn("group/panel relative flex h-full min-h-0 w-full min-w-0 flex-col", className)}
     >
       {children}
@@ -38,7 +39,11 @@ export function PanelShell({
         aria-label="Close panel"
         // Visible on hover over the panel. `z-20` keeps it above
         // internal content like scrollbars and code-mirror gutters.
-        className="absolute right-1 top-1 z-20 flex h-5 w-5 items-center justify-center rounded border border-border/0 bg-background/60 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition hover:border-border hover:bg-background hover:text-foreground group-hover/panel:opacity-100"
+        // Solid background (no backdrop-blur): a backdrop-filter stays
+        // composited even at opacity-0 and recomputes every frame the
+        // content behind it changes (row hover transitions), which shows
+        // up as hover jank in every panel.
+        className="absolute right-1 top-1 z-20 flex h-5 w-5 items-center justify-center rounded border border-border/0 bg-card text-muted-foreground opacity-0 shadow-sm transition-opacity hover:border-border hover:bg-accent hover:text-foreground group-hover/panel:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="h-3 w-3" />
       </button>

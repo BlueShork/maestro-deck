@@ -20,6 +20,12 @@ pub enum AppError {
     #[error("ADB command failed: {0}")]
     AdbFailed(String),
 
+    #[error("Android emulator not found. Install the Android SDK emulator or set ANDROID_HOME.")]
+    EmulatorNotFound,
+
+    #[error("Android emulator error: {0}")]
+    EmulatorFailed(String),
+
     #[error("scrcpy server failed: {0}")]
     ScrcpyFailed(String),
 

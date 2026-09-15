@@ -62,7 +62,7 @@ export function DevicePerformanceSettings() {
               </span>
             </>
           }
-          description="Shows the Web Browser (Chromium) device in the device list. Web support is beta and still unstable — off by default."
+          description="Shows the Web Browser (Chromium) device in the device list. Runs are headless with a live view; the interactive browser window is hidden automatically."
           checked={webBrowserEnabled}
           onCheckedChange={setWebBrowserEnabled}
         />

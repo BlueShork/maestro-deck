@@ -4,6 +4,7 @@
 import {
   BookOpen,
   Check,
+  Images,
   LayoutPanelLeft,
   ListChecks,
   Loader2,
@@ -106,7 +107,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-3">
         <div className="flex items-center gap-2">
           <Logo className="h-7 w-auto text-foreground" />
           <Separator orientation="vertical" className="mx-1 h-5" />
@@ -116,7 +117,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                 type="button"
                 onClick={() => void checkUpdate()}
                 disabled={updatePhase === "checking"}
-                className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-60"
+                className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {updatePhase === "checking" ? (
                   <span className="inline-flex items-center gap-1">
@@ -164,53 +165,56 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
           <Separator orientation="vertical" className="mx-1 h-5" />
 
-          {starting ? (
-            <Button size="sm" variant="destructive" disabled className="gap-1.5">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Starting…
-            </Button>
-          ) : running ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="sm" variant="destructive" onClick={onStop} className="gap-1.5">
-                  <Square className="h-3.5 w-3.5" fill="currentColor" />
-                  Stop
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Stop flow</TooltipContent>
-            </Tooltip>
-          ) : (
-            <>
+          <div data-tour="run-controls" className="flex items-center gap-1">
+            {starting ? (
+              <Button size="default" variant="destructive" disabled>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Starting…
+              </Button>
+            ) : running ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="sm" variant="default" onClick={onRun} className={cn("gap-1.5")}>
-                    <Play className="h-3.5 w-3.5" fill="currentColor" />
-                    Run
+                  <Button size="default" variant="destructive" onClick={onStop}>
+                    <Square className="h-4 w-4" fill="currentColor" />
+                    Stop
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Run flow (Cmd/Ctrl+R)</TooltipContent>
+                <TooltipContent>Stop flow</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={onRunAll}
-                    disabled={!folderPath}
-                    className="gap-1.5"
-                  >
-                    <ListChecks className="h-3.5 w-3.5" />
-                    Run all
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {folderPath ? "Run every flow in the workspace" : "Open a folder to enable"}
-                </TooltipContent>
-              </Tooltip>
-            </>
-          )}
+            ) : (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="default" variant="default" onClick={onRun}>
+                      <Play className="h-4 w-4" fill="currentColor" />
+                      Run
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Run flow (Cmd/Ctrl+R)</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="default"
+                      variant="outline"
+                      onClick={onRunAll}
+                      disabled={!folderPath}
+                    >
+                      <ListChecks className="h-4 w-4" />
+                      Run all
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {folderPath ? "Run every flow in the workspace" : "Open a folder to enable"}
+                  </TooltipContent>
+                </Tooltip>
+              </>
+            )}
+          </div>
 
-          <DropdownMenu>
+          {/* Non-modal: modal mode inert-marks the whole app (canvas, editor)
+              on open/close — visible jank. See ModelPicker for details. */}
+          <DropdownMenu modal={false}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
@@ -238,6 +242,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                 variant={chatOpen ? "secondary" : "ghost"}
                 onClick={toggleChat}
                 aria-label="Toggle AI assistant"
+                data-tour="chat-toggle"
               >
                 <Sparkles className="h-4 w-4" />
               </Button>
@@ -257,6 +262,21 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
               </Button>
             </TooltipTrigger>
             <TooltipContent>Documentation</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                data-tour="image-bank"
+                size="icon"
+                variant="ghost"
+                onClick={() => navigate("/image-bank")}
+                aria-label="Open image bank"
+              >
+                <Images className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Image bank</TooltipContent>
           </Tooltip>
 
           <Tooltip>

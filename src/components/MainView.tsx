@@ -8,7 +8,6 @@ import { Suspense, lazy, useCallback, useMemo } from "react";
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
-import { InspectorPanel } from "@/components/InspectorPanel";
 const MetricsPanel = lazy(() =>
   import("@/components/MetricsPanel").then((m) => ({ default: m.MetricsPanel })),
 );
@@ -19,7 +18,7 @@ import { Toolbar } from "@/components/Toolbar";
 import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ipc } from "@/lib/ipc";
-import { parseFlow } from "@/lib/flowAst";
+import { flowDisplayName, parseFlow } from "@/lib/flowAst";
 import { buildPartialFlow } from "@/lib/partialFlow";
 import { useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
@@ -49,7 +48,6 @@ export function MainView() {
   const setRunning = useRunStore((s) => s.setRunning);
   const setStarting = useRunStore((s) => s.setStarting);
   const startFailed = useRunStore((s) => s.startFailed);
-  const runningPid = useRunStore((s) => s.pid);
 
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const panels = usePanelsStore((s) => s.visible);
@@ -115,10 +113,16 @@ export function MainView() {
         await writeTextFile(filePath, content);
         useFlowStore.getState().saved(filePath);
       }
-      const { content: c2 } = useFlowStore.getState();
+      const { content: c2, filePath: fp2 } = useFlowStore.getState();
       resetSteps();
       initSteps(parseFlow(c2).steps);
-      useRunStore.getState().setRunTarget({ path: folder, kind: "all" });
+      // Run All executes every flow in the folder through one runner process;
+      // only the open file's flow may drive the editor/console step states.
+      useRunStore.getState().setRunTarget({
+        path: folder,
+        kind: "all",
+        expectedFlow: flowDisplayName(c2, fp2),
+      });
       const pid = await ipc.runFlow(folder, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
@@ -163,14 +167,18 @@ export function MainView() {
   );
 
   const onStop = useCallback(async () => {
-    if (runningPid === null) return;
+    // Read the pid at call time (via getState) rather than subscribing to it,
+    // so MainView — which owns the whole panel layout — doesn't re-render on
+    // every run start/stop.
+    const pid = useRunStore.getState().pid;
+    if (pid === null) return;
     useRunStore.getState().requestStop();
     try {
-      await ipc.stopFlow(runningPid);
+      await ipc.stopFlow(pid);
     } catch (err) {
       toast.error("Stop failed", err instanceof Error ? err.message : String(err));
     }
-  }, [runningPid]);
+  }, []);
 
   const shortcuts = useMemo(
     () => [
@@ -225,9 +233,6 @@ export function MainView() {
                 >
                   <PanelShell id="inspector">
                     <DeviceSelector />
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                      <InspectorPanel />
-                    </div>
                   </PanelShell>
                 </Panel>
                 <PanelResizeHandle className={RESIZE_HANDLE_H} />
@@ -253,7 +258,7 @@ export function MainView() {
                         >
                           <PanelShell
                             id="device"
-                            className="items-center justify-center bg-muted/40 p-4"
+                            className="items-center justify-center bg-card p-4"
                           >
                             <DeviceView />
                           </PanelShell>

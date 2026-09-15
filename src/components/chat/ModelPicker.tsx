@@ -32,7 +32,12 @@ export function ModelPicker() {
   for (const m of MODELS) grouped[m.provider].push(m);
 
   return (
-    <DropdownMenu>
+    // Non-modal: the default modal mode scroll-locks the body and applies
+    // aria-hidden/inert to the ENTIRE app (video canvas, editor, message
+    // list) on every open/close — a full a11y-tree recompute that visibly
+    // janks the picker. A small menu doesn't need outside-interaction
+    // blocking.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"

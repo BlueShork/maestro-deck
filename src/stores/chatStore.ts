@@ -4,12 +4,14 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+import { runAgentLoop, TURN_LIMIT_NOTICE } from "@/lib/chat/agentLoop";
 import { getProvider } from "@/lib/chat/registry";
 import { getEffectiveBillyPrompt } from "@/lib/chat/systemPrompt";
+import { ALL_TOOLS, executeTool } from "@/lib/chat/tools";
 import { useFlowStore } from "@/stores/flowStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { WorkspaceNode } from "@/types";
-import type { ChatMessage, ProviderId } from "@/types/chat";
+import type { ChatMessage, ContentBlock, ProviderId } from "@/types/chat";
 
 function listYamlPaths(node: WorkspaceNode | null, root: string | null): string[] {
   if (!node) return [];
@@ -139,10 +141,9 @@ export const useChatStore = create<ChatState>()(
             );
           }
           contextParts.push(
-            `# How to propose modifications\n\n` +
-              `- You can only directly modify the file currently open in the editor (shown above).\n` +
-              `- If the user asks you to change a different file from the workspace list, ask them to open it first (the **Apply** button only operates on the current editor).\n` +
-              `- When proposing a change to the open file, respond with the **complete new YAML** inside a single \`\`\`yaml fenced block. The UI will surface an Apply button on that block.`,
+            `# Modifying files\n\n` +
+              `- Use the write_flow tool to create or modify flow files directly — the editor refreshes automatically.\n` +
+              `- Only fall back to a fenced \`\`\`yaml block (Apply button) when the user explicitly asks to review the change before it lands.`,
           );
 
           const contextMsg: ChatMessage | null = contextParts.length
@@ -155,25 +156,74 @@ export const useChatStore = create<ChatState>()(
             : null;
 
           const history = get().messages.filter((m) => m.id !== assistantId);
-          const stream = provider.stream({
-            model: get().currentModel,
-            messages: contextMsg ? [systemMsg, contextMsg, ...history] : [systemMsg, ...history],
-            signal: abort.signal,
-          });
+          const base = contextMsg ? [systemMsg, contextMsg, ...history] : [systemMsg, ...history];
 
-          for await (const delta of stream) {
+          const appendBlock = (block: ContentBlock) =>
             set((s) => ({
               messages: s.messages.map((m) =>
-                m.id === assistantId ? { ...m, content: m.content + delta } : m,
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      content:
+                        typeof m.content === "string"
+                          ? m.content
+                            ? ([{ type: "text", text: m.content }, block] as ContentBlock[])
+                            : [block]
+                          : [...m.content, block],
+                    }
+                  : m,
               ),
             }));
+
+          for await (const evt of runAgentLoop({
+            provider,
+            model: get().currentModel,
+            tools: ALL_TOOLS,
+            messages: base,
+            signal: abort.signal,
+            execute: executeTool,
+          })) {
+            if (evt.type === "text_delta") {
+              set((s) => ({
+                messages: s.messages.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  if (typeof m.content === "string") return { ...m, content: m.content + evt.text };
+                  const blocks = m.content.slice();
+                  const last = blocks[blocks.length - 1];
+                  if (last?.type === "text")
+                    blocks[blocks.length - 1] = { ...last, text: last.text + evt.text };
+                  else blocks.push({ type: "text", text: evt.text });
+                  return { ...m, content: blocks };
+                }),
+              }));
+            } else if (evt.type === "tool_use" || evt.type === "tool_result") {
+              appendBlock(evt.block);
+            } else {
+              appendBlock({ type: "text", text: `\n\n_${TURN_LIMIT_NOTICE}_` });
+            }
           }
         } catch (err) {
           if (abort.signal.aborted) {
             set((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === assistantId ? { ...m, content: m.content + "\n\n_[stopped]_" } : m,
-              ),
+              messages: s.messages.map((m) => {
+                if (m.id !== assistantId) return m;
+                const stopped = "\n\n_[stopped]_";
+                if (typeof m.content === "string") {
+                  return { ...m, content: m.content + stopped };
+                }
+                // Content is an array; append to the trailing text block or push a new one
+                const blocks = [...m.content];
+                const lastBlock = blocks[blocks.length - 1];
+                if (lastBlock?.type === "text") {
+                  blocks[blocks.length - 1] = {
+                    ...lastBlock,
+                    text: lastBlock.text + stopped,
+                  };
+                } else {
+                  blocks.push({ type: "text", text: stopped });
+                }
+                return { ...m, content: blocks };
+              }),
             }));
           } else {
             const message = err instanceof Error ? err.message : String(err);

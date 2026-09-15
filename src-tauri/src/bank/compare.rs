@@ -23,6 +23,10 @@ pub enum Status {
 #[derive(serde::Serialize, Clone)]
 pub struct Comparison {
     pub name: String,
+    /// Flow file stem this comparison came from (Run All only; None for
+    /// single-flow comparisons).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flow: Option<String>,
     pub status: Status,
     pub changed_ratio: f32,
     pub bbox: Option<[u32; 4]>,
@@ -42,6 +46,8 @@ pub struct CompareInput<'a> {
     pub height: u32,
     pub tolerance: f64,
     pub threshold: f64,
+    pub platform: &'a str,
+    pub ignore_status_bar: bool,
 }
 
 fn b64(bytes: &[u8]) -> String {
@@ -58,13 +64,32 @@ fn dims(png: &[u8]) -> Option<(u32, u32)> {
 }
 
 pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Comparison>)> {
-    let key = device_key(input.model, input.width, input.height);
-    let bank_dir = input.workspace.join("maestro").join("bank").join(&key);
-    fs::create_dir_all(&bank_dir)?;
-
     let flow_dir = input.flow_path.parent().unwrap_or(Path::new("."));
     let yaml = fs::read_to_string(input.flow_path).unwrap_or_default();
     let names = screenshot_names(&yaml);
+
+    // iOS devices report 0x0 (simctl gives no per-list resolution), which would
+    // make the bank key `<model>_0x0`. Fall back to the first produced
+    // screenshot's real pixel size so the key matches the baselines it stores.
+    let (mut width, mut height) = (input.width, input.height);
+    if width == 0 || height == 0 {
+        if let Some((w, h)) = names
+            .iter()
+            .map(|n| flow_dir.join(format!("{n}.png")))
+            .find(|p| p.exists())
+            .and_then(|p| image::image_dimensions(&p).ok())
+        {
+            width = w;
+            height = h;
+        }
+    }
+    let key = device_key(input.model, width, height);
+    let bank_dir = input.workspace.join("maestro").join("bank").join(&key);
+    fs::create_dir_all(&bank_dir)?;
+
+    let mask_top = crate::bank::status_bar_ratio(input.platform, input.ignore_status_bar);
+    let mask_bottom = crate::bank::nav_bar_ratio(input.platform, input.ignore_status_bar);
+    let mask_right = crate::bank::scrollbar_ratio(input.platform, input.ignore_status_bar);
 
     let mut comps = Vec::new();
     for name in names {
@@ -74,6 +99,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
         if !produced.exists() {
             comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Missing,
                 changed_ratio: 0.0,
                 bbox: None,
@@ -89,6 +115,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             fs::copy(&produced, &reference)?;
             comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Seeded,
                 changed_ratio: 0.0,
                 bbox: None,
@@ -103,6 +130,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
         if dims(&bank_bytes) != dims(&new_bytes) {
             comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::DimensionMismatch,
                 changed_ratio: 0.0,
                 bbox: None,
@@ -113,9 +141,17 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             continue;
         }
 
-        match diff_images(&bank_bytes, &new_bytes, input.tolerance) {
+        match diff_images(
+            &bank_bytes,
+            &new_bytes,
+            input.tolerance,
+            mask_top,
+            mask_bottom,
+            mask_right,
+        ) {
             Ok(out) if out.changed_ratio as f64 > input.threshold => comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Changed,
                 changed_ratio: out.changed_ratio,
                 bbox: out.bbox,
@@ -125,6 +161,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             }),
             Ok(out) => comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Match,
                 changed_ratio: out.changed_ratio,
                 bbox: None,
@@ -134,6 +171,7 @@ pub fn compare_flow(input: CompareInput) -> std::io::Result<(String, Vec<Compari
             }),
             Err(_) => comps.push(Comparison {
                 name,
+                flow: None,
                 status: Status::Missing,
                 changed_ratio: 0.0,
                 bbox: None,
@@ -193,6 +231,8 @@ mod tests {
             height: 2,
             tolerance: 0.1,
             threshold: 0.001,
+            platform: "android",
+            ignore_status_bar: false,
         };
         let (key, comps) = compare_flow(input).unwrap();
         assert_eq!(comps.len(), 1);
@@ -209,6 +249,8 @@ mod tests {
             height: 2,
             tolerance: 0.1,
             threshold: 0.001,
+            platform: "android",
+            ignore_status_bar: false,
         };
         let (_, comps2) = compare_flow(input2).unwrap();
         assert!(matches!(comps2[0].status, Status::Match));
@@ -240,11 +282,42 @@ mod tests {
             height: 4,
             tolerance: 0.1,
             threshold: 0.001,
+            platform: "android",
+            ignore_status_bar: false,
         })
         .unwrap();
         assert!(matches!(comps[0].status, Status::Changed));
         assert!(comps[0].diff_b64.is_some());
         assert_eq!(comps[0].bbox, Some([0, 0, 1, 1]));
+    }
+
+    #[test]
+    fn derives_key_dims_from_screenshot_when_device_reports_zero() {
+        let ws = temp_dir("zerodims");
+        let flow_dir = ws.join("flows");
+        let flow_path = flow_dir.join("f.yaml");
+        fs::create_dir_all(&flow_dir).unwrap();
+        fs::write(&flow_path, "- takeScreenshot: home\n").unwrap();
+        // Device reports 0x0 (iOS); the produced PNG is 3x5.
+        write_png(
+            &flow_dir.join("home.png"),
+            &RgbaImage::from_pixel(3, 5, image::Rgba([1, 2, 3, 255])),
+        );
+
+        let (key, comps) = compare_flow(CompareInput {
+            workspace: &ws,
+            flow_path: &flow_path,
+            model: "iPhone 16 Pro",
+            width: 0,
+            height: 0,
+            tolerance: 0.1,
+            threshold: 0.001,
+            platform: "ios",
+            ignore_status_bar: false,
+        })
+        .unwrap();
+        assert_eq!(key, "iPhone_16_Pro_3x5");
+        assert!(matches!(comps[0].status, Status::Seeded));
     }
 
     #[test]
@@ -262,8 +335,43 @@ mod tests {
             height: 2,
             tolerance: 0.1,
             threshold: 0.001,
+            platform: "android",
+            ignore_status_bar: false,
         })
         .unwrap();
         assert!(matches!(comps[0].status, Status::Missing));
+    }
+
+    #[test]
+    fn ignores_change_in_status_bar_band() {
+        let ws = temp_dir("statusbar");
+        let flow_dir = ws.join("flows");
+        let flow_path = flow_dir.join("f.yaml");
+        fs::create_dir_all(&flow_dir).unwrap();
+        fs::write(&flow_path, "- takeScreenshot: home\n").unwrap();
+        let key = device_key("Dev", 10, 100);
+        // Baseline: solid black 10x100.
+        write_png(
+            &ws.join("maestro/bank").join(&key).join("home.png"),
+            &RgbaImage::from_pixel(10, 100, image::Rgba([0, 0, 0, 255])),
+        );
+        // Produced: identical except a changed pixel at y=2 (inside iOS 6% band = top 6 rows).
+        let mut produced = RgbaImage::from_pixel(10, 100, image::Rgba([0, 0, 0, 255]));
+        produced.put_pixel(5, 2, image::Rgba([255, 255, 255, 255]));
+        write_png(&flow_dir.join("home.png"), &produced);
+
+        let (_, comps) = compare_flow(CompareInput {
+            workspace: &ws,
+            flow_path: &flow_path,
+            model: "Dev",
+            width: 10,
+            height: 100,
+            tolerance: 0.1,
+            threshold: 0.001,
+            platform: "ios",
+            ignore_status_bar: true,
+        })
+        .unwrap();
+        assert!(matches!(comps[0].status, Status::Match));
     }
 }

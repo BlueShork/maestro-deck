@@ -5,6 +5,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
 import { Camera, House, Loader2, Moon, Smartphone, Sun } from "lucide-react";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -18,16 +19,18 @@ import {
 
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { H264Decoder } from "@/lib/decoder";
+import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
+import { useLocation } from "react-router-dom";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import type { Bounds, Selector, UINode } from "@/types";
+import type { Selector, UINode } from "@/types";
 
 function nodeArea(n: UINode): number {
   const w = n.bounds.right - n.bounds.left;
@@ -78,10 +81,17 @@ function findSmallestAt(root: UINode, x: number, y: number): UINode | null {
   return bestTargetable ?? bestAny;
 }
 
-function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
+function useFrameStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<VideoFrame | null>(null);
   const rafRef = useRef<number | null>(null);
+  const decoderRef = useRef<H264Decoder | null>(null);
+
+  // Pause/resume without recreating the decoder: the scrcpy config packet
+  // (SPS/PPS) only arrives once per stream, so the instance must survive.
+  useEffect(() => {
+    decoderRef.current?.setPaused(paused);
+  }, [paused]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -127,6 +137,7 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
         toast.error("Decoder error", err.message);
       },
     });
+    decoderRef.current = decoder;
 
     void events
       .onFrame((payload) => {
@@ -145,12 +156,13 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
         pendingRef.current.close();
         pendingRef.current = null;
       }
+      decoderRef.current = null;
       decoder.close();
     };
   }, [canvasRef, pushFrame]);
 }
 
-function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
+function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   // Hold the decoded bitmap plus the frame's *reported* dimensions. For iOS the
   // reported dims equal the bitmap's natural size, but for web the PNG is at
@@ -160,6 +172,8 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   // so overlay scaling and hit-testing use the right space.
   const pendingRef = useRef<{ bmp: ImageBitmap; w: number; h: number } | null>(null);
   const rafRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   useEffect(() => {
     const unlistens: Array<() => void> = [];
@@ -193,6 +207,7 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
     // iOS and web both deliver PNG screenshots; only the connected platform's
     // poller emits, so subscribing to both events is safe.
     const onShot = async (payload: { data: Uint8Array; width: number; height: number }) => {
+      if (pausedRef.current) return;
       try {
         // Copy the exact view region into a fresh buffer: robust if `data`
         // is ever a subarray, and yields a concrete-buffer typed array that
@@ -238,12 +253,18 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   }, [canvasRef, pushFrame]);
 }
 
-function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean) {
+function useNativePreviewStream(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  enabled: boolean,
+  paused: boolean,
+) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<{ w: number; h: number; rgba: Uint8ClampedArray<ArrayBuffer> } | null>(
     null,
   );
   const rafRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   useEffect(() => {
     if (!enabled) return;
@@ -265,7 +286,7 @@ function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled
 
     const channel = new Channel<ArrayBuffer>();
     channel.onmessage = (buf) => {
-      if (cancelled || buf.byteLength < 8) return;
+      if (cancelled || pausedRef.current || buf.byteLength < 8) return;
       const view = new DataView(buf);
       const w = view.getUint32(0, true);
       const h = view.getUint32(4, true);
@@ -302,6 +323,44 @@ function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled
   }, [canvasRef, enabled, pushFrame]);
 }
 
+/**
+ * Hover highlight for inspect mode. Subscribes to `hovered` itself so that
+ * pointer moves re-render only this leaf, not the whole DeviceView subtree
+ * (canvas, control cluster, handlers).
+ */
+const InspectorOverlay = memo(function InspectorOverlay({
+  enabled,
+  canvasRect,
+  displayW,
+  displayH,
+  overlayScaleX,
+  overlayScaleY,
+  scale,
+}: {
+  enabled: boolean;
+  canvasRect: { width: number; height: number };
+  displayW: number;
+  displayH: number;
+  overlayScaleX: number;
+  overlayScaleY: number;
+  scale: number;
+}) {
+  const hovered = useInspectorStore((s) => s.hovered);
+  const bounds = hovered?.bounds ?? null;
+  if (!enabled || !bounds || scale <= 0) return null;
+  return (
+    <div
+      className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
+      style={{
+        left: (canvasRect.width - displayW) / 2 + bounds.left * overlayScaleX,
+        top: (canvasRect.height - displayH) / 2 + bounds.top * overlayScaleY,
+        width: (bounds.right - bounds.left) * overlayScaleX,
+        height: (bounds.bottom - bounds.top) * overlayScaleY,
+      }}
+    />
+  );
+});
+
 export function DeviceView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -314,7 +373,6 @@ export function DeviceView() {
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const tree = useInspectorStore((s) => s.tree);
-  const hovered = useInspectorStore((s) => s.hovered);
   const setHovered = useInspectorStore((s) => s.setHovered);
   const select = useInspectorStore((s) => s.select);
   const scheduleAutoRefresh = useInspectorStore((s) => s.scheduleAutoRefresh);
@@ -324,17 +382,29 @@ export function DeviceView() {
     x: number;
     y: number;
     node: UINode;
-    selector: Selector | null;
+    selectors: Selector[];
   } | null>(null);
+
+  // Settings ("/settings/*") and Image Bank ("/image-bank") cover MainView
+  // (App keeps it mounted but CSS-hidden). Every other path redirects to "/",
+  // so `pathname !== "/"` is exactly "the mirror is invisible".
+  const mirrorPaused = useLocation().pathname !== "/";
 
   // Dark-mode toggle is an Android-only `adb` feature; hidden for iOS and web.
   const noDarkMode = current?.platform !== "android";
   // Both hooks mount unconditionally (Rules of Hooks). They listen to
   // different events (`frame` / `ios_frame` / `web_frame`), so only the
   // connected platform actually paints — the Android H.264 hook is unchanged.
-  useFrameStream(canvasRef);
-  useScreenshotStream(canvasRef);
-  useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled);
+  useFrameStream(canvasRef, mirrorPaused);
+  useScreenshotStream(canvasRef, mirrorPaused);
+  useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled, mirrorPaused);
+
+  // Register this canvas in the module-level registry so non-React code
+  // (e.g. Billy's take_screenshot tool) can capture frames without prop-drilling.
+  useEffect(() => {
+    registerDeviceCanvas(canvasRef.current);
+    return () => registerDeviceCanvas(null);
+  }, []);
 
   const deviceWidth = streamW || current?.screen_width || 1080;
   const deviceHeight = streamH || current?.screen_height || 2340;
@@ -504,7 +574,7 @@ export function DeviceView() {
           x: e.clientX,
           y: e.clientY,
           node,
-          selector: selectors[0] ?? null,
+          selectors,
         });
       } catch (err) {
         toast.error("Inspect failed", err instanceof Error ? err.message : String(err));
@@ -695,7 +765,10 @@ export function DeviceView() {
     [current, toDeviceCoords, wheelFlush],
   );
 
-  const overlayBounds: Bounds | null = hovered?.bounds ?? null;
+  const canvasStyle = useMemo(
+    () => ({ width: displayW || undefined, height: displayH || undefined }),
+    [displayW, displayH],
+  );
 
   return (
     <div
@@ -722,23 +795,18 @@ export function DeviceView() {
           !hasFrame && "hidden",
           inspectEnabled && "cursor-crosshair",
         )}
-        style={{
-          width: displayW || undefined,
-          height: displayH || undefined,
-        }}
+        style={canvasStyle}
       />
 
-      {inspectEnabled && overlayBounds && scale > 0 ? (
-        <div
-          className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
-          style={{
-            left: (canvasRect.width - displayW) / 2 + overlayBounds.left * overlayScaleX,
-            top: (canvasRect.height - displayH) / 2 + overlayBounds.top * overlayScaleY,
-            width: (overlayBounds.right - overlayBounds.left) * overlayScaleX,
-            height: (overlayBounds.bottom - overlayBounds.top) * overlayScaleY,
-          }}
-        />
-      ) : null}
+      <InspectorOverlay
+        enabled={inspectEnabled}
+        canvasRect={canvasRect}
+        displayW={displayW}
+        displayH={displayH}
+        overlayScaleX={overlayScaleX}
+        overlayScaleY={overlayScaleY}
+        scale={scale}
+      />
 
       {hasFrame ? (
         <div className="absolute right-3 top-3 z-10 flex gap-2">
@@ -785,7 +853,7 @@ export function DeviceView() {
           x={actionMenu.x}
           y={actionMenu.y}
           node={actionMenu.node}
-          selector={actionMenu.selector}
+          selectors={actionMenu.selectors}
           onClose={() => setActionMenu(null)}
         />
       ) : null}

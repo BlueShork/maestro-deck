@@ -125,7 +125,7 @@ struct ResolvedCache {
 
 static CACHE: Lazy<RwLock<ResolvedCache>> = Lazy::new(|| RwLock::new(ResolvedCache::default()));
 
-fn invalidate_cache() {
+pub(crate) fn invalidate_cache() {
     let mut c = CACHE.write().unwrap();
     c.adb = None;
     c.maestro = None;

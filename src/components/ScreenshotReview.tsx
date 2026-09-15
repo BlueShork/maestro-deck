@@ -18,21 +18,70 @@ import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useReviewStore } from "@/stores/reviewStore";
 import { toast } from "@/stores/toastStore";
+import { useVisualRegressionStore } from "@/stores/visualRegressionStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+
+/** Fractions of the ignored regions, mirroring src-tauri/src/bank/mod.rs
+ *  (status_bar_ratio / nav_bar_ratio / scrollbar_ratio). top/bottom are height
+ *  fractions, right is a width fraction. Used only to draw the review overlay —
+ *  the actual masking happens in Rust. */
+function maskRatios(
+  deviceKey: string,
+  on: boolean,
+): { top: number; bottom: number; right: number } {
+  // Web captures have no status/nav bars or reserved scrollbar band —
+  // mirrors status_bar_ratio("web") = 0 in Rust (nothing is masked there).
+  const web = /web|chromium/i.test(deviceKey);
+  if (!on || web) return { top: 0, bottom: 0, right: 0 };
+  const ios = /iphone|ipad|ipod/i.test(deviceKey);
+  return ios
+    ? { top: 0.06, bottom: 0.04, right: 0.02 }
+    : { top: 0.045, bottom: 0.045, right: 0.02 };
+}
 
 /** Neutral checkerboard so transparent PNGs and white captures both read
  *  clearly against the dialog surface. */
 const CHECKERBOARD =
   "[background-image:linear-gradient(45deg,hsl(var(--muted))_25%,transparent_25%),linear-gradient(-45deg,hsl(var(--muted))_25%,transparent_25%),linear-gradient(45deg,transparent_75%,hsl(var(--muted))_75%),linear-gradient(-45deg,transparent_75%,hsl(var(--muted))_75%)] [background-position:0_0,0_8px,8px_-8px,-8px_0] [background-size:16px_16px]";
 
+/** Dimmed, hatched band marking an ignored region (status / nav bar / scrollbar). */
+function IgnoredBand({ edge, pct }: { edge: "top" | "bottom" | "right"; pct: number }) {
+  if (pct <= 0) return null;
+  const vertical = edge === "right";
+  return (
+    <div
+      style={vertical ? { width: `${pct * 100}%` } : { height: `${pct * 100}%` }}
+      className={cn(
+        "pointer-events-none absolute flex items-center justify-center overflow-hidden bg-slate-900/40 [background-image:repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(255,255,255,0.07)_5px,rgba(255,255,255,0.07)_10px)]",
+        edge === "top" && "inset-x-0 top-0 border-b border-white/15",
+        edge === "bottom" && "inset-x-0 bottom-0 border-t border-white/15",
+        edge === "right" && "inset-y-0 right-0 border-l border-white/15",
+      )}
+    >
+      {/* The scrollbar band is too thin for a legible label. */}
+      {!vertical && (
+        <span className="rounded-full bg-black/55 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-white/85">
+          ignored
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ImageFrame({
   src,
   alt,
   accent,
+  maskTop = 0,
+  maskBottom = 0,
+  maskRight = 0,
 }: {
   src?: string;
   alt: string;
   accent: "neutral" | "warning";
+  maskTop?: number;
+  maskBottom?: number;
+  maskRight?: number;
 }) {
   return (
     <div
@@ -43,7 +92,12 @@ function ImageFrame({
       )}
     >
       {src ? (
-        <img src={src} alt={alt} className="max-h-[60vh] object-contain" />
+        <div className="relative">
+          <img src={src} alt={alt} className="block max-h-[60vh] object-contain" />
+          <IgnoredBand edge="top" pct={maskTop} />
+          <IgnoredBand edge="bottom" pct={maskBottom} />
+          <IgnoredBand edge="right" pct={maskRight} />
+        </div>
       ) : (
         <div className="flex flex-col items-center gap-1.5 py-10 text-xs text-muted-foreground">
           <ImageOff className="h-5 w-5" />
@@ -83,6 +137,7 @@ export function ScreenshotReview() {
   const queue = useReviewStore((s) => s.queue);
   const next = useReviewStore((s) => s.next);
   const close = useReviewStore((s) => s.close);
+  const ignoreStatusBar = useVisualRegressionStore((s) => s.ignoreStatusBar);
   const [showDiff, setShowDiff] = useState(true);
   const [pending, setPending] = useState(false);
 
@@ -104,6 +159,10 @@ export function ScreenshotReview() {
   const overlayOn = showDiff && hasDiff;
   const changedPct = (comp.changed_ratio * 100).toFixed(2);
   const bbox = comp.bbox;
+  // Ignored system-bar bands are drawn as an overlay (same fractions the Rust
+  // diff excluded) rather than baked into the image.
+  const mask = maskRatios(report.device_key, ignoreStatusBar);
+  const masked = mask.top > 0 || mask.bottom > 0 || mask.right > 0;
 
   const decide = async (decision: "keep" | "replace") => {
     if (pending) return;
@@ -137,6 +196,11 @@ export function ScreenshotReview() {
           <div className="flex items-center justify-between gap-3 pr-6">
             <DialogTitle className="flex items-center gap-2 text-base">
               Visual regression
+              {comp.flow && (
+                <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] font-normal text-emerald-600 dark:text-emerald-400">
+                  {comp.flow}
+                </span>
+              )}
               <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-normal">
                 {name}
               </code>
@@ -162,13 +226,26 @@ export function ScreenshotReview() {
                 changed region {bbox[2]}×{bbox[3]} at ({bbox[0]}, {bbox[1]})
               </span>
             )}
+            {masked && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="h-2.5 w-3.5 rounded-[2px] bg-slate-900/40 [background-image:repeating-linear-gradient(45deg,transparent,transparent_2px,rgba(255,255,255,0.12)_2px,rgba(255,255,255,0.12)_4px)]" />
+                system bars ignored
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid flex-1 grid-cols-2 gap-4 overflow-auto p-5">
           <figure className="flex flex-col gap-2">
             <PanelLabel dot="bg-emerald-500" title="Bank" hint="current source of truth" />
-            <ImageFrame src={comp.bank_b64} alt="bank reference" accent="neutral" />
+            <ImageFrame
+              src={comp.bank_b64}
+              alt="bank reference"
+              accent="neutral"
+              maskTop={mask.top}
+              maskBottom={mask.bottom}
+              maskRight={mask.right}
+            />
           </figure>
           <figure className="flex flex-col gap-2">
             <PanelLabel
@@ -180,7 +257,7 @@ export function ScreenshotReview() {
                   <button
                     type="button"
                     onClick={() => setShowDiff((v) => !v)}
-                    className="inline-flex items-center gap-1.5 rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted"
+                    className="inline-flex items-center gap-1.5 rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {showDiff ? (
                       <>
@@ -199,6 +276,9 @@ export function ScreenshotReview() {
               src={overlayOn ? comp.diff_b64 : comp.new_b64}
               alt="new capture"
               accent="warning"
+              maskTop={mask.top}
+              maskBottom={mask.bottom}
+              maskRight={mask.right}
             />
           </figure>
         </div>

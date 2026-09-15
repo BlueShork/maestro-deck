@@ -17,7 +17,7 @@ import type {
   UINode,
   WorkspaceNode,
 } from "@/types";
-import type { RunReport } from "@/types/visualRegression";
+import type { BankGroup, RunReport } from "@/types/visualRegression";
 
 export class IpcError extends Error {
   constructor(
@@ -68,7 +68,7 @@ export const ipc = {
   appVersion: () => call<string>("app_version"),
   listDevices: () => call<Device[]>("list_devices"),
   connectDevice: (serial: string, streamEnabled: boolean, platform: Platform, url?: string) =>
-    call<void>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
+    call<Device>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
   disconnectDevice: () => call<void>("disconnect_device"),
   // Tear down all sessions and exit. Called once the user confirms the quit
   // dialog (or has opted out of it). The app process exits, so this never
@@ -87,6 +87,8 @@ export const ipc = {
   runFlow: (filePath: string, appId?: string) =>
     call<number>("run_flow", { filePath, appId: appId?.trim() || null }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
+  launchAppOnDevice: (appId: string) => call<void>("launch_app", { appId }),
+  stopAppOnDevice: (appId: string) => call<void>("stop_app", { appId }),
   compareScreenshots: (args: {
     workspace: string;
     flowPath: string;
@@ -96,7 +98,20 @@ export const ipc = {
     tolerance: number;
     threshold: number;
     runId: string;
+    platform: Platform;
+    ignoreStatusBar: boolean;
   }) => call<RunReport>("compare_screenshots", args),
+  compareScreenshotsAll: (args: {
+    workspace: string;
+    model: string;
+    width: number;
+    height: number;
+    tolerance: number;
+    threshold: number;
+    runId: string;
+    platform: Platform;
+    ignoreStatusBar: boolean;
+  }) => call<RunReport>("compare_screenshots_all", args),
   resolveComparison: (args: {
     workspace: string;
     runId: string;
@@ -104,6 +119,17 @@ export const ipc = {
     name: string;
     decision: "keep" | "replace";
   }) => call<void>("resolve_comparison", args),
+  listBank: (workspace: string) => call<BankGroup[]>("list_bank", { workspace }),
+  loadBankImage: (workspace: string, deviceKey: string, name: string) =>
+    call<string>("load_bank_image", { workspace, deviceKey, name }),
+  deleteBankImage: (workspace: string, deviceKey: string, name: string) =>
+    call<void>("delete_bank_image", { workspace, deviceKey, name }),
+  deleteBankDevice: (workspace: string, deviceKey: string) =>
+    call<void>("delete_bank_device", { workspace, deviceKey }),
+  readWorkspaceFile: (workspace: string, relPath: string) =>
+    call<string>("read_workspace_file", { workspace, relPath }),
+  writeWorkspaceFile: (workspace: string, relPath: string, content: string) =>
+    call<void>("write_workspace_file", { workspace, relPath, content }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
   startStream: () => call<void>("start_stream"),
   stopStream: () => call<void>("stop_stream"),
@@ -135,6 +161,9 @@ export const ipc = {
       appleTeamId,
       maestroIosDevice,
     }),
+  // Environment prerequisites for the onboarding setup popup.
+  environmentStatus: () => call<EnvStatusResult>("environment_status"),
+  installTool: (id: "maestro" | "java") => call<void>("install_tool", { id }),
 };
 
 export interface IosPhysicalSetupStatus {
@@ -143,6 +172,19 @@ export interface IosPhysicalSetupStatus {
   // serde `rename_all = "camelCase"` turns `maestro_is_2_5_1` into `maestroIs251`.
   maestroIs251: boolean;
   maestroPatched: boolean;
+}
+
+export type EnvCheckId = "maestro" | "java" | "adb" | "xcode";
+export type EnvCheckStatus = "ok" | "missing" | "wrong-version" | "error";
+export interface EnvCheckResult {
+  id: EnvCheckId;
+  status: EnvCheckStatus;
+  version: string | null;
+  detail: string | null;
+}
+export interface EnvStatusResult {
+  checks: EnvCheckResult[];
+  minimalOk: boolean;
 }
 
 export interface ToolPathsView {
@@ -202,6 +244,10 @@ export const events = {
     }),
   onRunnerStdout: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stdout", (e) => handler(e.payload)),
+  onEnvInstallOutput: (handler: (p: { id: string; line: string }) => void) =>
+    listen<{ id: string; line: string }>("env:install:output", (e) => handler(e.payload)),
+  onEnvInstallDone: (handler: (p: { id: string; code: number | null }) => void) =>
+    listen<{ id: string; code: number | null }>("env:install:done", (e) => handler(e.payload)),
   onRunnerStderr: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stderr", (e) => handler(e.payload)),
   onRunnerExit: (handler: (payload: RunnerExitPayload) => void): Promise<UnlistenFn> =>
@@ -242,4 +288,12 @@ export const events = {
           height: e.payload.height,
         }),
     ),
+  onWebStatus: (
+    handler: (p: { stage: "info" | "warn" | "error"; message: string }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ stage: "info" | "warn" | "error"; message: string }>("web:status", (e) =>
+      handler(e.payload),
+    ),
+  onWebTapFallback: (handler: () => void): Promise<UnlistenFn> =>
+    listen<null>("web:tap_fallback", () => handler()),
 };

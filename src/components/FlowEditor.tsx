@@ -6,8 +6,6 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
-  type CompletionContext,
-  type CompletionResult,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
@@ -22,6 +20,7 @@ import {
 import { yaml } from "@codemirror/legacy-modes/mode/yaml";
 import {
   Compartment,
+  EditorSelection,
   EditorState,
   RangeSet,
   RangeSetBuilder,
@@ -50,8 +49,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
+import { clearIndentOnBlankLine } from "@/lib/editorCommands";
+import { maestroCompletions } from "@/lib/editorCompletions";
 import { parseFlow } from "@/lib/flowAst";
-import maestroCommands from "@/lib/maestro-commands.json";
 
 import { Button } from "@/components/ui/Button";
 import { themeExtensions } from "@/lib/editor-theme";
@@ -64,20 +64,6 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
-function maestroCompletions(ctx: CompletionContext): CompletionResult | null {
-  const word = ctx.matchBefore(/[\w-]*/);
-  if (!word || (word.from === word.to && !ctx.explicit)) return null;
-  return {
-    from: word.from,
-    options: maestroCommands.map(({ label, info }) => ({
-      label,
-      type: "keyword",
-      detail: "maestro",
-      description: info,
-    })) as unknown as CompletionResult["options"],
-  };
-}
-
 function renderCompletionDescription(completion: { description?: string }): Node | null {
   if (!completion.description) return null;
   const el = document.createElement("div");
@@ -88,7 +74,7 @@ function renderCompletionDescription(completion: { description?: string }): Node
 
 const setActiveLine = StateEffect.define<number | null>();
 
-type StepStatus = "running" | "done" | "failed";
+type StepStatus = "running" | "done" | "failed" | "skipped";
 type StepStatusMap = Map<number, { status: StepStatus; endLine: number }>;
 
 const setStepStatuses = StateEffect.define<StepStatusMap>();
@@ -199,6 +185,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
         }),
         keymap.of([
           ...closeBracketsKeymap,
+          { key: "Enter", run: clearIndentOnBlankLine },
           ...defaultKeymap,
           ...historyKeymap,
           ...completionKeymap,
@@ -214,10 +201,22 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
           if (v.docChanged && !syncingFromStore.current) {
             setContent(v.state.doc.toString());
           }
-          if (v.selectionSet) {
+          // Guard: store-sync dispatches (syncingFromStore) must never
+          // overwrite the store's cursorLine — appendAction advances it
+          // intentionally and the mapped caret from a full-doc replace would
+          // land at the wrong position (typically end-of-file), breaking
+          // chained right-click inserts.
+          if (v.selectionSet && !syncingFromStore.current) {
             const head = v.state.selection.main.head;
             const line = v.state.doc.lineAt(head);
-            setCursor(line.number, head - line.from + 1);
+            // Only user gestures (click, keyboard move, typing, deleting)
+            // count as "placing" the cursor — mount focus and store sync
+            // dispatches must not flip cursorPlaced.
+            const userDriven = v.transactions.some(
+              (tr) =>
+                tr.isUserEvent("select") || tr.isUserEvent("input") || tr.isUserEvent("delete"),
+            );
+            setCursor(line.number, head - line.from + 1, userDriven);
           }
         }),
       ],
@@ -239,9 +238,23 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
     if (!view) return;
     const current = view.state.doc.toString();
     if (current === content) return;
+    // Read the store's cursorLine now (not a reactive dep) so we can park
+    // the visible caret at the insertion point after appendAction advances it.
+    // We intentionally use getState() rather than a reactive dep so this
+    // effect is only triggered by content changes, not cursor changes.
+    const { cursorLine } = useFlowStore.getState();
+    // Compute the character offset of the target line in the new content so
+    // we can move the caret there in the same dispatch as the doc replace.
+    // This avoids a second dispatch (which would be another selectionSet).
+    const lines = content.split("\n");
+    const clampedLine = Math.min(Math.max(cursorLine, 1), lines.length);
+    const anchor = lines.slice(0, clampedLine - 1).reduce((acc, l) => acc + l.length + 1, 0);
     syncingFromStore.current = true;
+    // Place the caret at the store's cursorLine so the editor scrolls to the
+    // insertion point (e.g. after a right-click insert via appendAction).
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: content },
+      selection: EditorSelection.cursor(anchor),
     });
     syncingFromStore.current = false;
   }, [content]);
@@ -255,7 +268,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
     if (!view) return;
     const map: StepStatusMap = new Map();
     for (const s of steps) {
-      if (s.status === "running" || s.status === "done" || s.status === "failed") {
+      if (s.status !== "pending") {
         map.set(s.line, { status: s.status, endLine: s.endLine });
       }
     }

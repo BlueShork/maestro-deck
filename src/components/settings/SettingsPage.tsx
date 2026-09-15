@@ -51,7 +51,7 @@ export function SettingsPage() {
               onClick={() => navigate(`/settings/${s.id}`)}
               aria-current={active.id === s.id ? "page" : undefined}
               className={cn(
-                "w-full rounded px-3 py-1.5 text-left text-sm transition-colors",
+                "w-full rounded px-3 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 active.id === s.id
                   ? "bg-muted font-medium text-foreground"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",

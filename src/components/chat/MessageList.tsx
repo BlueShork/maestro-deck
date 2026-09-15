@@ -73,7 +73,10 @@ export function MessageList() {
   }
 
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-8">
+    <div
+      ref={ref}
+      className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150"
+    >
       <div className="flex min-w-0 flex-col gap-5">
         {messages.map((m) => (
           <ChatMessage key={m.id} message={m} />

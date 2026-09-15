@@ -65,6 +65,28 @@ pub fn list_devices() -> AppResult<Vec<Device>> {
     Ok(devices)
 }
 
+/// Raw `adb devices -l` entries, states included — used by AVD launch to
+/// diff serial sets without the per-device getprop round-trips of
+/// `list_devices`.
+pub fn list_device_entries() -> AppResult<Vec<DeviceListEntry>> {
+    Ok(parse_devices_l(&run_adb(&["devices", "-l"])?))
+}
+
+/// Name of the AVD behind a running `emulator-<port>` transport.
+/// `adb emu avd name` prints the name on the first line, then `OK`.
+pub fn emu_avd_name(serial: &str) -> AppResult<Option<String>> {
+    let out = run_adb(&["-s", serial, "emu", "avd", "name"])?;
+    Ok(parse_emu_avd_name(&out))
+}
+
+pub fn parse_emu_avd_name(stdout: &str) -> Option<String> {
+    stdout
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty() && *l != "OK")
+        .map(str::to_string)
+}
+
 pub fn get_device_info(serial: &str) -> AppResult<Device> {
     let model = exec_shell(serial, "getprop ro.product.model")?
         .trim()
@@ -253,5 +275,15 @@ mod tests {
         assert_eq!(DeviceState::parse("recovery"), DeviceState::Recovery);
         assert_eq!(DeviceState::parse("bootloader"), DeviceState::Bootloader);
         assert_eq!(DeviceState::parse("garbage"), DeviceState::Unknown);
+    }
+
+    #[test]
+    fn parses_emu_avd_name_output() {
+        assert_eq!(
+            parse_emu_avd_name("Pixel_8_API_34\r\nOK\n"),
+            Some("Pixel_8_API_34".to_string())
+        );
+        assert_eq!(parse_emu_avd_name("OK\n"), None);
+        assert_eq!(parse_emu_avd_name(""), None);
     }
 }

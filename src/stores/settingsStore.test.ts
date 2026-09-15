@@ -29,7 +29,7 @@ beforeEach(() => {
     showFps: INITIAL.showFps,
     theme: "system",
     streamEnabled: true,
-    fastHierarchyEnabled: false,
+    fastHierarchyEnabled: true,
     autoSaveEnabled: true,
     consoleMode: "simple",
     appId: "",
@@ -42,11 +42,14 @@ describe("settingsStore defaults", () => {
     expect(s.inspectKey).toBe("i");
     expect(s.theme).toBe("system");
     expect(s.streamEnabled).toBe(true);
-    expect(s.fastHierarchyEnabled).toBe(false);
+    // Fast hierarchy is on by default — it falls back to the CLI path if
+    // the studio keeper fails, so there's no downside to opting everyone in.
+    expect(s.fastHierarchyEnabled).toBe(true);
     expect(s.autoSaveEnabled).toBe(true);
     expect(s.consoleMode).toBe("simple");
-    // Web support is beta — the target stays hidden until opted in.
-    expect(s.webBrowserEnabled).toBe(false);
+    // Web target ships enabled since the 2026-07 hardening (hidden Chrome,
+    // live run mirror, viewport-pinned headless runs).
+    expect(s.webBrowserEnabled).toBe(true);
     expect(s.appId).toBe("");
   });
 });

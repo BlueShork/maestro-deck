@@ -201,18 +201,47 @@ pub async fn spawn_runner(
     Ok(pid)
 }
 
-/// Spawn `maestro test <flow>` for the web platform — no `--udid`, since
-/// Maestro targets the browser via the flow's `url:` header, and no adb
-/// emulator-ghost preamble (irrelevant to web). Streams stdout/stderr and
-/// emits `runner:exit` exactly like [`spawn_runner`].
+/// Vertical window-chrome allowance for headless web runs. Selenium applies
+/// `--screen-size` to the OUTER window, and Chrome (even headless=new)
+/// reserves ~143 px of virtual UI — the resulting viewport is that much
+/// shorter. Measured live (2026-07-11, Chrome 149: 1200x762 requested →
+/// 1200x619 viewport; 1200x905 requested → exactly 1200x762). If Chrome ever
+/// changes this, the bank will surface it as a visible dimension mismatch.
+const HEADLESS_CHROME_UI_PX: u32 = 143;
+
+/// `--screen-size WxH` args yielding a headless VIEWPORT that matches the
+/// interactive session's, so a run renders the SAME responsive layout the
+/// flow was authored against (maestro's headless default is 1024x768 — a
+/// narrower breakpoint where site content can differ or disappear) and bank
+/// captures line up with what the user sees. Empty when dims are unknown.
+fn web_screen_size_args(screen_size: Option<(u32, u32)>) -> Vec<String> {
+    match screen_size {
+        Some((w, h)) if w > 0 && h > 0 => {
+            vec![
+                "--screen-size".to_string(),
+                format!("{w}x{}", h + HEADLESS_CHROME_UI_PX),
+            ]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Spawn `maestro test --headless <flow>` for the web platform — no `--udid`,
+/// since Maestro targets the browser via the flow's `url:` header, and no adb
+/// emulator-ghost preamble (irrelevant to web). `--headless` keeps the run's
+/// Chromium off-screen (web-only flag; the console output is the run's UI);
+/// `--screen-size` pins the viewport to the interactive session's.
+/// Streams stdout/stderr and emits `runner:exit` exactly like [`spawn_runner`].
 pub async fn spawn_web_runner(
     app: AppHandle,
     flow_path: &str,
     app_id: Option<&str>,
+    screen_size: Option<(u32, u32)>,
 ) -> AppResult<u32> {
     let bin = maestro_bin();
-    info!(bin = %bin, flow = %flow_path, "spawning maestro (web)");
+    info!(bin = %bin, flow = %flow_path, ?screen_size, "spawning maestro (web, headless)");
     let env_args = app_id_env_args(app_id);
+    let size_args = web_screen_size_args(screen_size);
     let flow_dir = std::path::Path::new(flow_path)
         .parent()
         .map(|p| p.to_path_buf())
@@ -221,7 +250,8 @@ pub async fn spawn_web_runner(
     let mut child = Command::new(&bin)
         .no_window()
         // `-p web` is a global flag and must precede the `test` subcommand.
-        .args(["-p", "web", "test"])
+        .args(["-p", "web", "test", "--headless"])
+        .args(&size_args)
         .args(&env_args)
         .arg(flow_path)
         .current_dir(&flow_dir)
@@ -277,6 +307,30 @@ pub async fn spawn_web_runner(
             }
         };
         RUNNERS.lock().await.remove(&pid);
+        // Run finished — release the keeper, stop the CDP mirror and hand
+        // the canvas back to the (still-warm) studio preview.
+        {
+            use tauri::Manager;
+            let state = app_exit.state::<crate::state::AppState>();
+            state
+                .web_run_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            if let Some(mirror) = state.web_run_mirror_abort.lock().await.take() {
+                let _ = mirror.send(());
+            }
+            // Resume the studio preview poller (only if none is running —
+            // e.g. the user disconnected mid-run and teardown already ran).
+            let keeper = state.web_driver.lock().await.clone();
+            if let Some(keeper) = keeper {
+                let mut slot = state.web_screenshot_abort.lock().await;
+                if slot.is_none() {
+                    *slot = Some(crate::web_session::spawn_screenshot_poller(
+                        app_exit.clone(),
+                        keeper,
+                    ));
+                }
+            }
+        }
         let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
     });
 
@@ -523,6 +577,20 @@ pub async fn kill_runner(pid: u32) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn web_screen_size_args_pin_the_interactive_viewport() {
+        // Height is padded by the window-chrome allowance so the resulting
+        // VIEWPORT (not the outer window) matches the interactive session:
+        // requesting 1200x905 yields a 1200x762 viewport (measured live).
+        assert_eq!(
+            web_screen_size_args(Some((1200, 762))),
+            vec!["--screen-size".to_string(), "1200x905".to_string()]
+        );
+        // Unknown or degenerate dims → let maestro use its default.
+        assert!(web_screen_size_args(Some((0, 762))).is_empty());
+        assert!(web_screen_size_args(None).is_empty());
+    }
 
     #[tokio::test]
     async fn kill_unknown_pid_errors() {

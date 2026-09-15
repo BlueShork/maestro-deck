@@ -3,11 +3,13 @@
 
 //! Maestro Deck — source-available visual IDE for Maestro mobile tests.
 
+pub mod app_control;
 #[cfg(target_os = "macos")]
 pub mod avf_capture;
 pub mod bank;
 pub mod credentials;
 pub mod device;
+mod env_check;
 mod env_shim;
 pub mod error;
 pub mod hierarchy;
@@ -19,6 +21,7 @@ pub mod ipc;
 pub mod maestro_health;
 pub mod metrics;
 pub mod process_ext;
+pub mod prockill;
 pub mod runner;
 pub mod scrcpy;
 pub mod selector;
@@ -30,11 +33,13 @@ pub mod vertex;
 pub mod video;
 mod web_session;
 pub mod workspace;
+pub mod workspace_fs;
 pub mod yaml;
 
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{fmt, EnvFilter};
 
+use app_control::{launch_app, stop_app};
 use credentials::{delete_credential, get_credential, save_credential};
 use ipc::commands::*;
 use tool_paths::{get_tool_paths, set_tool_paths};
@@ -88,8 +93,17 @@ pub fn run() {
             get_dark_mode,
             run_flow,
             stop_flow,
+            launch_app,
+            stop_app,
             bank::ipc::compare_screenshots,
+            bank::ipc::compare_screenshots_all,
             bank::ipc::resolve_comparison,
+            bank::ipc::list_bank,
+            bank::ipc::load_bank_image,
+            bank::ipc::delete_bank_image,
+            bank::ipc::delete_bank_device,
+            workspace_fs::read_workspace_file,
+            workspace_fs::write_workspace_file,
             list_workspace,
             start_metrics,
             stop_metrics,
@@ -102,6 +116,8 @@ pub fn run() {
             delete_credential,
             get_tool_paths,
             set_tool_paths,
+            env_check::environment_status,
+            env_check::install_tool,
         ])
         .setup(|app| {
             ipc::register_events(app)?;

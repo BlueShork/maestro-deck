@@ -12,9 +12,12 @@ export interface VisualRegressionState {
   enabled: boolean;
   tolerance: number | null;
   threshold: number | null;
+  /** When true, the status-bar band (clock/notch) is excluded from diffs. */
+  ignoreStatusBar: boolean;
   setEnabled: (v: boolean) => void;
   setTolerance: (v: number | null) => void;
   setThreshold: (v: number | null) => void;
+  setIgnoreStatusBar: (v: boolean) => void;
   reset: () => void;
 }
 
@@ -24,9 +27,11 @@ export const useVisualRegressionStore = create<VisualRegressionState>()(
       enabled: true,
       tolerance: null,
       threshold: null,
+      ignoreStatusBar: false,
       setEnabled: (v) => set({ enabled: v }),
       setTolerance: (v) => set({ tolerance: v }),
       setThreshold: (v) => set({ threshold: v }),
+      setIgnoreStatusBar: (v) => set({ ignoreStatusBar: v }),
       reset: () => set({ tolerance: null, threshold: null }),
     }),
     {

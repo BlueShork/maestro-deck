@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
+import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from "react";
 
 import { cn } from "@/lib/utils";
 
 export const Separator = forwardRef<
-  ElementRef<typeof SeparatorPrimitive.Root>,
+  ComponentRef<typeof SeparatorPrimitive.Root>,
   ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root>
 >(({ className, orientation = "horizontal", decorative = true, ...props }, ref) => (
   <SeparatorPrimitive.Root

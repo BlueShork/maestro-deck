@@ -49,6 +49,24 @@ pub struct AppState {
 
     pub web_driver: AsyncMutex<Option<Arc<crate::web_session::WebStudioKeeper>>>,
     pub web_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+    /// True while a `maestro -p web test` run is in flight. The studio keeper's
+    /// browser and the test's own browser can't coexist, so `run_flow` stops the
+    /// keeper first — this flag then blocks `ensure_web_keeper` from re-spawning
+    /// a competing one (inspect, taps) until the run exits. Mirror of
+    /// `ios_sim_run_active`.
+    pub web_run_active: std::sync::atomic::AtomicBool,
+    /// Consecutive `WebStudioKeeper::start` failures — drives the exponential
+    /// respawn backoff (1 s / 2 s / 4 s) in `ensure_web_keeper`, reset on success.
+    pub web_respawn_fails: std::sync::atomic::AtomicU32,
+    /// Last real page URL seen in the web session (from SSE events; never a
+    /// Studio-local page). Survives keeper teardown so a respawn — after a
+    /// run, or after a transient driver failure — restores the user's page
+    /// instead of navigating to Studio's own SPA.
+    pub web_last_url: RwLock<Option<String>>,
+    /// Abort handle of the CDP run mirror (live view of a headless web run).
+    /// Fired by the runner's exit task — or by teardown if the user
+    /// disconnects mid-run.
+    pub web_run_mirror_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
 
     /// Set once the user has confirmed quitting (or opted out of the prompt).
     /// The window-close / app-exit handlers prevent the first quit to show the
