@@ -11,6 +11,7 @@
 //! physically live (they actually sit in `$OUT_DIR`).
 
 #![allow(clippy::enum_variant_names)]
+#![allow(clippy::result_large_err)]
 #![allow(non_snake_case)]
 
 tonic::include_proto!("maestro_android");
