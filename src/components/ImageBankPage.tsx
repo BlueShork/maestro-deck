@@ -92,7 +92,7 @@ function Thumb({
 
   return (
     <div
-      className="group animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-lg"
+      className="group animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both relative flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-lg"
       style={{ animationDelay: `${Math.min(index, 14) * 35}ms` }}
     >
       {/* Screen mat */}
@@ -111,29 +111,30 @@ function Thumb({
         ) : (
           <div className="h-full w-full animate-pulse rounded-md bg-muted/60" />
         )}
+      </button>
 
-        {/* Delete affordance — appears on hover, top-right */}
-        <span
-          role="button"
-          tabIndex={0}
-          aria-label={confirming ? `Confirm delete ${image.name}` : `Delete ${image.name}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (confirming) onDelete();
-            else {
-              setConfirming(true);
-              window.setTimeout(() => setConfirming(false), 3000);
-            }
-          }}
-          className={cn(
-            "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium backdrop-blur transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-            confirming
-              ? "bg-red-500/90 text-white opacity-100"
-              : "bg-background/70 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
-          )}
-        >
-          {confirming ? "Delete?" : <Trash2 className="h-3.5 w-3.5" />}
-        </span>
+      {/* Delete affordance — appears on hover, top-right. A sibling of the
+          open-button rather than a child: a button inside a button is invalid
+          HTML, which is what forced the previous `role="button"` span (and
+          left it unreachable by keyboard). */}
+      <button
+        type="button"
+        aria-label={confirming ? `Confirm delete ${image.name}` : `Delete ${image.name}`}
+        onClick={() => {
+          if (confirming) onDelete();
+          else {
+            setConfirming(true);
+            window.setTimeout(() => setConfirming(false), 3000);
+          }
+        }}
+        className={cn(
+          "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium backdrop-blur transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          confirming
+            ? "bg-red-500/90 text-white opacity-100"
+            : "bg-background/70 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
+        )}
+      >
+        {confirming ? "Delete?" : <Trash2 className="h-3.5 w-3.5" />}
       </button>
 
       {/* Caption */}

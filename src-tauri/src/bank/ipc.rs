@@ -35,6 +35,19 @@ pub struct BankGroup {
     pub images: Vec<BankImage>,
 }
 
+/// Runs a blocking filesystem/pixel job off the async runtime. The bank walks
+/// directories, decodes PNGs and diffs pixels — all of it would otherwise park
+/// a Tokio worker for the whole duration of a compare.
+async fn blocking<T, F>(f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("bank task panicked: {e}"))?
+}
+
 /// Rejects path components that could escape the bank directory.
 fn safe_component(s: &str) -> Result<(), String> {
     if s.is_empty() || s.contains('/') || s.contains('\\') || s.contains("..") {
@@ -61,7 +74,7 @@ pub async fn load_bank_image(
     safe_component(&device_key)?;
     safe_component(&name)?;
     let path = bank_image_path(&workspace, &device_key, &name);
-    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    let bytes = tokio::fs::read(&path).await.map_err(|e| e.to_string())?;
     Ok(format!(
         "data:image/png;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
@@ -77,7 +90,9 @@ pub async fn delete_bank_image(
 ) -> Result<(), String> {
     safe_component(&device_key)?;
     safe_component(&name)?;
-    fs::remove_file(bank_image_path(&workspace, &device_key, &name)).map_err(|e| e.to_string())
+    tokio::fs::remove_file(bank_image_path(&workspace, &device_key, &name))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Deletes an entire device-key group directory.
@@ -88,7 +103,9 @@ pub async fn delete_bank_device(workspace: String, device_key: String) -> Result
         .join("maestro")
         .join("bank")
         .join(&device_key);
-    fs::remove_dir_all(&dir).map_err(|e| e.to_string())
+    tokio::fs::remove_dir_all(&dir)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Ensures `<maestro_dir>/.gitignore` exists and contains `.runs/`.
@@ -180,11 +197,15 @@ fn stage_run_pngs(flow: &Path, run_dir: &Path) {
 /// (no pixels). Returns an empty vec when the bank directory is absent.
 #[tauri::command]
 pub async fn list_bank(workspace: String) -> Result<Vec<BankGroup>, String> {
-    let bank = PathBuf::from(&workspace).join("maestro").join("bank");
+    blocking(move || Ok(list_bank_sync(&workspace))).await
+}
+
+fn list_bank_sync(workspace: &str) -> Vec<BankGroup> {
+    let bank = PathBuf::from(workspace).join("maestro").join("bank");
     let mut groups: Vec<BankGroup> = Vec::new();
     let read = match fs::read_dir(&bank) {
         Ok(r) => r,
-        Err(_) => return Ok(groups),
+        Err(_) => return groups,
     };
     for entry in read.filter_map(|e| e.ok()) {
         let dir = entry.path();
@@ -225,7 +246,7 @@ pub async fn list_bank(workspace: String) -> Result<Vec<BankGroup>, String> {
         groups.push(BankGroup { device_key, images });
     }
     groups.sort_by(|a, b| a.device_key.cmp(&b.device_key));
-    Ok(groups)
+    groups
 }
 
 /// Remplace l'image de banque `<workspace>/maestro/bank/<key>/<name>.png`
@@ -267,6 +288,9 @@ pub async fn compare_screenshots(
     platform: String,
     ignore_status_bar: bool,
 ) -> Result<RunReport, String> {
+    // The whole pipeline (staging PNGs, decoding and diffing pixels, writing
+    // the report) is blocking and can run for seconds — keep it off the runtime.
+    blocking(move || {
     let ws = std::path::PathBuf::from(&workspace);
     let flow = std::path::PathBuf::from(&flow_path);
 
@@ -309,6 +333,8 @@ pub async fn compare_screenshots(
         comparisons,
         flow_errors: Vec::new(),
     })
+    })
+    .await
 }
 
 #[tauri::command]
@@ -321,8 +347,11 @@ pub async fn resolve_comparison(
 ) -> Result<(), String> {
     if decision == "replace" {
         // "replace": la nouvelle capture (copiée dans le dossier de run) devient la vérité.
-        replace_bank_image(Path::new(&workspace), &run_id, &device_key, &name)
-            .map_err(|e| e.to_string())?;
+        blocking(move || {
+            replace_bank_image(Path::new(&workspace), &run_id, &device_key, &name)
+                .map_err(|e| e.to_string())
+        })
+        .await?;
     }
     // "keep": régression confirmée, banque inchangée (déjà tracée dans report.json).
     Ok(())
@@ -340,6 +369,9 @@ pub async fn compare_screenshots_all(
     platform: String,
     ignore_status_bar: bool,
 ) -> Result<RunReport, String> {
+    // Same as `compare_screenshots`, but looping over every flow — strictly
+    // longer-running, so it belongs on a blocking thread even more clearly.
+    blocking(move || {
     let ws = PathBuf::from(&workspace);
     let flows = discover_flows(&ws).map_err(|e| e.to_string())?;
 
@@ -421,6 +453,8 @@ pub async fn compare_screenshots_all(
         comparisons: merged,
         flow_errors,
     })
+    })
+    .await
 }
 
 #[cfg(test)]
