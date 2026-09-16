@@ -1,3 +1,18 @@
+# What's New in v0.8.0
+
+## Devices panel redesign
+- **Real brand icons** for Apple/Android devices, replacing generic icons.
+- **Clearer connected state** — connected devices stay green via border/background/icon instead of a pulsing dot.
+- **Auto-poll for hotplug** — plugged-in devices and booted simulators now appear automatically in the background.
+- **iOS simulators as tappable rows** — tap a simulator to launch it, instead of picking from a dropdown.
+- **Scrollable device list** — a long list of devices/simulators now scrolls instead of overflowing the panel.
+- **Uniform toolbar buttons** — Run / Run all line up with the icon buttons instead of rendering shorter.
+
+## Maintenance
+- Dependency updates (js-yaml, vitest, postcss, actions/setup-node).
+
+---
+
 # What's New in v0.7.0
 
 ## Visual regression
