@@ -18,7 +18,7 @@ tauri-build = { version = "2.0", features = [] }
 # time. `protox` is a pure-Rust protobuf compiler so we don't need the
 # external `protoc` binary on contributors' machines.
 tonic-build = { version = "0.12", default-features = false, features = ["prost", "transport"] }
-protox = "0.7"
+protox = "0.9"
 
 [dependencies]
 tauri = { version = "2.1", features = [] }
