@@ -13,6 +13,7 @@ import {
   Settings,
   Sparkles,
   Square,
+  User,
 } from "lucide-react";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -32,6 +33,7 @@ import { Separator } from "@/components/ui/Separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
+import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
@@ -104,6 +106,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const showAllPanels = usePanelsStore((s) => s.showAll);
   const updatePhase = useUpdateStore((s) => s.phase);
   const checkUpdate = useUpdateStore((s) => s.check);
+  const cloudUser = useCloudAuthStore((s) => s.user);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -277,6 +280,22 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
               </Button>
             </TooltipTrigger>
             <TooltipContent>Image bank</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant={cloudUser ? "secondary" : "ghost"}
+                onClick={() => navigate("/account")}
+                aria-label="Maestro Deck Cloud account"
+              >
+                <User className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {cloudUser ? `Signed in as ${cloudUser.email}` : "Sign in to Maestro Deck Cloud"}
+            </TooltipContent>
           </Tooltip>
 
           <Tooltip>

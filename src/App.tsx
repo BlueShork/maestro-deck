@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
+import { AccountPage } from "@/components/AccountPage";
 import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
@@ -18,6 +19,7 @@ import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
+import { startCloudAuthListener } from "@/stores/cloudAuthStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useReviewStore } from "@/stores/reviewStore";
 import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRegressionStore";
@@ -48,10 +50,11 @@ export default function App() {
   const location = useLocation();
   const settingsOpen = location.pathname.startsWith("/settings");
   const imageBankOpen = location.pathname.startsWith("/image-bank");
+  const accountOpen = location.pathname.startsWith("/account");
   useEffect(() => {
-    setShortcutsSuppressed(settingsOpen || imageBankOpen);
+    setShortcutsSuppressed(settingsOpen || imageBankOpen || accountOpen);
     return () => setShortcutsSuppressed(false);
-  }, [settingsOpen, imageBankOpen]);
+  }, [settingsOpen, imageBankOpen, accountOpen]);
   const theme = useSettingsStore((s) => s.theme);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
@@ -73,6 +76,10 @@ export default function App() {
       useTourStore.getState().start();
     }
   }, []);
+
+  // Optional Maestro Deck Cloud sign-in: Firebase persists the session
+  // itself, this just keeps cloudAuthStore in sync with it.
+  useEffect(() => startCloudAuthListener(), []);
 
   // Silent update check on startup. Skipped if the user disabled it in
   // Settings. Failure is non-fatal — we just don't surface the toast.
@@ -310,13 +317,14 @@ export default function App() {
     <>
       {/* Always mounted; hidden (not unmounted) while settings is open so the
           editor + video decoder survive and returning is instant. */}
-      <div className={settingsOpen || imageBankOpen ? "hidden" : "contents"}>
+      <div className={settingsOpen || imageBankOpen || accountOpen ? "hidden" : "contents"}>
         <MainView />
       </div>
       <Routes>
         <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
         <Route path="/image-bank" element={<ImageBankPage />} />
+        <Route path="/account" element={<AccountPage />} />
         {/* MainView already covers "/"; redirect any other unknown path there. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

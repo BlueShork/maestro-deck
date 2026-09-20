@@ -49,6 +49,7 @@
     "@tauri-apps/plugin-updater": "^2.10.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "firebase": "^12.19.0",
     "js-yaml": "^4.3.2",
     "lucide-react": "^1.16.0",
     "motion": "^13.4.0",
