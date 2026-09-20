@@ -58,6 +58,7 @@ export async function fetchCloudBilling(): Promise<CloudBillingInfo> {
   const res = await fetch(`${DASHBOARD_URL}/api/billing/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (res.status === 401) throw new Error("your session expired — sign out and back in");
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as CloudBillingInfo;
 }
