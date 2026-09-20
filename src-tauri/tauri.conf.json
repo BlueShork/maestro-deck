@@ -26,7 +26,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://*.googleapis.com https://api.anthropic.com",
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://www.google.com; frame-src https://www.google.com; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://*.googleapis.com https://api.anthropic.com https://www.google.com https://dashboard.maestrodeck.cloud",
       "dangerousDisableAssetCspModification": true
     }
   },

@@ -30,7 +30,37 @@ if (!getApps().length) {
 
 const auth: Auth = getAuth();
 
+/** Same dashboard the login lives on (maestro-nightly/dashboard/lib/site.ts). */
+const DASHBOARD_URL = "https://dashboard.maestrodeck.cloud";
+
+/** Where "buy more runs" sends the user — the dashboard's own billing page,
+ *  which already has the pack picker and Stripe checkout. */
+export const CLOUD_BILLING_URL = `${DASHBOARD_URL}/billing`;
+
 export type CloudUser = Pick<User, "uid" | "email">;
+
+export interface CloudBillingInfo {
+  tier: string;
+  runsRemaining: number;
+  runsToday: number;
+  dailyCap: number;
+  currentPack: { id: string; displayName: string } | null;
+  expiresAt: string | null;
+}
+
+/** Mirrors the response shape of GET /api/billing/me (maestro-nightly/dashboard).
+ *  That route already accepts a Firebase ID token via `Authorization: Bearer`,
+ *  same as every other authed dashboard route, so no new backend work is needed. */
+export async function fetchCloudBilling(): Promise<CloudBillingInfo> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not signed in");
+  const token = await user.getIdToken();
+  const res = await fetch(`${DASHBOARD_URL}/api/billing/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as CloudBillingInfo;
+}
 
 export function onCloudAuthStateChanged(callback: (user: CloudUser | null) => void) {
   return onFirebaseAuthStateChanged(auth, callback);

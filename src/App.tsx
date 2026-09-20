@@ -79,7 +79,9 @@ export default function App() {
 
   // Optional Maestro Deck Cloud sign-in: Firebase persists the session
   // itself, this just keeps cloudAuthStore in sync with it.
-  useEffect(() => startCloudAuthListener(), []);
+  useEffect(() => {
+    startCloudAuthListener();
+  }, []);
 
   // Silent update check on startup. Skipped if the user disabled it in
   // Settings. Failure is non-fatal — we just don't surface the toast.
