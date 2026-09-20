@@ -17,7 +17,9 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 
+import { DottedGrid } from "@/components/effects/DottedGrid";
 import { InspectActionMenu } from "@/components/InspectActionMenu";
+import { Logo } from "@/components/Logo";
 import { H264Decoder } from "@/lib/decoder";
 import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
@@ -884,22 +886,26 @@ function EmptyState({
   if (iosPhysical && connected && !lightweight) {
     return <IosPhysicalWaiting />;
   }
+  if (!connected) {
+    return (
+      <DottedGrid className="pointer-events-none aspect-[9/19.5] h-full w-auto rounded-2xl border border-border">
+        <Logo className="h-auto w-40 text-foreground" />
+        <div className="max-w-[16rem] text-xs text-muted-foreground">
+          Plug in an Android device with USB debugging enabled, then pick it in the sidebar.
+        </div>
+      </DottedGrid>
+    );
+  }
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
       <Smartphone className="h-10 w-10 text-muted-foreground/60" />
       <div className="text-sm font-medium">
-        {lightweight
-          ? "Lightweight mode"
-          : connected
-            ? "Waiting for frames…"
-            : "No device connected"}
+        {lightweight ? "Lightweight mode" : "Waiting for frames…"}
       </div>
       <div className="max-w-[16rem] text-xs text-muted-foreground">
         {lightweight
           ? "Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle in Settings to re-enable mirroring."
-          : connected
-            ? "The stream will appear here once scrcpy pushes the first frame."
-            : "Plug in an Android device with USB debugging enabled, then pick it in the sidebar."}
+          : "The stream will appear here once scrcpy pushes the first frame."}
       </div>
     </div>
   );

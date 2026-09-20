@@ -1,18 +1,13 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { X } from "lucide-react";
-
-import { Button } from "@/components/ui/Button";
-import { MetricsSparkline } from "@/components/MetricsSparkline";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
+import { MetricsSparkline } from "@/components/MetricsSparkline";
 import { metricsForDevice, thermalLabel, type MetricCardId } from "@/lib/metricsCards";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useMetricsStore } from "@/stores/metricsStore";
-import { usePanelsStore } from "@/stores/panelsStore";
 
-export function MetricsPanel() {
-  const hidePanel = usePanelsStore((s) => s.hide);
+export function MetricsBody() {
   const pkg = useMetricsStore((s) => s.currentPackage);
   const samples = useMetricsStore((s) => s.samples);
   const stopped = useMetricsStore((s) => s.stoppedReason);
@@ -22,47 +17,29 @@ export function MetricsPanel() {
   const layout = device ? metricsForDevice(device.platform, device.physical) : null;
 
   return (
-    <section className="flex h-full min-h-0 w-full flex-col border-l border-border bg-muted/30">
-      <header className="flex items-center justify-between border-b border-border px-3 py-1.5">
-        <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Performance
+    <div className="text-[11px]">
+      <div className="mb-2 truncate text-foreground/80">{pkg ?? "—"}</div>
+      {!device || !layout ? (
+        <div className="text-muted-foreground">Connect a device to monitor performance.</div>
+      ) : layout.kind === "limited" ? (
+        <div className="text-muted-foreground">{layout.message}</div>
+      ) : stopped && stopped !== "unsupported" ? (
+        <div className="text-red-600 dark:text-red-400">Monitoring stopped ({stopped}).</div>
+      ) : samples.length === 0 ? (
+        <div className="text-muted-foreground">Waiting for samples…</div>
+      ) : (
+        <TooltipProvider delayDuration={300}>
+          <div className="space-y-3">
+            {layout.cards.map((id) => (
+              <MetricCard key={id} id={id} samples={samples} last={last} />
+            ))}
+            {layout.note ? (
+              <div className="pt-1 text-[10px] text-muted-foreground">{layout.note}</div>
+            ) : null}
           </div>
-          <div className="truncate text-[11px] text-foreground/80">{pkg ?? "—"}</div>
-        </div>
-        <Button
-          size="xs"
-          variant="ghost"
-          onClick={() => hidePanel("metrics")}
-          aria-label="Close performance panel"
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-[11px]">
-        {!device || !layout ? (
-          <div className="text-muted-foreground">Connect a device to monitor performance.</div>
-        ) : layout.kind === "limited" ? (
-          <div className="text-muted-foreground">{layout.message}</div>
-        ) : stopped && stopped !== "unsupported" ? (
-          <div className="text-red-600 dark:text-red-400">Monitoring stopped ({stopped}).</div>
-        ) : samples.length === 0 ? (
-          <div className="text-muted-foreground">Waiting for samples…</div>
-        ) : (
-          <TooltipProvider delayDuration={300}>
-            <div className="space-y-3">
-              {layout.cards.map((id) => (
-                <MetricCard key={id} id={id} samples={samples} last={last} />
-              ))}
-              {layout.note ? (
-                <div className="pt-1 text-[10px] text-muted-foreground">{layout.note}</div>
-              ) : null}
-            </div>
-          </TooltipProvider>
-        )}
-      </div>
-    </section>
+        </TooltipProvider>
+      )}
+    </div>
   );
 }
 

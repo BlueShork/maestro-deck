@@ -19,6 +19,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
+import { FlowScrollGrid } from "@/components/effects/FlowScrollGrid";
 import { Button } from "@/components/ui/Button";
 import { filterGroups, filterImages } from "@/lib/bankFilter";
 import { ipc } from "@/lib/ipc";
@@ -351,6 +352,7 @@ export function ImageBankPage() {
   const [confirmGroup, setConfirmGroup] = useState(false);
   const [query, setQuery] = useState("");
   const mountedRef = useRef(true);
+  const galleryScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Reset on (re)mount too — React 18 StrictMode mounts, unmounts, then
@@ -543,7 +545,7 @@ export function ImageBankPage() {
           </nav>
 
           {/* Gallery */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={galleryScrollRef} className="min-h-0 flex-1 overflow-y-auto">
             {activeGroup && activeMeta ? (
               <div className="p-5">
                 <div className="mb-4 flex items-end justify-between gap-3">
@@ -588,7 +590,7 @@ export function ImageBankPage() {
                     No screenshot matches "{query.trim()}" in this device group.
                   </EmptyState>
                 ) : (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4">
+                  <FlowScrollGrid scrollContainerRef={galleryScrollRef}>
                     {visibleImages.map((img) => (
                       <Thumb
                         key={img.name}
@@ -604,7 +606,7 @@ export function ImageBankPage() {
                         }
                       />
                     ))}
-                  </div>
+                  </FlowScrollGrid>
                 )}
               </div>
             ) : null}

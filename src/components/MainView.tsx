@@ -3,14 +3,11 @@
 
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { tempDir } from "@tauri-apps/api/path";
-import { Suspense, lazy, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
-const MetricsPanel = lazy(() =>
-  import("@/components/MetricsPanel").then((m) => ({ default: m.MetricsPanel })),
-);
 import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
 import { ScreenshotReview } from "@/components/ScreenshotReview";
@@ -294,40 +291,9 @@ export function MainView() {
                       defaultSize={mainBottomSize}
                       minSize={BOTTOM_MIN}
                     >
-                      <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
-                        {panels.console ? (
-                          <Panel
-                            id="console"
-                            order={1}
-                            defaultSize={panels.metrics ? 70 : 100}
-                            minSize={20}
-                          >
-                            <PanelShell id="console">
-                              <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
-                            </PanelShell>
-                          </Panel>
-                        ) : null}
-
-                        {panels.metrics ? (
-                          <>
-                            {panels.console ? (
-                              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-                            ) : null}
-                            <Panel
-                              id="metrics"
-                              order={2}
-                              defaultSize={panels.console ? 30 : 100}
-                              minSize={15}
-                            >
-                              <PanelShell id="metrics">
-                                <Suspense fallback={null}>
-                                  <MetricsPanel />
-                                </Suspense>
-                              </PanelShell>
-                            </Panel>
-                          </>
-                        ) : null}
-                      </PanelGroup>
+                      <PanelShell id="console">
+                        <RunConsole />
+                      </PanelShell>
                     </Panel>
                   </>
                 ) : null}

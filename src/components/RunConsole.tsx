@@ -1,17 +1,17 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Activity, Ban, CheckCircle2, Eraser, Play, Square, XCircle } from "lucide-react";
+import { Activity, Ban, CheckCircle2, Eraser, List, Terminal, XCircle } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { MetricsBody } from "@/components/MetricsPanel";
 import { renderAnsi } from "@/lib/ansi";
 import { humanLabel, formatDuration } from "@/lib/stepRenderer";
 import { cn } from "@/lib/utils";
 import { useRunStore } from "@/stores/runStore";
 import type { StepRunState } from "@/stores/runStore";
-import { usePanelsStore } from "@/stores/panelsStore";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { useSettingsStore, type ConsoleMode } from "@/stores/settingsStore";
 
 /** Plain-language outcome of the last run instead of a raw `exit N` code. */
 function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: boolean }) {
@@ -47,15 +47,18 @@ function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: bool
   );
 }
 
-export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () => void }) {
+const CONSOLE_TABS: Array<{ id: ConsoleMode; label: string; icon: typeof List }> = [
+  { id: "simple", label: "Simple", icon: List },
+  { id: "technical", label: "Technical", icon: Terminal },
+  { id: "performance", label: "Performance", icon: Activity },
+];
+
+export function RunConsole() {
   const running = useRunStore((s) => s.running);
   const exitCode = useRunStore((s) => s.exitCode);
   const logs = useRunStore((s) => s.logs);
   const truncatedCount = useRunStore((s) => s.truncatedCount);
   const clearConsole = useRunStore((s) => s.clearConsole);
-
-  const metricsOpen = usePanelsStore((s) => s.visible.metrics);
-  const toggleMetrics = usePanelsStore((s) => s.toggle);
 
   const consoleMode = useSettingsStore((s) => s.consoleMode);
   const setConsoleMode = useSettingsStore((s) => s.setConsoleMode);
@@ -91,40 +94,24 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
         </div>
         <div className="flex items-center gap-1">
           <div className="mr-1 flex overflow-hidden rounded border border-border">
-            <button
-              type="button"
-              onClick={() => setConsoleMode("simple")}
-              className={cn(
-                "px-2 py-0.5 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                consoleMode === "simple"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-transparent text-muted-foreground hover:bg-muted",
-              )}
-            >
-              Simple
-            </button>
-            <button
-              type="button"
-              onClick={() => setConsoleMode("technical")}
-              className={cn(
-                "px-2 py-0.5 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                consoleMode === "technical"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-transparent text-muted-foreground hover:bg-muted",
-              )}
-            >
-              Technical
-            </button>
+            {CONSOLE_TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setConsoleMode(id)}
+                aria-pressed={consoleMode === id}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-0.5 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  consoleMode === id
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-transparent text-muted-foreground hover:bg-muted",
+                )}
+              >
+                <Icon className="h-3 w-3" />
+                {label}
+              </button>
+            ))}
           </div>
-          <Button
-            size="xs"
-            variant={metricsOpen ? "default" : "ghost"}
-            onClick={() => toggleMetrics("metrics")}
-            title="Toggle performance panel"
-          >
-            <Activity className="h-3 w-3" />
-            Performance
-          </Button>
           <Button
             size="xs"
             variant="ghost"
@@ -136,17 +123,6 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
             <Eraser className="h-3 w-3" />
             Clear
           </Button>
-          {running ? (
-            <Button size="xs" variant="destructive" onClick={onStop}>
-              <Square className="h-3 w-3" fill="currentColor" />
-              Stop
-            </Button>
-          ) : (
-            <Button size="xs" variant="default" onClick={onRun}>
-              <Play className="h-3 w-3" fill="currentColor" />
-              Run
-            </Button>
-          )}
         </div>
       </div>
 
@@ -156,9 +132,11 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
           const el = e.currentTarget;
           stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         }}
-        className="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
+        className="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 text-[11px] leading-relaxed"
       >
-        {consoleMode === "technical" ? (
+        {consoleMode === "performance" ? (
+          <MetricsBody />
+        ) : consoleMode === "technical" ? (
           logs.length === 0 ? (
             <div className="text-muted-foreground">
               No output yet. Press Run to execute the current flow.
@@ -174,7 +152,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
                 <div
                   key={l.id}
                   className={cn(
-                    "whitespace-pre-wrap",
+                    "whitespace-pre-wrap font-mono",
                     l.stream === "stderr" && "text-red-600 dark:text-red-400",
                     l.stream === "system" && "text-muted-foreground italic",
                   )}
