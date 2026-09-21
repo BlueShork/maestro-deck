@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { AccountPage } from "@/components/AccountPage";
+import { CloudInviteDialog } from "@/components/CloudInviteDialog";
 import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
@@ -19,7 +20,8 @@ import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
-import { startCloudAuthListener } from "@/stores/cloudAuthStore";
+import { startCloudAuthListener, useCloudAuthStore } from "@/stores/cloudAuthStore";
+import { useCloudInviteStore } from "@/stores/cloudInviteStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useReviewStore } from "@/stores/reviewStore";
 import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRegressionStore";
@@ -162,6 +164,15 @@ export default function App() {
         if (wasStopped) toast.success("Flow stopped");
         else if (code === 0) toast.success("Flow completed");
         else toast.error("Flow failed", `exit code ${code}`);
+
+        // First run that actually worked, and only for signed-out users: the
+        // one moment the cloud offer is worth hearing. Delayed so the success
+        // toast lands first — the ask should follow the win, not cover it.
+        if (code === 0 && !wasStopped && !useCloudAuthStore.getState().user) {
+          setTimeout(() => {
+            if (!useCloudAuthStore.getState().user) useCloudInviteStore.getState().offer();
+          }, 1600);
+        }
         if (code === 0 && !wasStopped && useVisualRegressionStore.getState().enabled) {
           const target = useRunStore.getState().runTarget;
           const ws = useWorkspaceStore.getState().folderPath;
@@ -331,6 +342,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <UpdateDialog />
+      <CloudInviteDialog />
       <QuitConfirmDialog />
       <TourOverlay />
       <SetupPopup />

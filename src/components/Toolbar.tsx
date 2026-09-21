@@ -11,9 +11,11 @@ import {
   MousePointer2,
   Play,
   Settings,
+  Sparkle,
   Sparkles,
   Square,
   User,
+  Zap,
 } from "lucide-react";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/DropdownMenu";
 import { Separator } from "@/components/ui/Separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
+import { tierLabel } from "@/lib/cloudAuth";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
@@ -57,6 +60,54 @@ interface ToolbarProps {
   onRun: () => void;
   onRunAll: () => void;
   onStop: () => void;
+}
+
+/**
+ * Current Maestro Deck Cloud plan, always on screen so the free tier stays
+ * visible without nagging: it's a status pill, not a prompt. Signed out it
+ * reads "Free Tier"; signed in it shows the live pack. Either way it opens
+ * the account page.
+ */
+function PackBadge() {
+  const navigate = useNavigate();
+  const user = useCloudAuthStore((s) => s.user);
+  const billing = useCloudAuthStore((s) => s.billing);
+
+  // Signed in but the balance hasn't arrived: show the pill in a resting
+  // state rather than briefly claiming the user is on the free tier.
+  const pending = Boolean(user) && !billing;
+  const paid = Boolean(billing) && billing?.tier !== "free";
+  const label = !user
+    ? "Free Tier"
+    : pending
+      ? "Plan"
+      : (billing?.currentPack?.displayName ?? tierLabel(billing?.tier ?? "free"));
+  const Icon = paid ? Zap : Sparkle;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={() => navigate("/account")}
+          aria-label={user ? `Plan: ${label}` : "Sign in to Maestro Deck Cloud"}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            paid
+              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+              : "border-border bg-muted/40 text-muted-foreground hover:text-foreground",
+            pending && "opacity-70",
+          )}
+        >
+          <Icon className="h-3 w-3" />
+          {label}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {user ? "Your Maestro Deck Cloud plan" : "Sign in to Maestro Deck Cloud"}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /** Isolated so the periodic fps updates (4 Hz while a device streams)
@@ -113,6 +164,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-3">
         <div className="flex items-center gap-2">
           <Logo className="h-7 w-auto text-foreground" />
+          <PackBadge />
           <Separator orientation="vertical" className="mx-1 h-5" />
           <Tooltip>
             <TooltipTrigger asChild>

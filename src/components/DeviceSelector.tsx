@@ -15,6 +15,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
+import { CloudPromoCard } from "@/components/CloudPromoCard";
 
 import { Button } from "@/components/ui/Button";
 import { HealthcheckModal } from "@/components/HealthcheckModal";
@@ -313,6 +314,16 @@ export function DeviceSelector() {
               row={row}
             />
           ) : null}
+
+          {/* Unlike Simulators, this section is unconditional: it's the only
+              place in the app that asks for a sign-up, and a machine with no
+              simulators installed is exactly where the cloud is worth most. */}
+          <div className="flex flex-col gap-1.5 pt-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Cloud
+            </div>
+            <CloudPromoCard />
+          </div>
         </div>
       </div>
 

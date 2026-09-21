@@ -39,6 +39,23 @@ export const CLOUD_BILLING_URL = `${DASHBOARD_URL}/billing`;
 
 export type CloudUser = Pick<User, "uid" | "email">;
 
+/** Mirrors TIER_CONFIG in maestro-nightly/dashboard/lib/billing-constants.ts.
+ *  Unknown ids fall back to a capitalised form rather than rendering raw, so a
+ *  tier added server-side still reads sensibly here until this list catches up. */
+const TIER_LABELS: Record<string, string> = {
+  free: "Free Tier",
+  starter: "Starter",
+  indie: "Indie",
+  pro: "Pro",
+  studio: "Studio",
+  scale: "Scale",
+  enterprise: "Enterprise",
+};
+
+export function tierLabel(tier: string): string {
+  return TIER_LABELS[tier] ?? tier.charAt(0).toUpperCase() + tier.slice(1);
+}
+
 export interface CloudBillingInfo {
   tier: string;
   runsRemaining: number;

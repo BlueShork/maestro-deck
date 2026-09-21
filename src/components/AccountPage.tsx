@@ -23,24 +23,11 @@ import {
   getCloudAuthErrorMessage,
   loginWithEmail,
   logout,
+  tierLabel,
   type CloudBillingInfo,
 } from "@/lib/cloudAuth";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
-
-const TIER_LABELS: Record<string, string> = {
-  free: "Free",
-  starter: "Starter",
-  indie: "Indie",
-  pro: "Pro",
-  studio: "Studio",
-  scale: "Scale",
-  enterprise: "Enterprise",
-};
-
-function tierLabel(tier: string): string {
-  return TIER_LABELS[tier] ?? tier.charAt(0).toUpperCase() + tier.slice(1);
-}
 
 /** Full-screen account page — the in-app storefront for Maestro Deck Cloud.
  *  Signed out, it's a pitch for what connecting buys you; signed in, it's the
