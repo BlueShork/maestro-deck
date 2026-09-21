@@ -164,6 +164,11 @@ export const ipc = {
   // Environment prerequisites for the onboarding setup popup.
   environmentStatus: () => call<EnvStatusResult>("environment_status"),
   installTool: (id: "maestro" | "java") => call<void>("install_tool", { id }),
+  /** PUT a local file to a pre-signed GCS URL. Lives in Rust because the
+   *  webview has no binary read permission and an APK has no business being
+   *  loaded into WebKit memory to be sent straight back out. */
+  cloudUploadFile: (uploadUrl: string, path: string) =>
+    call<void>("cloud_upload_file", { uploadUrl, path }),
 };
 
 export interface IosPhysicalSetupStatus {

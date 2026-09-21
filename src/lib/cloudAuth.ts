@@ -33,6 +33,17 @@ const auth: Auth = getAuth();
 /** Same dashboard the login lives on (maestro-nightly/dashboard/lib/site.ts). */
 const DASHBOARD_URL = "https://dashboard.maestrodeck.cloud";
 
+/** The dashboard also hosts the job API, so cloud runs talk to the same origin. */
+export const CLOUD_DASHBOARD_URL = DASHBOARD_URL;
+
+/** The bearer token every authed dashboard route expects. Throws rather than
+ *  returning null: a caller with no session has nothing useful to do next. */
+export async function getCloudIdToken(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not signed in");
+  return user.getIdToken();
+}
+
 /** Where "buy more runs" sends the user — the dashboard's own billing page,
  *  which already has the pack picker and Stripe checkout. */
 export const CLOUD_BILLING_URL = `${DASHBOARD_URL}/billing`;

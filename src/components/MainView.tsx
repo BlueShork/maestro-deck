@@ -24,6 +24,8 @@ import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { startCloudRun, stopWatchingCloudRun } from "@/lib/cloudRunner";
+import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -88,6 +90,11 @@ export function MainView() {
       resetSteps();
       initSteps(parseFlow(content).steps);
       useRunStore.getState().setRunTarget({ path, kind: "flow" });
+      const cloudTarget = useCloudTargetStore.getState().target;
+      if (cloudTarget) {
+        await startCloudRun(cloudTarget, [path]);
+        return;
+      }
       const pid = await ipc.runFlow(path, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · ${path}]`);
@@ -167,6 +174,12 @@ export function MainView() {
     // Read the pid at call time (via getState) rather than subscribing to it,
     // so MainView — which owns the whole panel layout — doesn't re-render on
     // every run start/stop.
+    // A cloud run has no local process and no cancel endpoint: the most the
+    // app can do is stop watching, which stopWatchingCloudRun says out loud.
+    if (useRunStore.getState().cloud) {
+      stopWatchingCloudRun();
+      return;
+    }
     const pid = useRunStore.getState().pid;
     if (pid === null) return;
     useRunStore.getState().requestStop();

@@ -43,6 +43,10 @@ interface RunState {
   truncatedCount: number;
   steps: StepRunState[];
   runTarget: { path: string; kind: "flow" | "all" } | null;
+  /** Set while the run is executing on Maestro Deck Cloud instead of a local
+   *  device. `pid` stays null in that case: there is no local process, and
+   *  nothing in the app can stop the job once the cloud has it. */
+  cloud: { jobId: string; status: string } | null;
   /** Flow display name to gate on for Run All (config `name:` or file stem).
    *  null = single-flow run, every flow header re-arms matching. */
   expectedFlow: string | null;
@@ -57,6 +61,9 @@ interface RunState {
   setRunning: (pid: number) => void;
   requestStop: () => void;
   setStopped: (exitCode: number | null) => void;
+  /** Marks the run as live in the cloud. There is no pid to report. */
+  cloudRunStarted: (jobId: string) => void;
+  cloudStatusChanged: (status: string) => void;
   setRunTarget: (target: {
     path: string;
     kind: "flow" | "all";
@@ -197,6 +204,7 @@ export const useRunStore = create<RunState>((set) => ({
   truncatedCount: 0,
   steps: [],
   runTarget: null,
+  cloud: null,
   expectedFlow: null,
   flowGateOpen: true,
   pendingErrorIdx: null,
@@ -209,7 +217,17 @@ export const useRunStore = create<RunState>((set) => ({
   setRunning: (pid) =>
     set({ running: true, starting: false, pid, exitCode: null, stopRequested: false }),
   requestStop: () => set({ stopRequested: true }),
-  setStopped: (exitCode) => set({ running: false, starting: false, pid: null, exitCode }),
+  setStopped: (exitCode) =>
+    set({ running: false, starting: false, pid: null, exitCode, cloud: null }),
+  cloudRunStarted: (jobId) =>
+    set({
+      running: true,
+      starting: false,
+      pid: null,
+      exitCode: null,
+      cloud: { jobId, status: "pending" },
+    }),
+  cloudStatusChanged: (status) => set((s) => (s.cloud ? { cloud: { ...s.cloud, status } } : {})),
   setRunTarget: ({ path, kind, expectedFlow }) =>
     set({
       runTarget: { path, kind },

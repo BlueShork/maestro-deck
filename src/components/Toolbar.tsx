@@ -153,6 +153,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const running = useRunStore((s) => s.running);
   const starting = useRunStore((s) => s.starting);
+  const cloudRun = useRunStore((s) => s.cloud);
   const folderPath = useWorkspaceStore((s) => s.folderPath);
   const showAllPanels = usePanelsStore((s) => s.showAll);
   const updatePhase = useUpdateStore((s) => s.phase);
@@ -231,10 +232,15 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                 <TooltipTrigger asChild>
                   <Button size="default" variant="destructive" onClick={onStop}>
                     <Square className="h-4 w-4" fill="currentColor" />
-                    Stop
+                    {cloudRun ? "Stop watching" : "Stop"}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Stop flow</TooltipContent>
+                {/* The cloud has no cancel endpoint and the run is already
+                    paid for, so this only detaches — say so rather than
+                    implying the job dies with the click. */}
+                <TooltipContent>
+                  {cloudRun ? "Stop watching — the run continues in the cloud" : "Stop flow"}
+                </TooltipContent>
               </Tooltip>
             ) : (
               <>
