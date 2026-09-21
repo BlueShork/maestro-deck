@@ -143,3 +143,14 @@ describe("watchCloudJob", () => {
     expect(h.onFinished).toHaveBeenCalled();
   });
 });
+
+describe("runVerdict", () => {
+  it("reads the normalised job status, not the run document's raw one", async () => {
+    const { runVerdict } = await import("./cloudRun");
+    // /api/jobs/{id}/status normalises; /api/runs/{id} returns the runner's own
+    // word. Judging on the raw "success" against "passed" marked a green run red.
+    expect(runVerdict({ jobId: "j", status: "passed" })).toEqual({ passed: true, exitCode: 0 });
+    expect(runVerdict({ jobId: "j", status: "failed" })).toEqual({ passed: false, exitCode: 1 });
+    expect(runVerdict({ jobId: "j", status: "error" })).toEqual({ passed: false, exitCode: 1 });
+  });
+});

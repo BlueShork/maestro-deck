@@ -7,7 +7,7 @@ import {
   submitCloudJob,
   type CloudJobPlatform,
 } from "@/lib/cloudJobs";
-import { watchCloudJob, type CloudWatch } from "@/lib/cloudRun";
+import { runVerdict, watchCloudJob, type CloudWatch } from "@/lib/cloudRun";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useRunStore } from "@/stores/runStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -66,7 +66,9 @@ export async function startCloudRun(
         const counts = detail.summary
           ? ` — ${detail.summary.passed}/${detail.summary.total} passed`
           : "";
-        line(`[cloud] ${detail.status}${counts}`);
+        // job.status, never detail.status: the run document reports the
+        // runner's raw word ("success"), the job endpoint the normalised one.
+        line(`[cloud] ${job.status}${counts}`);
 
         // An infra failure (install refused, emulator never booted) carries an
         // error and no summary. Without this the console would only say
@@ -88,7 +90,7 @@ export async function startCloudRun(
         }
 
         currentWatch = null;
-        useRunStore.getState().setStopped(detail.status === "passed" ? 0 : 1);
+        useRunStore.getState().setStopped(runVerdict(job).exitCode);
         // The balance moved when the job was accepted; refresh so the card at
         // the foot of the sidebar stops showing the pre-run figure.
         void useCloudAuthStore.getState().refreshBilling();

@@ -16,10 +16,20 @@ export const CLOUD_POLL_MS = 3000;
  *  We stop watching and keep the id on screen rather than poll forever. */
 export const CLOUD_WATCH_CEILING_MS = 20 * 60 * 1000;
 
-/** The four raw statuses the runner and workers write
- *  (maestro-nightly/dashboard/lib/job-status.ts). Anything else is treated as
- *  still in flight. */
+/** The statuses /api/jobs/{id}/status reports, after normalisation
+ *  (maestro-nightly/dashboard/lib/job-status.ts). Anything else is still in
+ *  flight.
+ *
+ *  Careful: this is NOT the vocabulary /api/runs/{id} answers with. That route
+ *  passes the runner's raw word through — `success` where this one says
+ *  `passed`. Only the normalised status is ever judged here. */
 const TERMINAL = new Set(["passed", "failed", "error"]);
+
+/** Turns the normalised job status into the run's verdict. */
+export function runVerdict(job: CloudJobStatus): { passed: boolean; exitCode: number } {
+  const passed = job.status === "passed";
+  return { passed, exitCode: passed ? 0 : 1 };
+}
 
 export interface CloudWatchHandlers {
   /** Fired once per distinct status, not on every poll. */
