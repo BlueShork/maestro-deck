@@ -15,21 +15,24 @@ import { useWorkspaceStore } from "@/stores/workspaceStore";
 /**
  * What each fleet actually runs.
  *
- * Both simulated fleets are pinned to one device, so they are named outright.
- * The Android profile comes from android-docker/docker-compose.yml; the iOS one
- * from the simulator ios-worker/README.md has you create at deploy time
- * (`simctl create maestro-worker … iPhone-15 … iOS-18-0`). Note the difference
- * in footing: the Android profile is enforced by the compose file, the iOS one
- * by a documented procedure, so a machine set up differently would drift from
- * this label.
+ * Android is named because it is pinned in code: EMULATOR_DEVICE in
+ * android-docker/docker-compose.yml.
  *
- * The farm's phone cannot be named at all: the worker claims whichever one is
+ * iOS is not named, because nothing pins it. The worker targets a SIM_UDID
+ * handed to it by its environment, and the deploy step picked the first iOS
+ * runtime and the first "iPhone 16|15" device type present on that Mac
+ * (docs/superpowers/plans/2026-06-06-ios-worker.md) — the repo's own README
+ * disagrees with that script. The model is therefore a property of the worker
+ * machine, not of this codebase. Naming it here would be a guess, and a guess
+ * about which device your tests ran on is worse than no claim at all.
+ *
+ * The farm's phone cannot be named either: the worker claims whichever one is
  * idle, and the status endpoint does not report claimedBy.
  */
 export const CLOUD_TARGET_LABELS: Record<CloudJobPlatform, string> = {
   android: "Galaxy S10 · Android 14",
   android_physical: "a phone in the device farm",
-  ios: "iPhone 15 · iOS 18.0",
+  ios: "the hosted iOS simulator",
 };
 
 /**
