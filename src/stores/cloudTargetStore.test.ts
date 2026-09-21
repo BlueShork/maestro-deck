@@ -1,10 +1,17 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useCloudTargetStore } from "./cloudTargetStore";
 import { useWorkspaceStore } from "./workspaceStore";
+
+vi.mock("@/lib/ipc", () => ({
+  ipc: {
+    connectDevice: vi.fn(async (serial: string) => ({ serial, platform: "android" })),
+    startStream: vi.fn(),
+  },
+}));
 
 beforeEach(() => {
   useCloudTargetStore.setState({ target: null });
@@ -21,6 +28,20 @@ describe("cloudTargetStore", () => {
     expect(useCloudTargetStore.getState().target).toBe("android");
 
     useCloudTargetStore.getState().clear();
+    expect(useCloudTargetStore.getState().target).toBeNull();
+  });
+});
+
+describe("handing the run target back to a local device", () => {
+  it("clears the cloud target when a device is connected", async () => {
+    const { useDeviceStore } = await import("./deviceStore");
+    useCloudTargetStore.getState().select("android");
+    useDeviceStore.setState({ devices: [{ serial: "R3CX", platform: "android" } as never] });
+
+    await useDeviceStore.getState().connect("R3CX");
+
+    // Otherwise both the phone and the emulator would read as chosen, and the
+    // Run button's destination would be a coin toss.
     expect(useCloudTargetStore.getState().target).toBeNull();
   });
 });

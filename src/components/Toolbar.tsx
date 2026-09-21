@@ -11,6 +11,7 @@ import {
   MousePointer2,
   Play,
   Settings,
+  Cloud,
   Sparkle,
   Sparkles,
   Square,
@@ -34,9 +35,11 @@ import {
 import { Separator } from "@/components/ui/Separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
 import { tierLabel } from "@/lib/cloudAuth";
+import { CLOUD_ANDROID_DEVICE } from "@/lib/cloudRunner";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
+import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
@@ -154,6 +157,8 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const running = useRunStore((s) => s.running);
   const starting = useRunStore((s) => s.starting);
   const cloudRun = useRunStore((s) => s.cloud);
+  const cloudTarget = useCloudTargetStore((s) => s.target);
+  const cloudApk = useWorkspaceStore((s) => s.cloudApkPath);
   const folderPath = useWorkspaceStore((s) => s.folderPath);
   const showAllPanels = usePanelsStore((s) => s.showAll);
   const updatePhase = useUpdateStore((s) => s.phase);
@@ -246,12 +251,30 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
               <>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="default" variant="default" onClick={onRun}>
-                      <Play className="h-4 w-4" fill="currentColor" />
-                      Run
+                    {/* The button names its destination. Running in the cloud
+                        costs a run and cannot be cancelled, so the difference
+                        has to be visible before the click, not after. */}
+                    <Button
+                      size="default"
+                      variant="default"
+                      onClick={onRun}
+                      disabled={cloudTarget !== null && !cloudApk}
+                    >
+                      {cloudTarget ? (
+                        <Cloud className="h-4 w-4" />
+                      ) : (
+                        <Play className="h-4 w-4" fill="currentColor" />
+                      )}
+                      {cloudTarget ? "Run in cloud" : "Run"}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Run flow (Cmd/Ctrl+R)</TooltipContent>
+                  <TooltipContent>
+                    {!cloudTarget
+                      ? "Run flow (Cmd/Ctrl+R)"
+                      : !cloudApk
+                        ? "Choose the .apk to install, under Cloud in the device panel"
+                        : `Runs on ${CLOUD_ANDROID_DEVICE} — spends 1 run and cannot be cancelled`}
+                  </TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -259,14 +282,18 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                       size="default"
                       variant="outline"
                       onClick={onRunAll}
-                      disabled={!folderPath}
+                      disabled={!folderPath || cloudTarget !== null}
                     >
                       <ListChecks className="h-4 w-4" />
                       Run all
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {folderPath ? "Run every flow in the workspace" : "Open a folder to enable"}
+                    {cloudTarget
+                      ? "Run all is local-only for now — clear the cloud target to use it"
+                      : folderPath
+                        ? "Run every flow in the workspace"
+                        : "Open a folder to enable"}
                   </TooltipContent>
                 </Tooltip>
               </>
