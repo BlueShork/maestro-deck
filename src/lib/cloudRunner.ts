@@ -8,6 +8,7 @@ import {
   type CloudJobPlatform,
 } from "@/lib/cloudJobs";
 import { watchCloudJob, type CloudWatch } from "@/lib/cloudRun";
+import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useRunStore } from "@/stores/runStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
@@ -82,13 +83,27 @@ export async function startCloudRun(
 
         currentWatch = null;
         useRunStore.getState().setStopped(detail.status === "passed" ? 0 : 1);
+        // The balance moved when the job was accepted; refresh so the card at
+        // the foot of the sidebar stops showing the pre-run figure.
+        void useCloudAuthStore.getState().refreshBilling();
       })();
+    },
+
+    onError: (msg) => {
+      // The run is over; only its result is unreadable. Say that, rather than
+      // leaving the console sitting on "running".
+      line(`[cloud] the run finished but its result could not be read: ${msg}`);
+      line(`[cloud] job ${jobId} is on the dashboard if you need the detail`);
+      currentWatch = null;
+      useRunStore.getState().setStopped(null);
+      void useCloudAuthStore.getState().refreshBilling();
     },
 
     onGaveUp: (id) => {
       line(`[cloud] no news for 20 minutes — no longer watching job ${id}, which may still finish`);
       currentWatch = null;
       useRunStore.getState().setStopped(null);
+      void useCloudAuthStore.getState().refreshBilling();
     },
   });
 }

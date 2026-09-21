@@ -32,6 +32,7 @@ function handlers() {
     onStatus: vi.fn(),
     onFinished: vi.fn(),
     onGaveUp: vi.fn(),
+    onError: vi.fn(),
   };
 }
 
@@ -108,6 +109,21 @@ describe("watchCloudJob", () => {
     expect(status.mock.calls.length).toBe(callsAtDetach);
     // Detaching is not a failure: the job keeps running in the cloud.
     expect(h.onGaveUp).not.toHaveBeenCalled();
+  });
+
+  it("reports a terminal job whose detail cannot be read, instead of looping", async () => {
+    // The run is over either way. Swallowing the error here left the console
+    // frozen on "running" until the 20 minute ceiling.
+    status.mockResolvedValue({ jobId: "j", status: "failed" });
+    detail.mockRejectedValue(new Error("not found"));
+
+    const h = handlers();
+    const done = watchCloudJob("j", h);
+    await vi.advanceTimersByTimeAsync(CLOUD_POLL_MS * 2);
+    await done;
+
+    expect(h.onError).toHaveBeenCalledWith(expect.stringContaining("not found"));
+    expect(detail).toHaveBeenCalledTimes(1);
   });
 
   it("survives a transient status error rather than dropping the run", async () => {

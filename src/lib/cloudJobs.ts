@@ -167,10 +167,12 @@ export interface CloudRunDetail {
   logsUrl: string | null;
 }
 
-/** The run document lives under `run-{jobId}` — the job only carries a status,
- *  the counters and artifacts are on the run (maestro-nightly/dashboard). */
+/** Takes the *job* id, despite the route being called `runs`: it looks up
+ *  `jobs/{id}` for ownership and status, then reads `runs/run-{id}` itself for
+ *  the counters (see the route's own comment in maestro-nightly). Passing
+ *  `run-{jobId}` here 404s. */
 export function fetchRunDetail(jobId: string): Promise<CloudRunDetail> {
-  return authedJson<CloudRunDetail>(`/api/runs/run-${jobId}`);
+  return authedJson<CloudRunDetail>(`/api/runs/${jobId}`);
 }
 
 /** Downloads an artifact from its signed URL. Through Rust as well: a GCS

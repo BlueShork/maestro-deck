@@ -23,6 +23,9 @@ export interface CloudWatchHandlers {
   onFinished: (detail: CloudRunDetail) => void;
   /** Fired instead of onFinished when the ceiling is hit. */
   onGaveUp: (jobId: string) => void;
+  /** The run ended but its result could not be read. Watching stops: the job
+   *  is over, and saying nothing would leave the console frozen on "running". */
+  onError: (message: string) => void;
 }
 
 export interface CloudWatch extends Promise<void> {
@@ -54,23 +57,32 @@ export function watchCloudJob(jobId: string, handlers: CloudWatchHandlers): Clou
         return;
       }
 
+      let status: string;
       try {
-        const { status } = await fetchJobStatus(jobId);
-        if (stopped) return;
+        ({ status } = await fetchJobStatus(jobId));
+      } catch {
+        // A blip while the job is still in flight is worth riding out: the next
+        // tick usually succeeds, and the ceiling still applies if it doesn't.
+        await sleep(CLOUD_POLL_MS);
+        continue;
+      }
+      if (stopped) return;
 
-        if (status !== lastStatus) {
-          lastStatus = status;
-          handlers.onStatus(status);
-        }
+      if (status !== lastStatus) {
+        lastStatus = status;
+        handlers.onStatus(status);
+      }
 
-        if (TERMINAL.has(status)) {
+      if (TERMINAL.has(status)) {
+        // Past this point the run is over, so a failure is reported rather than
+        // retried — retrying a finished job just hides the problem.
+        try {
           const detail = await fetchRunDetail(jobId);
           if (!stopped) handlers.onFinished(detail);
-          return;
+        } catch (err) {
+          if (!stopped) handlers.onError(err instanceof Error ? err.message : String(err));
         }
-      } catch {
-        // Keep polling: the next tick usually succeeds, and the ceiling still
-        // applies if it doesn't.
+        return;
       }
 
       await sleep(CLOUD_POLL_MS);
