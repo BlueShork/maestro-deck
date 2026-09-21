@@ -7,7 +7,7 @@ pub mod app_control;
 #[cfg(target_os = "macos")]
 pub mod avf_capture;
 pub mod bank;
-pub mod cloud_upload;
+pub mod cloud;
 pub mod credentials;
 pub mod device;
 mod env_check;
@@ -103,7 +103,9 @@ pub fn run() {
             bank::ipc::load_bank_image,
             bank::ipc::delete_bank_image,
             bank::ipc::delete_bank_device,
-            cloud_upload::cloud_upload_file,
+            cloud::cloud_upload_file,
+            cloud::cloud_api_request,
+            cloud::cloud_download_text,
             workspace_fs::read_workspace_file,
             workspace_fs::write_workspace_file,
             list_workspace,

@@ -169,6 +169,19 @@ export const ipc = {
    *  loaded into WebKit memory to be sent straight back out. */
   cloudUploadFile: (uploadUrl: string, path: string) =>
     call<void>("cloud_upload_file", { uploadUrl, path }),
+  /** Call the cloud dashboard API. In Rust because the API answers a CORS
+   *  preflight on /api/billing/me only, so a webview fetch to any other route
+   *  is blocked before it leaves. Returns the raw status and body — the
+   *  mapping to user-facing errors stays in TypeScript. */
+  cloudApiRequest: (method: "GET" | "POST", path: string, token: string, body?: string) =>
+    call<{ status: number; body: string }>("cloud_api_request", {
+      method,
+      path,
+      token,
+      body: body ?? null,
+    }),
+  /** Fetch a text artifact from its signed GCS URL — same CORS story. */
+  cloudDownloadText: (url: string) => call<string>("cloud_download_text", { url }),
 };
 
 export interface IosPhysicalSetupStatus {

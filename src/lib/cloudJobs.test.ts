@@ -4,11 +4,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ipc", () => ({
-  ipc: { cloudUploadFile: vi.fn() },
+  ipc: { cloudUploadFile: vi.fn(), cloudApiRequest: vi.fn(), cloudDownloadText: vi.fn() },
 }));
 
 vi.mock("@/lib/cloudAuth", () => ({
-  CLOUD_DASHBOARD_URL: "https://dashboard.test",
   getCloudIdToken: vi.fn(async () => "test-token"),
 }));
 
@@ -16,6 +15,7 @@ const { ipc } = await import("@/lib/ipc");
 const { submitCloudJob, CloudJobError, fetchJobStatus } = await import("./cloudJobs");
 
 const uploadFile = vi.mocked(ipc.cloudUploadFile);
+const apiRequest = vi.mocked(ipc.cloudApiRequest);
 
 /** Shapes the real routes return (maestro-nightly/dashboard/app/api/jobs). */
 const INIT_OK = {
@@ -30,16 +30,13 @@ const INIT_OK = {
   ],
 };
 
+/** What the Rust transport hands back: the raw status and body, unparsed. */
 function jsonResponse(body: unknown, status = 200) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
+  return { status, body: JSON.stringify(body) };
 }
-
-let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  fetchMock = vi.fn();
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
 
 const INPUT = {
@@ -50,24 +47,25 @@ const INPUT = {
 
 describe("submitCloudJob", () => {
   it("initialises with the file basenames, not their local paths", async () => {
-    fetchMock
+    apiRequest
       .mockResolvedValueOnce(jsonResponse(INIT_OK))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
 
     await submitCloudJob(INPUT);
 
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("https://dashboard.test/api/jobs/init");
-    expect(JSON.parse(init.body)).toEqual({
+    const [method, path, token, body] = apiRequest.mock.calls[0];
+    expect(method).toBe("POST");
+    expect(path).toBe("/api/jobs/init");
+    expect(token).toBe("test-token");
+    expect(JSON.parse(body as string)).toEqual({
       platform: "android",
       apk: { name: "app-debug.apk" },
       yamls: [{ name: "login.yaml" }],
     });
-    expect(init.headers.Authorization).toBe("Bearer test-token");
   });
 
   it("uploads every file to the signed URL the server handed back", async () => {
-    fetchMock
+    apiRequest
       .mockResolvedValueOnce(jsonResponse(INIT_OK))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
 
@@ -79,15 +77,15 @@ describe("submitCloudJob", () => {
   });
 
   it("finalises with the GCS paths and returns the job id", async () => {
-    fetchMock
+    apiRequest
       .mockResolvedValueOnce(jsonResponse(INIT_OK))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
 
     const result = await submitCloudJob(INPUT);
 
-    const [url, init] = fetchMock.mock.calls[1];
-    expect(url).toBe("https://dashboard.test/api/jobs/finalize");
-    expect(JSON.parse(init.body)).toEqual({
+    const [, path, , body] = apiRequest.mock.calls[1];
+    expect(path).toBe("/api/jobs/finalize");
+    expect(JSON.parse(body as string)).toEqual({
       jobId: "job-123",
       platform: "android",
       apkPath: INIT_OK.apk.gsPath,
@@ -97,17 +95,17 @@ describe("submitCloudJob", () => {
   });
 
   it("never finalises when an upload fails", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(INIT_OK));
+    apiRequest.mockResolvedValueOnce(jsonResponse(INIT_OK));
     uploadFile.mockRejectedValueOnce(new Error("connection reset"));
 
     await expect(submitCloudJob(INPUT)).rejects.toThrow(CloudJobError);
     // A finalised job whose objects are missing burns a run and then fails on
     // the worker, so the second call must never happen.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(apiRequest).toHaveBeenCalledTimes(1);
   });
 
   it("names an exhausted quota rather than reporting a bare 402", async () => {
-    fetchMock
+    apiRequest
       .mockResolvedValueOnce(jsonResponse(INIT_OK))
       .mockResolvedValueOnce(
         jsonResponse({ error: "QUOTA_EXCEEDED", message: "No runs left" }, 402),
@@ -119,7 +117,7 @@ describe("submitCloudJob", () => {
   });
 
   it("carries the server's own message for a disabled service", async () => {
-    fetchMock.mockResolvedValueOnce(
+    apiRequest.mockResolvedValueOnce(
       jsonResponse({ error: "JOBS_DISABLED", message: "Job submission is unavailable." }, 503),
     );
 
@@ -129,7 +127,7 @@ describe("submitCloudJob", () => {
   });
 
   it("reports an expired session on 401", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({}, 401));
+    apiRequest.mockResolvedValueOnce(jsonResponse({}, 401));
 
     const err = await submitCloudJob(INPUT).catch((e: unknown) => e);
     expect((err as InstanceType<typeof CloudJobError>).code).toBe("UNAUTHENTICATED");
@@ -139,7 +137,7 @@ describe("submitCloudJob", () => {
   it("flags a failure that already cost the user a run", async () => {
     // Anything after finalize is billed: the caller needs to tell the user why
     // their balance moved.
-    fetchMock
+    apiRequest
       .mockResolvedValueOnce(jsonResponse(INIT_OK))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
 
@@ -150,9 +148,9 @@ describe("submitCloudJob", () => {
 
 describe("fetchJobStatus", () => {
   it("returns the normalised status for a job", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ jobId: "job-123", status: "running" }));
+    apiRequest.mockResolvedValueOnce(jsonResponse({ jobId: "job-123", status: "running" }));
 
     await expect(fetchJobStatus("job-123")).resolves.toMatchObject({ status: "running" });
-    expect(fetchMock.mock.calls[0][0]).toBe("https://dashboard.test/api/jobs/job-123/status");
+    expect(apiRequest.mock.calls[0][1]).toBe("/api/jobs/job-123/status");
   });
 });

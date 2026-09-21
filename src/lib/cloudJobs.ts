@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { CLOUD_DASHBOARD_URL, getCloudIdToken } from "@/lib/cloudAuth";
+import { getCloudIdToken } from "@/lib/cloudAuth";
 import { ipc } from "@/lib/ipc";
 
 /**
@@ -73,18 +73,24 @@ function basename(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
-async function authedJson<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+async function authedJson<T>(
+  path: string,
+  init?: { method?: "GET" | "POST"; body?: unknown },
+): Promise<T> {
   const token = await getCloudIdToken();
-  const res = await fetch(`${CLOUD_DASHBOARD_URL}${path}`, {
-    method: init?.method ?? "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(init?.body === undefined ? {} : { "Content-Type": "application/json" }),
-    },
-    ...(init?.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-  });
+  // Routed through Rust, not fetch: the API sets CORS headers on
+  // /api/billing/me alone, so the webview's preflight for anything else comes
+  // back bare and WebKit blocks the request before it is sent.
+  const res = await ipc.cloudApiRequest(
+    init?.method ?? "GET",
+    path,
+    token,
+    init?.body === undefined ? undefined : JSON.stringify(init.body),
+  );
 
-  if (res.ok) return (await res.json()) as T;
+  const parsed = parseJson(res.body);
+
+  if (res.status >= 200 && res.status < 300) return parsed as T;
 
   if (res.status === 401) {
     throw new CloudJobError("UNAUTHENTICATED", "Your session expired — sign out and back in.");
@@ -92,10 +98,7 @@ async function authedJson<T>(path: string, init?: { method?: string; body?: unkn
 
   // Every error route answers { error, message }; fall back to the status code
   // if one ever doesn't, rather than throwing while building the error.
-  const body = (await res.json().catch(() => null)) as {
-    error?: string;
-    message?: string;
-  } | null;
+  const body = parsed as { error?: string; message?: string } | null;
   const code: CloudJobErrorCode =
     body?.error === "QUOTA_EXCEEDED"
       ? "QUOTA_EXCEEDED"
@@ -170,15 +173,26 @@ export function fetchRunDetail(jobId: string): Promise<CloudRunDetail> {
   return authedJson<CloudRunDetail>(`/api/runs/run-${jobId}`);
 }
 
-/** Downloads an artifact from its signed URL. No auth header: the signature is
- *  the credential, and adding one would invalidate it. */
+/** Downloads an artifact from its signed URL. Through Rust as well: a GCS
+ *  bucket sends no CORS headers by default, so the webview could not read this
+ *  either. No auth header — the signature is the credential. */
 export async function fetchArtifactText(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) {
+  try {
+    return await ipc.cloudDownloadText(url);
+  } catch (err) {
     throw new CloudJobError(
       "REQUEST_FAILED",
-      `Could not download the run log (HTTP ${res.status})`,
+      `Could not download the run log: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  return res.text();
+}
+
+/** The API always answers JSON, but an edge or proxy can return HTML on a bad
+ *  day. Parsing must not throw here — the status still has to be reported. */
+function parseJson(body: string): unknown {
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    return null;
+  }
 }
