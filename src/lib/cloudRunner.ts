@@ -12,14 +12,24 @@ import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useRunStore } from "@/stores/runStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
-/** What each fleet actually runs. The emulator is a fixed profile
- *  (maestro-nightly/android-docker/docker-compose.yml); the farm's phone is
- *  whichever one is idle when the worker claims the job, and nothing in the
- *  API tells us which — the job's claimedBy is not exposed. */
+/**
+ * What each fleet actually runs.
+ *
+ * Both simulated fleets are pinned to one device, so they are named outright.
+ * The Android profile comes from android-docker/docker-compose.yml; the iOS one
+ * from the simulator ios-worker/README.md has you create at deploy time
+ * (`simctl create maestro-worker … iPhone-15 … iOS-18-0`). Note the difference
+ * in footing: the Android profile is enforced by the compose file, the iOS one
+ * by a documented procedure, so a machine set up differently would drift from
+ * this label.
+ *
+ * The farm's phone cannot be named at all: the worker claims whichever one is
+ * idle, and the status endpoint does not report claimedBy.
+ */
 export const CLOUD_TARGET_LABELS: Record<CloudJobPlatform, string> = {
   android: "Galaxy S10 · Android 14",
   android_physical: "a phone in the device farm",
-  ios: "the hosted iOS simulator",
+  ios: "iPhone 15 · iOS 18.0",
 };
 
 /**
