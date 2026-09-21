@@ -67,6 +67,11 @@ interface InitResponse {
 export interface CloudJobStatus {
   jobId: string;
   status: string;
+  /** Set when the job failed outside the tests themselves — a failed install,
+   *  an emulator that never booted. Null for an ordinary test failure. */
+  error?: string | null;
+  /** The job's page on the dashboard, for everything the app cannot show. */
+  reportUrl?: string;
 }
 
 function basename(path: string): string {

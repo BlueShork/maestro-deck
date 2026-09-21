@@ -1,7 +1,12 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { fetchJobStatus, fetchRunDetail, type CloudRunDetail } from "@/lib/cloudJobs";
+import {
+  fetchJobStatus,
+  fetchRunDetail,
+  type CloudJobStatus,
+  type CloudRunDetail,
+} from "@/lib/cloudJobs";
 
 /** Same cadence the device list already polls at: often enough to feel live,
  *  quiet enough to leave the API alone. */
@@ -19,8 +24,9 @@ const TERMINAL = new Set(["passed", "failed", "error"]);
 export interface CloudWatchHandlers {
   /** Fired once per distinct status, not on every poll. */
   onStatus: (status: string) => void;
-  /** Fired once, with the run detail, when the job reaches a terminal status. */
-  onFinished: (detail: CloudRunDetail) => void;
+  /** Fired once the job reaches a terminal status, with both the job (which
+   *  carries the failure reason) and the run detail (counters, log URL). */
+  onFinished: (result: { job: CloudJobStatus; detail: CloudRunDetail }) => void;
   /** Fired instead of onFinished when the ceiling is hit. */
   onGaveUp: (jobId: string) => void;
   /** The run ended but its result could not be read. Watching stops: the job
@@ -57,9 +63,9 @@ export function watchCloudJob(jobId: string, handlers: CloudWatchHandlers): Clou
         return;
       }
 
-      let status: string;
+      let job: CloudJobStatus;
       try {
-        ({ status } = await fetchJobStatus(jobId));
+        job = await fetchJobStatus(jobId);
       } catch {
         // A blip while the job is still in flight is worth riding out: the next
         // tick usually succeeds, and the ceiling still applies if it doesn't.
@@ -68,17 +74,17 @@ export function watchCloudJob(jobId: string, handlers: CloudWatchHandlers): Clou
       }
       if (stopped) return;
 
-      if (status !== lastStatus) {
-        lastStatus = status;
-        handlers.onStatus(status);
+      if (job.status !== lastStatus) {
+        lastStatus = job.status;
+        handlers.onStatus(job.status);
       }
 
-      if (TERMINAL.has(status)) {
+      if (TERMINAL.has(job.status)) {
         // Past this point the run is over, so a failure is reported rather than
         // retried — retrying a finished job just hides the problem.
         try {
           const detail = await fetchRunDetail(jobId);
-          if (!stopped) handlers.onFinished(detail);
+          if (!stopped) handlers.onFinished({ job, detail });
         } catch (err) {
           if (!stopped) handlers.onError(err instanceof Error ? err.message : String(err));
         }

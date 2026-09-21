@@ -61,12 +61,18 @@ export async function startCloudRun(
       else if (status === "pending") line("[cloud] waiting for a free emulator…");
     },
 
-    onFinished: (detail) => {
+    onFinished: ({ job, detail }) => {
       void (async () => {
         const counts = detail.summary
           ? ` — ${detail.summary.passed}/${detail.summary.total} passed`
           : "";
         line(`[cloud] ${detail.status}${counts}`);
+
+        // An infra failure (install refused, emulator never booted) carries an
+        // error and no summary. Without this the console would only say
+        // "failed" for something the flow had no part in.
+        if (job.error) line(`[cloud] ${job.error}`);
+        if (job.reportUrl) line(`[cloud] full report: ${job.reportUrl}`);
 
         if (detail.logsUrl) {
           try {

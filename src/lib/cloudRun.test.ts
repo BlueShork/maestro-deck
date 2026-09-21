@@ -68,7 +68,10 @@ describe("watchCloudJob", () => {
 
     expect(detail).toHaveBeenCalledWith("j");
     expect(h.onFinished).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "failed", summary: { total: 3, passed: 2, failed: 1 } }),
+      expect.objectContaining({
+        detail: expect.objectContaining({ summary: { total: 3, passed: 2, failed: 1 } }),
+        job: expect.objectContaining({ status: "failed" }),
+      }),
     );
   });
 
