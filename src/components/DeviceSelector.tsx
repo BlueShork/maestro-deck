@@ -15,12 +15,15 @@ import {
 import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
+import { CloudDevicesSection } from "@/components/CloudDevicesSection";
 import { CloudPromoCard } from "@/components/CloudPromoCard";
+import { LogoCloud } from "@/components/Logo";
 
 import { Button } from "@/components/ui/Button";
 import { HealthcheckModal } from "@/components/HealthcheckModal";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
+import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
@@ -197,6 +200,7 @@ export function DeviceSelector() {
   const refresh = useDeviceStore((s) => s.refresh);
   const connect = useDeviceStore((s) => s.connect);
   const disconnect = useDeviceStore((s) => s.disconnect);
+  const cloudUser = useCloudAuthStore((s) => s.user);
 
   // The synthetic "Web Browser (Chromium)" target is hidden unless the user
   // opts into the beta from Settings — the backend always returns it.
@@ -319,12 +323,21 @@ export function DeviceSelector() {
               place in the app that asks for a sign-up, and a machine with no
               simulators installed is exactly where the cloud is worth most. */}
           <div className="flex flex-col gap-1.5 pt-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Cloud
-            </div>
-            <CloudPromoCard />
+            {/* The brand lockup stands in for the section title here. Muted to
+                sit at the same weight as the other headings rather than turning
+                the sidebar into a billboard. */}
+            <LogoCloud className="mb-2 h-9 w-auto self-start text-muted-foreground" />
+            {/* Signed in you get the fleet; signed out the card does the asking,
+                since there is nothing to run on until there is an account. */}
+            {cloudUser ? <CloudDevicesSection /> : null}
           </div>
         </div>
+      </div>
+
+      {/* Outside the scroller: the balance is the one thing that stays put, so
+          it never scrolls off behind a long device list. */}
+      <div className="border-t border-border px-3 py-2.5">
+        <CloudPromoCard />
       </div>
 
       {report && (

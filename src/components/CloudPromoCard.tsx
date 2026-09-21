@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Gift } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -17,13 +16,6 @@ import { useCloudAuthStore } from "@/stores/cloudAuthStore";
  *  and the "20 free runs" the marketing site already promises. */
 const FREE_GRANT_RUNS = 20;
 
-/** The travelling edge light. Mostly empty so a single beam sweeps the border
- *  rather than the whole outline glowing — emerald is the app's accent, set on
- *  --ring and used across the components, so the card reads as part of the app
- *  rather than an ad pasted into it. */
-const BEAM_GRADIENT =
-  "bg-[conic-gradient(from_0deg,transparent_0deg,transparent_236deg,#10b981_306deg,#a7f3d0_344deg,transparent_360deg)]";
-
 interface Promo {
   /** Rendered large when present — for this card the number *is* the message. */
   count: string | null;
@@ -34,11 +26,13 @@ interface Promo {
 }
 
 /**
- * The in-app storefront entry, sat under Cloud in the device sidebar. It
- * follows the funnel rather than showing one fixed pitch: strangers get the
- * free grant, free users get the upgrade, paying users get a top-up. Signing
- * in stays optional everywhere else in the app, so this card is the one place
- * that actually asks.
+ * The cloud balance, parked at the foot of the device sidebar. It reads as a
+ * ledger line rather than an ad: the figure carries the whole card, everything
+ * else is set quiet around it, and the only colour is the app's own contrast.
+ *
+ * It still follows the funnel — strangers get the free grant, signed-in users
+ * get their balance — because signing in is optional everywhere else, so this
+ * is the one surface that asks.
  */
 export function CloudPromoCard() {
   const navigate = useNavigate();
@@ -55,45 +49,23 @@ export function CloudPromoCard() {
       type="button"
       onClick={onClick}
       aria-label={promo.aria}
-      className="group relative w-full overflow-hidden rounded-xl bg-border p-px text-left transition-transform duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:hover:-translate-y-0.5"
+      className="group w-full rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
-      {/* Beam layer: oversized square so the rotating cone always covers the
-          card's corners, clipped back to the rounded rect by the parent. */}
-      <span
-        aria-hidden
-        className={`pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[240%] opacity-90 motion-safe:animate-[cloud-beam-spin_6s_linear_infinite] ${BEAM_GRADIENT}`}
-        style={{ transform: "translate(-50%, -50%)" }}
-      />
-
-      {/* Body sits above the beam and covers all but the 1px padding ring. */}
-      <span className="relative block overflow-hidden rounded-[11px] bg-card p-3">
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -left-8 -top-10 h-28 w-28 rounded-full bg-emerald-500/25 blur-2xl motion-safe:animate-[cloud-glow-breathe_7s_ease-in-out_infinite]"
-        />
-
-        <span className="relative block">
-          <span className="mb-2.5 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30 dark:text-emerald-400">
-            <Gift className="h-4 w-4" />
+      <span className="flex flex-wrap items-baseline gap-x-1.5">
+        {promo.count ? (
+          <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums text-foreground">
+            {promo.count}
           </span>
+        ) : null}
+        <span className="text-xs text-muted-foreground">{promo.label}</span>
+      </span>
 
-          <span className="flex flex-wrap items-baseline gap-x-1.5">
-            {promo.count ? (
-              <span className="text-[26px] font-bold leading-none tracking-tight tabular-nums text-foreground">
-                {promo.count}
-              </span>
-            ) : null}
-            <span className="text-xs font-semibold text-foreground">{promo.label}</span>
-          </span>
+      <span className="mt-1.5 block text-[11px] leading-snug text-muted-foreground">
+        {promo.sub}
+      </span>
 
-          <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">
-            {promo.sub}
-          </span>
-
-          <span className="mt-3 block rounded-md bg-emerald-500 px-2.5 py-1.5 text-center text-[11px] font-semibold text-emerald-950 transition-colors group-hover:bg-emerald-400">
-            {promo.cta}
-          </span>
-        </span>
+      <span className="mt-3 block rounded-md bg-foreground px-2.5 py-1.5 text-center text-[11px] font-medium text-background transition-opacity group-hover:opacity-85">
+        {promo.cta}
       </span>
     </button>
   );
@@ -103,9 +75,9 @@ function resolvePromo(user: CloudUser | null, billing: CloudBillingInfo | null):
   if (!user) {
     return {
       count: String(FREE_GRANT_RUNS),
-      label: "free cloud runs",
-      sub: "Run your flows on real devices. No card needed.",
-      cta: "Create free account",
+      label: "free runs",
+      sub: "Run your flows on hosted devices. No card needed.",
+      cta: "Create account",
       aria: `Create a free Maestro Deck Cloud account and get ${FREE_GRANT_RUNS} free runs`,
     };
   }
