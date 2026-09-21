@@ -80,6 +80,11 @@ interface RunState {
   ingestLine: (raw: string) => void;
   applyEvent: (e: StepEvent) => void;
   resetSteps: () => void;
+  /** Takes any step still marked running back to pending. Used when a run ends
+   *  without the log resolving every step — a cloud run's log artifact does not
+   *  always carry the completion lines the live parser expects. A step left
+   *  pulsing blue claims to be executing, which is the one thing it is not. */
+  settleSteps: () => void;
 }
 
 let nextId = 1;
@@ -219,6 +224,11 @@ export const useRunStore = create<RunState>((set) => ({
   requestStop: () => set({ stopRequested: true }),
   setStopped: (exitCode) =>
     set({ running: false, starting: false, pid: null, exitCode, cloud: null }),
+  settleSteps: () =>
+    set((s) => ({
+      steps: s.steps.map((step) => (step.status === "running" ? asPending(step) : step)),
+      pendingErrorIdx: null,
+    })),
   cloudRunStarted: (jobId) =>
     set({
       running: true,

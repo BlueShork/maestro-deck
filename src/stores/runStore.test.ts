@@ -353,3 +353,36 @@ describe("runStore.steps", () => {
     });
   });
 });
+
+describe("settleSteps", () => {
+  it("takes steps out of running when a run ends without resolving them", () => {
+    const store = useRunStore.getState();
+    store.resetSteps();
+    store.initSteps([
+      { line: 3, endLine: 3, command: "launchApp", arg: null, depth: 0 },
+      { line: 4, endLine: 4, command: "tapOn", arg: "Login", depth: 0 },
+    ] as never);
+    store.ingestLine(" > Flow cloud-smoke");
+    expect(useRunStore.getState().steps[0].status).toBe("running");
+
+    useRunStore.getState().settleSteps();
+
+    // A cloud run's log may not resolve every step. Leaving one pulsing blue
+    // claims it is still executing, which is the one thing it is not.
+    expect(useRunStore.getState().steps.every((s) => s.status !== "running")).toBe(true);
+    expect(useRunStore.getState().steps[0].status).toBe("pending");
+  });
+
+  it("leaves resolved steps alone", () => {
+    const store = useRunStore.getState();
+    store.resetSteps();
+    store.initSteps([{ line: 3, endLine: 3, command: "launchApp", arg: null, depth: 0 }] as never);
+    useRunStore.setState({
+      steps: useRunStore.getState().steps.map((s) => ({ ...s, status: "done" as const })),
+    });
+
+    useRunStore.getState().settleSteps();
+
+    expect(useRunStore.getState().steps[0].status).toBe("done");
+  });
+});

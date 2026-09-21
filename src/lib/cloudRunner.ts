@@ -79,15 +79,24 @@ export async function startCloudRun(
         if (detail.logsUrl) {
           try {
             const log = await fetchArtifactText(detail.logsUrl);
-            // Same parser as a local run: the steps light up all at once here,
-            // because this is the first moment there is anything to read.
-            for (const l of log.split("\n")) useRunStore.getState().ingestLine(l);
+            const run = useRunStore.getState();
+            for (const l of log.split("\n")) {
+              // Two jobs, both needed: show the line, and feed the step parser.
+              // ingestLine only drives step state — on its own it downloads a
+              // log and throws the text away.
+              run.appendLog("stdout", l);
+              run.ingestLine(l);
+            }
           } catch (err) {
             line(`[cloud] the run finished but its log could not be downloaded: ${message(err)}`);
           }
         } else {
           line("[cloud] the run produced no log artifact");
         }
+
+        // The artifact does not always carry the lines the live parser needs to
+        // close a step, so nothing may be left claiming to run.
+        useRunStore.getState().settleSteps();
 
         currentWatch = null;
         useRunStore.getState().setStopped(runVerdict(job).exitCode);
