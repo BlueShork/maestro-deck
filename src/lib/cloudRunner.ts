@@ -12,8 +12,14 @@ import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useRunStore } from "@/stores/runStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
-/** What the fleet actually runs (maestro-nightly/android-docker/docker-compose.yml). */
-export const CLOUD_ANDROID_DEVICE = "Galaxy S10 · Android 14";
+/** What each fleet actually runs. The emulator is a fixed profile
+ *  (maestro-nightly/android-docker/docker-compose.yml); the farm's phone is
+ *  whichever one is idle when the worker claims the job, and nothing in the
+ *  API tells us which — the job's claimedBy is not exposed. */
+export const CLOUD_TARGET_LABELS: Record<CloudJobPlatform, string> = {
+  android: "Galaxy S10 · Android 14",
+  android_physical: "a phone in the device farm",
+};
 
 /** The watch belonging to the run in flight, so Stop can detach from it.
  *  Module-level because a run outlives any component that started it. */
@@ -50,15 +56,23 @@ export async function startCloudRun(
   const { jobId } = await submitCloudJob({ platform, apkPath, yamlPaths });
 
   run.cloudRunStarted(jobId);
-  // Say it plainly: finalize is the moment the balance moves, and the user
-  // cannot cancel from here.
-  line(`[cloud] job ${jobId} queued — 1 run spent, and it cannot be cancelled`);
+  // The run is debited when execution starts, not when the job is accepted:
+  // finalize writes quotaConsumed: false and the runner flips it on claim. A
+  // job that never starts costs nothing — but once started it cannot be
+  // cancelled from here, and that is the part worth warning about.
+  line(`[cloud] job ${jobId} queued — it will spend 1 run once it starts, and cannot be cancelled`);
 
   currentWatch = watchCloudJob(jobId, {
     onStatus: (status) => {
       useRunStore.getState().cloudStatusChanged(status);
-      if (status === "running") line(`[cloud] running on ${CLOUD_ANDROID_DEVICE}`);
-      else if (status === "pending") line("[cloud] waiting for a free emulator…");
+      if (status === "running") line(`[cloud] running on ${CLOUD_TARGET_LABELS[platform]}`);
+      else if (status === "pending") {
+        line(
+          platform === "android_physical"
+            ? "[cloud] queued — waiting for a free phone in the farm…"
+            : "[cloud] waiting for a free emulator…",
+        );
+      }
     },
 
     onFinished: ({ job, detail }) => {

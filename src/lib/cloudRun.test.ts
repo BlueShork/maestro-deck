@@ -98,6 +98,32 @@ describe("watchCloudJob", () => {
     expect(h.onFinished).not.toHaveBeenCalled();
   });
 
+  it("does not count a queued job against the ceiling", async () => {
+    // A physical job stays pending, unclaimed and unbilled, until one of the
+    // farm's phones frees up. Waiting in the queue is not a stall.
+    status.mockResolvedValue({ jobId: "j", status: "pending" });
+
+    const h = handlers();
+    const done = watchCloudJob("j", h);
+    await vi.advanceTimersByTimeAsync(CLOUD_WATCH_CEILING_MS * 2);
+
+    expect(h.onGaveUp).not.toHaveBeenCalled();
+    done.stop();
+  });
+
+  it("starts the ceiling when the job actually starts running", async () => {
+    status
+      .mockResolvedValueOnce({ jobId: "j", status: "pending" })
+      .mockResolvedValue({ jobId: "j", status: "running" });
+
+    const h = handlers();
+    const done = watchCloudJob("j", h);
+    await vi.advanceTimersByTimeAsync(CLOUD_WATCH_CEILING_MS + CLOUD_POLL_MS * 2);
+    await done;
+
+    expect(h.onGaveUp).toHaveBeenCalledWith("j");
+  });
+
   it("stops polling when the caller detaches", async () => {
     status.mockResolvedValue({ jobId: "j", status: "running" });
 

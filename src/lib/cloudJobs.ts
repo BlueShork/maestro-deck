@@ -15,9 +15,13 @@ import { ipc } from "@/lib/ipc";
  *   finalize(gs paths)   → job created, quota decremented, worker dispatched
  */
 
-/** The only cloud platform wired up so far. The API also knows `android_physical`,
- *  `ios` and `web`; those tabs exist in the UI but submit nothing yet. */
-export type CloudJobPlatform = "android";
+/** The cloud platforms the app can submit to. The API also knows `ios` and
+ *  `web`; those tabs exist in the UI but submit nothing yet.
+ *
+ *  `android` is dispatched to a Cloud Run job (the Docker emulator);
+ *  `android_physical` is left for the NUC worker to pick up from Firestore,
+ *  which is why finalize skips dispatch for it. */
+export type CloudJobPlatform = "android" | "android_physical";
 
 export type CloudJobErrorCode =
   | "QUOTA_EXCEEDED"

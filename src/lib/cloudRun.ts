@@ -12,8 +12,12 @@ import {
  *  quiet enough to leave the API alone. */
 export const CLOUD_POLL_MS = 3000;
 
-/** A job that has said nothing for this long is not coming back on its own.
- *  We stop watching and keep the id on screen rather than poll forever. */
+/** A job that has been *executing* this long is not coming back on its own.
+ *  We stop watching and keep the id on screen rather than poll forever.
+ *
+ *  Queue time is deliberately excluded: a physical job sits pending — not
+ *  claimed, not billed — until one of the farm's phones frees up, and that wait
+ *  is legitimate however long it takes. The user can always stop watching. */
 export const CLOUD_WATCH_CEILING_MS = 20 * 60 * 1000;
 
 /** The statuses /api/jobs/{id}/status reports, after normalisation
@@ -62,13 +66,14 @@ export interface CloudWatch extends Promise<void> {
 export function watchCloudJob(jobId: string, handlers: CloudWatchHandlers): CloudWatch {
   let stopped = false;
   let lastStatus: string | null = null;
-  const startedAt = Date.now();
+  /** Set the first time the job reports anything other than pending. */
+  let executingSince: number | null = null;
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const run = (async () => {
     while (!stopped) {
-      if (Date.now() - startedAt >= CLOUD_WATCH_CEILING_MS) {
+      if (executingSince !== null && Date.now() - executingSince >= CLOUD_WATCH_CEILING_MS) {
         handlers.onGaveUp(jobId);
         return;
       }
@@ -83,6 +88,8 @@ export function watchCloudJob(jobId: string, handlers: CloudWatchHandlers): Clou
         continue;
       }
       if (stopped) return;
+
+      if (job.status !== "pending" && executingSince === null) executingSince = Date.now();
 
       if (job.status !== lastStatus) {
         lastStatus = job.status;

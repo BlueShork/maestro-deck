@@ -35,7 +35,7 @@ import {
 import { Separator } from "@/components/ui/Separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
 import { tierLabel } from "@/lib/cloudAuth";
-import { CLOUD_ANDROID_DEVICE } from "@/lib/cloudRunner";
+import { CLOUD_TARGET_LABELS } from "@/lib/cloudRunner";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
@@ -273,7 +273,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                       ? "Run flow (Cmd/Ctrl+R)"
                       : !cloudApk
                         ? "Choose the .apk to install, under Cloud in the device panel"
-                        : `Runs on ${CLOUD_ANDROID_DEVICE} — spends 1 run and cannot be cancelled`}
+                        : `Runs on ${CLOUD_TARGET_LABELS[cloudTarget]} — spends 1 run once it starts, and cannot be cancelled`}
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>
