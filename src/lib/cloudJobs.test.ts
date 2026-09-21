@@ -41,7 +41,7 @@ beforeEach(() => {
 
 const INPUT = {
   platform: "android" as const,
-  apkPath: "/home/me/builds/app-debug.apk",
+  appPath: "/home/me/builds/app-debug.apk",
   yamlPaths: ["/home/me/flows/login.yaml"],
 };
 
@@ -72,7 +72,7 @@ describe("submitCloudJob", () => {
     await submitCloudJob(INPUT);
 
     expect(uploadFile).toHaveBeenCalledTimes(2);
-    expect(uploadFile).toHaveBeenCalledWith(INIT_OK.apk.uploadUrl, INPUT.apkPath);
+    expect(uploadFile).toHaveBeenCalledWith(INIT_OK.apk.uploadUrl, INPUT.appPath);
     expect(uploadFile).toHaveBeenCalledWith(INIT_OK.yamls[0].uploadUrl, INPUT.yamlPaths[0]);
   });
 

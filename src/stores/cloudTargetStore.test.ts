@@ -15,7 +15,7 @@ vi.mock("@/lib/ipc", () => ({
 
 beforeEach(() => {
   useCloudTargetStore.setState({ target: null });
-  useWorkspaceStore.setState({ folderPath: null, cloudApkPath: null });
+  useWorkspaceStore.setState({ folderPath: null, cloudApkPath: null, cloudIosAppPath: null });
 });
 
 describe("cloudTargetStore", () => {
@@ -46,7 +46,25 @@ describe("handing the run target back to a local device", () => {
   });
 });
 
-describe("workspace APK", () => {
+describe("workspace artefacts", () => {
+  it("keeps the iOS build separate from the Android apk", async () => {
+    const { cloudAppPath } = await import("@/lib/cloudRunner");
+    useWorkspaceStore.getState().setCloudApkPath("/builds/app-debug.apk");
+    useWorkspaceStore.getState().setCloudIosAppPath("/builds/MyApp.app.zip");
+
+    // Sharing one field would send an apk to simctl, or a .app.zip to adb —
+    // each failing only after the run had been charged.
+    expect(cloudAppPath("android")).toBe("/builds/app-debug.apk");
+    expect(cloudAppPath("android_physical")).toBe("/builds/app-debug.apk");
+    expect(cloudAppPath("ios")).toBe("/builds/MyApp.app.zip");
+  });
+
+  it("forgets the iOS build when the workspace changes", () => {
+    useWorkspaceStore.getState().setCloudIosAppPath("/builds/MyApp.app.zip");
+    useWorkspaceStore.getState().setFolder("/other/project");
+    expect(useWorkspaceStore.getState().cloudIosAppPath).toBeNull();
+  });
+
   it("remembers the chosen apk", () => {
     useWorkspaceStore.getState().setCloudApkPath("/builds/app-debug.apk");
     expect(useWorkspaceStore.getState().cloudApkPath).toBe("/builds/app-debug.apk");

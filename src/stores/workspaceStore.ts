@@ -14,6 +14,10 @@ interface WorkspaceState {
    *  different project is a different app, and silently shipping the previous
    *  build to the emulator would be worse than asking again. */
   cloudApkPath: string | null;
+  /** The zipped .app simulator build uploaded for iOS cloud runs. Separate
+   *  from the APK: a different artefact for a different fleet, and both can be
+   *  set at once. Cleared with the folder, same reasoning. */
+  cloudIosAppPath: string | null;
   // Tree is in-memory only — re-fetched on launch from folderPath.
   tree: WorkspaceNode | null;
   loading: boolean;
@@ -29,6 +33,7 @@ interface WorkspaceState {
   setExpanded: (path: string, value: boolean) => void;
   setLastOpenFile: (path: string | null) => void;
   setCloudApkPath: (path: string | null) => void;
+  setCloudIosAppPath: (path: string | null) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -38,6 +43,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       expanded: {},
       lastOpenFile: null,
       cloudApkPath: null,
+      cloudIosAppPath: null,
       tree: null,
       loading: false,
       error: null,
@@ -51,6 +57,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           expanded: {},
           hasConfig: false,
           cloudApkPath: null,
+          cloudIosAppPath: null,
         }),
       setTree: (tree) => set({ tree }),
       setLoading: (loading) => set({ loading }),
@@ -61,6 +68,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       setExpanded: (path, value) => set((s) => ({ expanded: { ...s.expanded, [path]: value } })),
       setLastOpenFile: (lastOpenFile) => set({ lastOpenFile }),
       setCloudApkPath: (cloudApkPath) => set({ cloudApkPath }),
+      setCloudIosAppPath: (cloudIosAppPath) => set({ cloudIosAppPath }),
     }),
     {
       name: "maestro-deck.workspace",
@@ -70,6 +78,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         expanded: s.expanded,
         lastOpenFile: s.lastOpenFile,
         cloudApkPath: s.cloudApkPath,
+        cloudIosAppPath: s.cloudIosAppPath,
       }),
     },
   ),

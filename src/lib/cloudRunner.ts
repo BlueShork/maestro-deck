@@ -19,7 +19,43 @@ import { useWorkspaceStore } from "@/stores/workspaceStore";
 export const CLOUD_TARGET_LABELS: Record<CloudJobPlatform, string> = {
   android: "Galaxy S10 · Android 14",
   android_physical: "a phone in the device farm",
+  ios: "the hosted iOS simulator",
 };
+
+/**
+ * The artefact each fleet installs, and how to talk about it. Android takes an
+ * .apk; iOS takes a **simulator** build — the worker unzips the archive and
+ * looks for a *.app inside, so an .ipa or a device build fails there, after the
+ * run has been charged.
+ */
+export const CLOUD_ARTIFACTS: Record<
+  CloudJobPlatform,
+  { extension: string; prompt: string; rejection: string }
+> = {
+  android: {
+    extension: "apk",
+    prompt: "Choose the .apk to install",
+    rejection: "The cloud installs .apk files only, not .aab bundles.",
+  },
+  android_physical: {
+    extension: "apk",
+    prompt: "Choose the .apk to install",
+    rejection: "The cloud installs .apk files only, not .aab bundles.",
+  },
+  ios: {
+    extension: "zip",
+    prompt: "Choose the zipped .app simulator build",
+    rejection: "iOS runs need a simulator .app bundle, zipped — an .ipa cannot be installed.",
+  },
+};
+
+/** Where the chosen artefact lives for a platform. Both Android fleets share
+ *  one APK; iOS keeps its own, so switching fleets never silently sends the
+ *  wrong binary. */
+export function cloudAppPath(platform: CloudJobPlatform): string | null {
+  const ws = useWorkspaceStore.getState();
+  return platform === "ios" ? ws.cloudIosAppPath : ws.cloudApkPath;
+}
 
 /** The watch belonging to the run in flight, so Stop can detach from it.
  *  Module-level because a run outlives any component that started it. */
@@ -42,18 +78,18 @@ export async function startCloudRun(
   yamlPaths: string[],
 ): Promise<void> {
   const run = useRunStore.getState();
-  const apkPath = useWorkspaceStore.getState().cloudApkPath;
+  const appPath = cloudAppPath(platform);
 
-  if (!apkPath) {
+  if (!appPath) {
     // Thrown before anything is sent: no upload, no finalize, no run spent.
-    throw new CloudJobError("NO_APK", "Choose the .apk to install on the cloud emulator first.");
+    throw new CloudJobError("NO_APK", `${CLOUD_ARTIFACTS[platform].prompt} first.`);
   }
 
   line(
     `[cloud] uploading ${yamlPaths.length === 1 ? "1 flow" : `${yamlPaths.length} flows`} + app…`,
   );
 
-  const { jobId } = await submitCloudJob({ platform, apkPath, yamlPaths });
+  const { jobId } = await submitCloudJob({ platform, appPath, yamlPaths });
 
   run.cloudRunStarted(jobId);
   // The run is debited when execution starts, not when the job is accepted:

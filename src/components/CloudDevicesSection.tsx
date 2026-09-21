@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Cloud, Package, Smartphone } from "lucide-re
 import { useState, type ComponentType, type SVGProps } from "react";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
-import { CLOUD_TARGET_LABELS } from "@/lib/cloudRunner";
+import { CLOUD_ARTIFACTS, CLOUD_TARGET_LABELS } from "@/lib/cloudRunner";
 import type { CloudJobPlatform } from "@/lib/cloudJobs";
 import { cn } from "@/lib/utils";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
@@ -21,8 +21,9 @@ import { useWorkspaceStore } from "@/stores/workspaceStore";
  */
 export type CloudPlatform = "android_physical" | "android" | "ios";
 
-/** The platforms that actually submit jobs today. iOS is still a shell. */
-const WIRED: CloudPlatform[] = ["android_physical", "android"];
+/** Every tab submits jobs now; the constant stays so a platform added to the
+ *  list above without a runner behind it still gets the placeholder. */
+const WIRED: CloudPlatform[] = ["android_physical", "android", "ios"];
 
 const PLATFORMS: {
   id: CloudPlatform;
@@ -56,9 +57,8 @@ const PLATFORMS: {
  * The CLOUD DEVICES area: same drill-in shape as SIMULATORS, so running in the
  * cloud reads as one more place to pick a device rather than a separate mode.
  *
- * Both Android tabs submit jobs; iOS is still a shell and opens onto an
- * explicit placeholder rather than an empty list, which would read as "the
- * fleet is down".
+ * All three tabs submit jobs. Each names its fleet and the artefact that fleet
+ * installs — an .apk for Android, a zipped .app simulator build for iOS.
  */
 export function CloudDevicesSection() {
   const [view, setView] = useState<CloudPlatform | null>(null);
@@ -126,23 +126,28 @@ export function CloudDevicesSection() {
  */
 function CloudTargetTab({ platform }: { platform: CloudJobPlatform }) {
   const target = useCloudTargetStore((s) => s.target);
-  const apkPath = useWorkspaceStore((s) => s.cloudApkPath);
+  const isIos = platform === "ios";
+  const appPath = useWorkspaceStore((s) => (isIos ? s.cloudIosAppPath : s.cloudApkPath));
   const setApk = useWorkspaceStore((s) => s.setCloudApkPath);
+  const setIosApp = useWorkspaceStore((s) => s.setCloudIosAppPath);
   const selected = target === platform;
+  const artifact = CLOUD_ARTIFACTS[platform];
 
-  const pickApk = async () => {
+  const pickApp = async () => {
     const picked = await openDialog({
       multiple: false,
-      filters: [{ name: "Android app", extensions: ["apk"] }],
+      filters: [
+        { name: isIos ? "Simulator build" : "Android app", extensions: [artifact.extension] },
+      ],
     });
     if (typeof picked !== "string") return;
-    if (!picked.toLowerCase().endsWith(".apk")) {
-      // The cloud installs with `adb install`, which cannot take a bundle, and
-      // the job would fail after the run had already been charged.
-      toast.error("Not an APK", "The cloud installs .apk files only, not .aab bundles.");
+    if (!picked.toLowerCase().endsWith(`.${artifact.extension}`)) {
+      // Rejected here rather than in the cloud: the wrong artefact fails at
+      // install, after the run has already been charged.
+      toast.error("Wrong file", artifact.rejection);
       return;
     }
-    setApk(picked);
+    (isIos ? setIosApp : setApk)(picked);
   };
 
   return (
@@ -176,15 +181,15 @@ function CloudTargetTab({ platform }: { platform: CloudJobPlatform }) {
 
       <button
         type="button"
-        onClick={() => void pickApk()}
+        onClick={() => void pickApp()}
         className="flex w-full items-center gap-2 rounded-md border border-dashed border-border px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-accent/40"
       >
         <Package className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">
-          {apkPath ? (
-            apkPath.split(/[\\/]/).pop()
+          {appPath ? (
+            appPath.split(/[\\/]/).pop()
           ) : (
-            <span className="text-muted-foreground">Choose the .apk to install</span>
+            <span className="text-muted-foreground">{artifact.prompt}</span>
           )}
         </span>
       </button>

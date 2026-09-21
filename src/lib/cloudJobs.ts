@@ -21,7 +21,7 @@ import { ipc } from "@/lib/ipc";
  *  `android` is dispatched to a Cloud Run job (the Docker emulator);
  *  `android_physical` is left for the NUC worker to pick up from Firestore,
  *  which is why finalize skips dispatch for it. */
-export type CloudJobPlatform = "android" | "android_physical";
+export type CloudJobPlatform = "android" | "android_physical" | "ios";
 
 export type CloudJobErrorCode =
   | "QUOTA_EXCEEDED"
@@ -47,8 +47,11 @@ export class CloudJobError extends Error {
 
 export interface SubmitCloudJobInput {
   platform: CloudJobPlatform;
-  /** Absolute path to the .apk to install on the emulator. */
-  apkPath: string;
+  /** Absolute path to the artefact to install: an .apk for both Android
+   *  fleets, a zipped .app simulator build for iOS. The API calls the field
+   *  `apk` either way and names the object app.apk / app.zip from the
+   *  platform, so only the local file differs. */
+  appPath: string;
   /** Absolute paths to the flow files to run. */
   yamlPaths: string[];
 }
@@ -122,7 +125,7 @@ export async function submitCloudJob(input: SubmitCloudJobInput): Promise<Submit
     method: "POST",
     body: {
       platform: input.platform,
-      apk: { name: basename(input.apkPath) },
+      apk: { name: basename(input.appPath) },
       yamls: input.yamlPaths.map((p) => ({ name: basename(p) })),
     },
   });
@@ -137,7 +140,7 @@ export async function submitCloudJob(input: SubmitCloudJobInput): Promise<Submit
   // The server sanitises names, so it decides which uploadUrl belongs to which
   // flow. Pair them back up by position — init preserves the order it was given.
   const uploads: [string, string][] = [
-    [init.apk.uploadUrl, input.apkPath],
+    [init.apk.uploadUrl, input.appPath],
     ...init.yamls.map((y, i): [string, string] => [y.uploadUrl, input.yamlPaths[i]]),
   ];
 

@@ -35,7 +35,7 @@ import {
 import { Separator } from "@/components/ui/Separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
 import { tierLabel } from "@/lib/cloudAuth";
-import { CLOUD_TARGET_LABELS } from "@/lib/cloudRunner";
+import { CLOUD_ARTIFACTS, CLOUD_TARGET_LABELS } from "@/lib/cloudRunner";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
@@ -158,7 +158,11 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const starting = useRunStore((s) => s.starting);
   const cloudRun = useRunStore((s) => s.cloud);
   const cloudTarget = useCloudTargetStore((s) => s.target);
-  const cloudApk = useWorkspaceStore((s) => s.cloudApkPath);
+  // Per platform: iOS installs a zipped .app, Android an .apk. Reading the
+  // apk field for an iOS target would keep Run disabled with a build chosen.
+  const cloudApk = useWorkspaceStore((s) =>
+    cloudTarget === "ios" ? s.cloudIosAppPath : s.cloudApkPath,
+  );
   const folderPath = useWorkspaceStore((s) => s.folderPath);
   const showAllPanels = usePanelsStore((s) => s.showAll);
   const updatePhase = useUpdateStore((s) => s.phase);
@@ -272,7 +276,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                     {!cloudTarget
                       ? "Run flow (Cmd/Ctrl+R)"
                       : !cloudApk
-                        ? "Choose the .apk to install, under Cloud in the device panel"
+                        ? `${CLOUD_ARTIFACTS[cloudTarget].prompt}, under Cloud in the device panel`
                         : `Runs on ${CLOUD_TARGET_LABELS[cloudTarget]} — spends 1 run once it starts, and cannot be cancelled`}
                   </TooltipContent>
                 </Tooltip>
