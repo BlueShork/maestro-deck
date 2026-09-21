@@ -30,6 +30,7 @@ import {
 import {
   Decoration,
   type DecorationSet,
+  drawSelection,
   EditorView,
   GutterMarker,
   gutterLineClass,
@@ -168,6 +169,11 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
         indentUnit.of("  "),
         bracketMatching(),
         closeBrackets(),
+        // Let CodeMirror draw the caret and selection itself. The native
+        // WebKit caret leaves a ghost behind when the selection is moved
+        // programmatically (every inspector insert does), and the theme's
+        // .cm-cursor / .cm-selectionLayer rules only apply to drawn ones.
+        drawSelection(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
         search({ top: true }),
