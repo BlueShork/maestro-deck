@@ -30,6 +30,7 @@ pub mod selector;
 pub mod sim_capture;
 pub mod state;
 pub mod tool_paths;
+pub mod tool_setup;
 pub mod vertex;
 pub mod video;
 mod web_session;
@@ -58,6 +59,9 @@ pub fn run() {
     // include adb / maestro / java. Inherit the user's shell env before we
     // expose any subprocess command.
     env_shim::enrich_from_login_shell();
+    // After the login shell, so a JDK we installed wins over an older system
+    // one — we only ever install when the machine's own Java was rejected.
+    tool_setup::install::apply_managed_java_env();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -103,6 +107,8 @@ pub fn run() {
             bank::ipc::load_bank_image,
             bank::ipc::delete_bank_image,
             bank::ipc::delete_bank_device,
+            tool_setup::install::setup_tools,
+            tool_setup::install::managed_tools,
             cloud::cloud_upload_file,
             cloud::cloud_api_request,
             cloud::cloud_download_text,

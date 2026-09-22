@@ -143,6 +143,20 @@ const IPROXY_DEFAULT: &str = "iproxy";
 const DEVICECTL_DEFAULT: &str = "devicectl";
 const MAESTRO_IOS_DEVICE_DEFAULT: &str = "maestro-ios-device";
 
+/// The copy this app downloaded for itself, if any, ahead of the machine's own
+/// install locations.
+///
+/// It sits at level 3 — after the user's explicit override and `*_BIN`, before
+/// Homebrew and the login shell — so someone who already has a working tool is
+/// never overridden, while a machine whose only copy is the wrong version gets
+/// ours. See tool_setup.
+fn with_managed(tool: crate::tool_setup::ManagedTool, mut common: Vec<PathBuf>) -> Vec<PathBuf> {
+    if let Some(path) = crate::tool_setup::install::managed_path(tool) {
+        common.insert(0, PathBuf::from(path));
+    }
+    common
+}
+
 pub fn adb_bin() -> String {
     if let Some(cached) = CACHE.read().unwrap().adb.clone() {
         return cached;
@@ -152,7 +166,7 @@ pub fn adb_bin() -> String {
         "ADB_BIN",
         ADB_DEFAULT,
         load_overrides().adb.as_deref(),
-        &adb_common_paths(),
+        &with_managed(crate::tool_setup::ManagedTool::Adb, adb_common_paths()),
     );
     CACHE.write().unwrap().adb = Some(resolved.clone());
     resolved
@@ -180,7 +194,10 @@ pub fn maestro_bin() -> String {
         "MAESTRO_BIN",
         MAESTRO_DEFAULT,
         load_overrides().maestro.as_deref(),
-        &maestro_common_paths(),
+        &with_managed(
+            crate::tool_setup::ManagedTool::Maestro,
+            maestro_common_paths(),
+        ),
     );
     CACHE.write().unwrap().maestro = Some(resolved.clone());
     resolved
