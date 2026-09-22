@@ -256,13 +256,30 @@ function RunStep() {
   const target = useOnboardingStore((s) => s.target);
   const running = useRunStore((s) => s.running || s.starting);
   const exitCode = useRunStore((s) => s.exitCode);
+  const cloudTarget = useCloudTargetStore((s) => s.target);
   const state = onboardingRunState(running, exitCode);
+  const [armError, setArmError] = useState<string | null>(null);
 
-  // Selecting the cloud target here means Run sends it there, exactly as it
-  // would any other day — no special path for the walkthrough.
+  // Point Run at the cloud and give it the sample APK to upload. Without the
+  // apk the cloud Run button stays disabled, and the walkthrough would send
+  // the user to press a button that cannot be pressed — or, worse, silently
+  // run on whatever device happens to be connected.
   useEffect(() => {
-    if (target === "cloud") useCloudTargetStore.getState().select("android");
-  }, [target]);
+    if (target !== "cloud" || running) return;
+    if (cloudTarget === "android") return;
+    void (async () => {
+      try {
+        const apk = await ipc.sampleAppApk();
+        useWorkspaceStore.getState().setCloudApkPath(apk);
+        useCloudTargetStore.getState().select("android");
+        setArmError(null);
+      } catch (err) {
+        setArmError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+  }, [target, cloudTarget, running]);
+
+  const cloud = target === "cloud";
 
   const titles: Record<typeof state, string> = {
     waiting: "Run it",
@@ -272,10 +289,9 @@ function RunStep() {
   };
 
   const subs: Record<typeof state, string> = {
-    waiting:
-      target === "cloud"
-        ? "Press Run in cloud, up in the toolbar. There is no live view, so watch the console: it reports each status, then the log when the run ends."
-        : "Press Run, up in the toolbar. Watch the mirror, and the steps light up in the editor as they pass.",
+    waiting: cloud
+      ? "Press Run in cloud, up in the toolbar. There is no live view, so watch the console: it reports each status, then the log when the run ends."
+      : "Press Run, up in the toolbar. Watch the mirror, and the steps light up in the editor as they pass.",
     running: "Watching it go.",
     passed: "",
     failed:
@@ -285,6 +301,12 @@ function RunStep() {
   return (
     <>
       <Title sub={subs[state]}>{titles[state]}</Title>
+
+      {armError ? (
+        <p className="mb-2 text-[11px] text-destructive-foreground">
+          The sample app could not be prepared for the cloud: {armError}
+        </p>
+      ) : null}
 
       {state === "running" ? (
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -300,8 +322,9 @@ function RunStep() {
       {state === "passed" ? (
         <>
           <p className="mb-3 text-[13px] leading-snug text-muted-foreground">
-            You wrote a test and ran it on a real device. Everything else in Maestro Deck is that
-            loop, with more commands.
+            {cloud
+              ? "You wrote a test and ran it on a hosted emulator, without plugging anything in. Everything else in Maestro Deck is that loop, with more commands."
+              : "You wrote a test and ran it on a real device. Everything else in Maestro Deck is that loop, with more commands."}
           </p>
           <StepButton onClick={() => useOnboardingStore.getState().quit()}>Done</StepButton>
         </>
