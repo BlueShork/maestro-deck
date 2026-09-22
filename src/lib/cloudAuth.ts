@@ -41,7 +41,13 @@ export const CLOUD_DASHBOARD_URL = DASHBOARD_URL;
 export async function getCloudIdToken(): Promise<string> {
   const user = auth.currentUser;
   if (!user) throw new Error("Not signed in");
-  return user.getIdToken();
+  try {
+    return await user.getIdToken();
+  } catch (err) {
+    // Refreshing the token goes over the network. Letting Firebase's raw code
+    // reach a run's error toast tells the user nothing to do about it.
+    throw new Error(getCloudAuthErrorMessage(err), { cause: err });
+  }
 }
 
 /** Where "buy more runs" sends the user — the dashboard's own billing page,
@@ -80,9 +86,9 @@ export interface CloudBillingInfo {
  *  That route already accepts a Firebase ID token via `Authorization: Bearer`,
  *  same as every other authed dashboard route, so no new backend work is needed. */
 export async function fetchCloudBilling(): Promise<CloudBillingInfo> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("Not signed in");
-  const token = await user.getIdToken();
+  // Same translated failure as every other call: the balance and a run must
+  // not describe a lost connection in two different vocabularies.
+  const token = await getCloudIdToken();
   const res = await fetch(`${DASHBOARD_URL}/api/billing/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -118,6 +124,12 @@ export function getCloudAuthErrorMessage(error: unknown): string {
       return "Choose a password with at least 6 characters.";
     case "auth/invalid-email":
       return "Enter a valid email address.";
+    case "auth/network-request-failed":
+      // Firebase's generic "the request never completed". Its own wording is a
+      // bare error code, which tells the user nothing they can act on.
+      return "Could not reach Maestro Deck Cloud. Check your connection and try again.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Wait a moment and try again.";
     default:
       return error instanceof Error ? error.message : "Sign-in failed";
   }
