@@ -19,6 +19,7 @@ import {
   ONBOARDING_FLOW,
   onboardingRunState,
   shouldAutoStartWalkthrough,
+  walkthroughCandidates,
   useOnboardingStore,
 } from "./onboardingStore";
 
@@ -172,5 +173,29 @@ describe("shouldAutoStartWalkthrough", () => {
     // It ends on "press Run"; opening it while Run is disabled would say the
     // app is broken.
     expect(shouldAutoStartWalkthrough({ ...base, toolsReady: false })).toBe(false);
+  });
+});
+
+describe("walkthroughCandidates", () => {
+  const devices = [
+    { serial: "R3CX", platform: "android" },
+    { serial: "emulator-5554", platform: "android" },
+    { serial: "avd:Pixel_7", platform: "android" },
+    { serial: "9A9D-IPHONE", platform: "ios" },
+    { serial: "web", platform: "web" },
+  ];
+
+  it("keeps the phone and the booted emulator", () => {
+    expect(walkthroughCandidates(devices).map((d) => d.serial)).toEqual(["R3CX", "emulator-5554"]);
+  });
+
+  it("drops a shutdown AVD, which has nothing to install onto yet", () => {
+    expect(walkthroughCandidates(devices).some((d) => d.serial.startsWith("avd:"))).toBe(false);
+  });
+
+  it("drops iOS and the browser, which cannot take an APK", () => {
+    const platforms = walkthroughCandidates(devices).map((d) => d.platform);
+    expect(platforms).not.toContain("ios");
+    expect(platforms).not.toContain("web");
   });
 });

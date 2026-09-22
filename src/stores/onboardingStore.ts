@@ -76,6 +76,19 @@ export function shouldAutoStartWalkthrough(opts: {
   return opts.toolsReady;
 }
 
+/**
+ * The devices the walkthrough can install onto and run on.
+ *
+ * Android only: the sample app is an APK. Shutdown AVDs are excluded — they are
+ * synthetic entries the backend tags with an `avd:` serial and there is nothing
+ * running to install onto yet.
+ */
+export function walkthroughCandidates<T extends { serial: string; platform: string }>(
+  devices: T[],
+): T[] {
+  return devices.filter((d) => d.platform === "android" && !d.serial.startsWith("avd:"));
+}
+
 /** Where the user chose to run their first test. */
 export type OnboardingTarget = "device" | "cloud";
 

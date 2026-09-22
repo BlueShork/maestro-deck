@@ -12,7 +12,12 @@ import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
-import { ONBOARDING_FLOW, onboardingRunState, useOnboardingStore } from "@/stores/onboardingStore";
+import {
+  ONBOARDING_FLOW,
+  onboardingRunState,
+  useOnboardingStore,
+  walkthroughCandidates,
+} from "@/stores/onboardingStore";
 import { useRunStore } from "@/stores/runStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -125,6 +130,7 @@ function SignInStep() {
 
 function InstallStep() {
   const target = useOnboardingStore((s) => s.target);
+  const devices = useDeviceStore((s) => s.devices);
   const current = useDeviceStore((s) => s.current);
   const [busy, setBusy] = useState(false);
 
@@ -139,10 +145,12 @@ function InstallStep() {
     );
   }
 
-  if (!current) {
+  const candidates = walkthroughCandidates(devices);
+
+  if (candidates.length === 0) {
     return (
       <>
-        <Title sub="Plug it in over USB with developer mode and USB debugging enabled, then pick it in the device panel. This screen notices on its own.">
+        <Title sub="Plug it in over USB with developer mode and USB debugging enabled. This screen picks it up on its own — there is nothing to click behind this dialog.">
           Connect your phone
         </Title>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -153,10 +161,18 @@ function InstallStep() {
     );
   }
 
+  // Whatever is already selected, else the first Android we can see. The run
+  // needs a *connected* device, so this step connects it rather than sending
+  // the user to a panel this dialog is covering.
+  const chosen = candidates.find((d) => d.serial === current?.serial) ?? candidates[0];
+
   const install = async () => {
     setBusy(true);
     try {
-      await ipc.installSampleApp(current.serial);
+      if (current?.serial !== chosen.serial) {
+        await useDeviceStore.getState().connect(chosen.serial);
+      }
+      await ipc.installSampleApp(chosen.serial);
       useOnboardingStore.getState().next();
     } catch (err) {
       toast.error("Install failed", err instanceof Error ? err.message : String(err));
@@ -167,13 +183,11 @@ function InstallStep() {
 
   return (
     <>
-      <Title
-        sub={`A tiny sign-in screen, built for this walkthrough. It goes on ${current.model}.`}
-      >
+      <Title sub={`A tiny sign-in screen, built for this walkthrough. It goes on ${chosen.model}.`}>
         Install the sample app
       </Title>
       <StepButton onClick={() => void install()} busy={busy}>
-        Install it
+        {busy ? "Installing…" : `Install it on ${chosen.model}`}
       </StepButton>
     </>
   );
