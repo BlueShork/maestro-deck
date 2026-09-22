@@ -53,6 +53,29 @@ export function onboardingRunState(
   return exitCode === 0 ? "passed" : "failed";
 }
 
+/**
+ * Whether to open the walkthrough by itself on this launch.
+ *
+ * Its job is "at least once, for everyone" — including the users who had
+ * already been through the tour before the walkthrough existed, and would
+ * otherwise never meet it. Once seen it is marked done, so this returns false
+ * forever after: shown once, never nagged.
+ *
+ * Held back while the toolchain is still missing. Opening a walkthrough that
+ * ends on "press Run" while Run is disabled would teach the wrong thing about
+ * whether the app works.
+ */
+export function shouldAutoStartWalkthrough(opts: {
+  hasSeenTour: boolean;
+  walkthroughDone: boolean;
+  toolsReady: boolean;
+}): boolean {
+  // A first-time user gets the tour first; its ending opens this.
+  if (!opts.hasSeenTour) return false;
+  if (opts.walkthroughDone) return false;
+  return opts.toolsReady;
+}
+
 /** Where the user chose to run their first test. */
 export type OnboardingTarget = "device" | "cloud";
 

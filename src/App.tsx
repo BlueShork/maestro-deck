@@ -33,6 +33,8 @@ import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast, useToastStore } from "@/stores/toastStore";
+import { shouldAutoStartWalkthrough, useOnboardingStore } from "@/stores/onboardingStore";
+import { useEnvStore } from "@/stores/envStore";
 import { useTourStore } from "@/stores/tourStore";
 import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -79,6 +81,24 @@ export default function App() {
       useTourStore.getState().start();
     }
   }, []);
+
+  // Everyone should meet the hands-on walkthrough once, including the users
+  // who went through the tour before it existed — their tour ended long ago
+  // and will never hand over. It waits for the toolchain, since it ends on
+  // "press Run". Marked done as soon as it is seen, so it never returns.
+  const toolsReady = useEnvStore((s) => s.minimalOk === true);
+  const walkthroughDone = useOnboardingStore((s) => s.done);
+  useEffect(() => {
+    if (
+      shouldAutoStartWalkthrough({
+        hasSeenTour: useTourStore.getState().hasSeenTour,
+        walkthroughDone,
+        toolsReady,
+      })
+    ) {
+      useOnboardingStore.getState().start();
+    }
+  }, [toolsReady, walkthroughDone]);
 
   // Optional Maestro Deck Cloud sign-in: Firebase persists the session
   // itself, this just keeps cloudAuthStore in sync with it.

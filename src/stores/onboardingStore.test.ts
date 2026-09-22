@@ -15,7 +15,12 @@ vi.hoisted(() => {
   };
 });
 
-import { ONBOARDING_FLOW, onboardingRunState, useOnboardingStore } from "./onboardingStore";
+import {
+  ONBOARDING_FLOW,
+  onboardingRunState,
+  shouldAutoStartWalkthrough,
+  useOnboardingStore,
+} from "./onboardingStore";
 
 beforeEach(() => {
   useOnboardingStore.setState({
@@ -142,5 +147,30 @@ describe("onboardingRunState", () => {
     // The old behaviour showed "waiting for you to press Run" over a failed
     // run — the worst possible answer at the moment a new user is deciding.
     expect(onboardingRunState(false, 1)).toBe("failed");
+  });
+});
+
+describe("shouldAutoStartWalkthrough", () => {
+  const base = { hasSeenTour: true, walkthroughDone: false, toolsReady: true };
+
+  it("opens for someone who saw the tour before the walkthrough existed", () => {
+    // Without this they would never meet it: the tour only hands over at its
+    // end, and theirs ended long ago.
+    expect(shouldAutoStartWalkthrough(base)).toBe(true);
+  });
+
+  it("leaves a first-time user to the tour, which hands over itself", () => {
+    expect(shouldAutoStartWalkthrough({ ...base, hasSeenTour: false })).toBe(false);
+  });
+
+  it("never reopens what was already seen", () => {
+    // Shown once, never nagged.
+    expect(shouldAutoStartWalkthrough({ ...base, walkthroughDone: true })).toBe(false);
+  });
+
+  it("waits until the tools are there", () => {
+    // It ends on "press Run"; opening it while Run is disabled would say the
+    // app is broken.
+    expect(shouldAutoStartWalkthrough({ ...base, toolsReady: false })).toBe(false);
   });
 });
