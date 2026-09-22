@@ -123,7 +123,11 @@ export function SetupPopup() {
   // Own the startup probe + install event wiring (the component is always
   // mounted from App, even when it renders null).
   useEffect(() => {
-    void refresh();
+    // First launch: probe, then install whatever is missing without asking.
+    // The user opened the app to run a flow, not to shop for a JDK.
+    void refresh().then(() => {
+      if (useEnvStore.getState().minimalOk === false) void useEnvStore.getState().runSetup();
+    });
     const subs = Promise.all([
       events.onEnvInstallOutput(({ id, line }) => {
         useEnvStore.getState().onInstallOutput(id, line);
@@ -131,6 +135,16 @@ export function SetupPopup() {
         useRunStore.getState().appendLog("system", `[install ${id}] ${line}`);
       }),
       events.onEnvInstallDone(() => void useEnvStore.getState().refresh()),
+      events.onSetupProgress((p) => useEnvStore.getState().onSetupProgress(p)),
+      events.onSetupDone((d) => {
+        useEnvStore.getState().onSetupDone(d);
+        useRunStore
+          .getState()
+          .appendLog(
+            "system",
+            d.ok ? `[setup] ${d.label} ready` : `[setup] ${d.label} failed: ${d.error ?? ""}`,
+          );
+      }),
     ]);
     return () => {
       void subs.then((fns) => fns.forEach((fn) => fn()));

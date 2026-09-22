@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
+import { selectSetupChip, useEnvStore } from "@/stores/envStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
@@ -168,6 +169,10 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const updatePhase = useUpdateStore((s) => s.phase);
   const checkUpdate = useUpdateStore((s) => s.check);
   const cloudUser = useCloudAuthStore((s) => s.user);
+  const setupChip = useEnvStore(selectSetupChip);
+  // A cloud run uploads the flow and needs nothing installed here, so the
+  // local toolchain must never gate it.
+  const localToolsMissing = useEnvStore((s) => s.minimalOk === false);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -230,6 +235,26 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
           <Separator orientation="vertical" className="mx-1 h-5" />
 
+          {/* Beside Run, because that is where someone reaches when nothing
+              happens. Clicking opens the setup panel with the detail. */}
+          {setupChip ? (
+            <button
+              type="button"
+              onClick={() => useEnvStore.getState().setCollapsed(false)}
+              className={cn(
+                "mr-1 flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors",
+                setupChip.state === "failed"
+                  ? "border-destructive/40 bg-destructive/10 text-destructive-foreground"
+                  : "border-border text-muted-foreground hover:bg-accent/40",
+              )}
+            >
+              {setupChip.state === "installing" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : null}
+              {setupChip.text}
+            </button>
+          ) : null}
+
           <div data-tour="run-controls" className="flex items-center gap-1">
             {starting ? (
               <Button size="default" variant="destructive" disabled>
@@ -262,7 +287,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                       size="default"
                       variant="default"
                       onClick={onRun}
-                      disabled={cloudTarget !== null && !cloudApk}
+                      disabled={cloudTarget !== null ? !cloudApk : localToolsMissing}
                     >
                       {cloudTarget ? (
                         <Cloud className="h-4 w-4" />
@@ -274,7 +299,9 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                   </TooltipTrigger>
                   <TooltipContent>
                     {!cloudTarget
-                      ? "Run flow (Cmd/Ctrl+R)"
+                      ? localToolsMissing
+                        ? (setupChip?.text ?? "Setting up the tools needed to run locally")
+                        : "Run flow (Cmd/Ctrl+R)"
                       : !cloudApk
                         ? `${CLOUD_ARTIFACTS[cloudTarget].prompt}, under Cloud in the device panel`
                         : `Runs on ${CLOUD_TARGET_LABELS[cloudTarget]} — spends 1 run once it starts, and cannot be cancelled`}
