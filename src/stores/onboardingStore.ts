@@ -89,10 +89,24 @@ export function walkthroughCandidates<T extends { serial: string; platform: stri
   return devices.filter((d) => d.platform === "android" && !d.serial.startsWith("avd:"));
 }
 
+export type OnboardingStep = "choose-target" | "sign-in" | "install" | "write" | "run";
+
+/**
+ * Whether the walkthrough may cover the app at this point.
+ *
+ * It may only when everything the step asks for is inside the dialog. A step
+ * that says "press Run in the toolbar" or "open a folder" while a backdrop
+ * swallows every click is asking for the impossible — twice now, which is why
+ * this is a decision the component cannot make by accident.
+ */
+export function walkthroughBlocks(step: OnboardingStep, hasFolder: boolean): boolean {
+  if (step === "run") return false;
+  if (step === "write") return hasFolder;
+  return true;
+}
+
 /** Where the user chose to run their first test. */
 export type OnboardingTarget = "device" | "cloud";
-
-export type OnboardingStep = "choose-target" | "sign-in" | "install" | "write" | "run";
 
 interface OnboardingState {
   active: boolean;

@@ -16,6 +16,7 @@ import {
   ONBOARDING_FLOW,
   onboardingRunState,
   useOnboardingStore,
+  walkthroughBlocks,
   walkthroughCandidates,
 } from "@/stores/onboardingStore";
 import { useRunStore } from "@/stores/runStore";
@@ -33,12 +34,29 @@ import { useWorkspaceStore } from "@/stores/workspaceStore";
 export function OnboardingOverlay() {
   const active = useOnboardingStore((s) => s.active);
   const step = useOnboardingStore((s) => s.step);
+  const hasFolder = useWorkspaceStore((s) => s.folderPath !== null);
 
   if (!active) return null;
 
+  const blocking = walkthroughBlocks(step, hasFolder);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-      <div className="relative w-[min(560px,calc(100vw-48px))] rounded-xl border border-border bg-card p-5 shadow-2xl">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex",
+        blocking
+          ? "items-center justify-center bg-background/70 backdrop-blur-sm"
+          : // No backdrop and no hit area: the step is asking for something in
+            // the app behind it, so every click has to reach through.
+            "pointer-events-none items-end justify-center p-4",
+      )}
+    >
+      <div
+        className={cn(
+          "pointer-events-auto relative w-[min(560px,calc(100vw-48px))] rounded-xl border border-border bg-card p-5",
+          blocking ? "shadow-2xl" : "shadow-xl",
+        )}
+      >
         {/* Quitting is available at every step, as promised on the way in. */}
         <button
           type="button"
@@ -215,7 +233,7 @@ function WriteStep() {
   if (!folder) {
     return (
       <>
-        <Title sub="Open a folder first, from the workspace panel. Your flow belongs somewhere you can find it again — that is how you will work day to day.">
+        <Title sub="Open a folder from the workspace panel on the left. Your flow belongs somewhere you can find it again — that is how you will work day to day.">
           Choose where your flows live
         </Title>
       </>
@@ -256,8 +274,8 @@ function RunStep() {
   const subs: Record<typeof state, string> = {
     waiting:
       target === "cloud"
-        ? "Press Run in cloud. There is no live view, so watch the console: it reports each status, then the log when the run ends."
-        : "Press Run in the toolbar. Watch the mirror, and the steps light up in the editor as they pass.",
+        ? "Press Run in cloud, up in the toolbar. There is no live view, so watch the console: it reports each status, then the log when the run ends."
+        : "Press Run, up in the toolbar. Watch the mirror, and the steps light up in the editor as they pass.",
     running: "Watching it go.",
     passed: "",
     failed:

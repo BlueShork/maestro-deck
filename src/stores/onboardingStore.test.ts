@@ -19,6 +19,7 @@ import {
   ONBOARDING_FLOW,
   onboardingRunState,
   shouldAutoStartWalkthrough,
+  walkthroughBlocks,
   walkthroughCandidates,
   useOnboardingStore,
 } from "./onboardingStore";
@@ -197,5 +198,27 @@ describe("walkthroughCandidates", () => {
     const platforms = walkthroughCandidates(devices).map((d) => d.platform);
     expect(platforms).not.toContain("ios");
     expect(platforms).not.toContain("web");
+  });
+});
+
+describe("walkthroughBlocks", () => {
+  it("covers the app while everything it asks for is in the dialog", () => {
+    expect(walkthroughBlocks("choose-target", true)).toBe(true);
+    expect(walkthroughBlocks("sign-in", true)).toBe(true);
+    expect(walkthroughBlocks("install", true)).toBe(true);
+  });
+
+  it("gets out of the way when it asks for the Run button", () => {
+    // The toolbar is behind the dialog; a backdrop makes the instruction
+    // impossible to follow.
+    expect(walkthroughBlocks("run", true)).toBe(false);
+  });
+
+  it("gets out of the way when it asks for a folder to be opened", () => {
+    expect(walkthroughBlocks("write", false)).toBe(false);
+  });
+
+  it("covers the app again once the folder is there and the button is its own", () => {
+    expect(walkthroughBlocks("write", true)).toBe(true);
   });
 });
