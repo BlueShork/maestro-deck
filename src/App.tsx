@@ -9,6 +9,7 @@ import { AccountPage } from "@/components/AccountPage";
 import { CloudInviteDialog } from "@/components/CloudInviteDialog";
 import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
+import { OnboardingOverlay } from "@/components/OnboardingOverlay";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { SetupPopup } from "@/components/SetupPopup";
@@ -345,6 +346,7 @@ export default function App() {
       <CloudInviteDialog />
       <QuitConfirmDialog />
       <TourOverlay />
+      <OnboardingOverlay />
       <SetupPopup />
       <Toaster />
     </>

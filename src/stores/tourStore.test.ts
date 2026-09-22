@@ -19,6 +19,7 @@ vi.hoisted(() => {
   } as Storage;
 });
 
+import { useOnboardingStore } from "./onboardingStore";
 import { useTourStore } from "./tourStore";
 import { TOUR_STEPS } from "@/lib/tourSteps";
 
@@ -72,5 +73,29 @@ describe("tourStore", () => {
     expect(parsed.state).toEqual({ hasSeenTour: false });
     expect(parsed.state.isActive).toBeUndefined();
     expect(parsed.state.stepIndex).toBeUndefined();
+  });
+});
+
+describe("handing over to the hands-on walkthrough", () => {
+  beforeEach(() => {
+    useOnboardingStore.setState({ active: false, done: false, step: "choose-target" });
+    useTourStore.setState({ isActive: true, stepIndex: 0, hasSeenTour: false });
+  });
+
+  it("opens the walkthrough when the tour is seen through to the end", () => {
+    for (let i = 0; i < TOUR_STEPS.length; i++) useTourStore.getState().next();
+    expect(useOnboardingStore.getState().active).toBe(true);
+  });
+
+  it("stays out of the way when the tour is skipped", () => {
+    // Cutting the tour short is not a request for more of it.
+    useTourStore.getState().skip();
+    expect(useOnboardingStore.getState().active).toBe(false);
+  });
+
+  it("does not reopen a walkthrough already done", () => {
+    useOnboardingStore.setState({ done: true });
+    useTourStore.getState().finish();
+    expect(useOnboardingStore.getState().active).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import { TOUR_STEPS } from "@/lib/tourSteps";
+import { useOnboardingStore } from "@/stores/onboardingStore";
 
 interface TourState {
   /** Persisted: has the user completed or skipped the tour at least once. */
@@ -31,13 +32,19 @@ export const useTourStore = create<TourState>()(
         const { stepIndex } = get();
         if (stepIndex >= TOUR_STEPS.length - 1) {
           set({ isActive: false, hasSeenTour: true });
+          // Reaching the end is the signal to offer the hands-on half. Skipping
+          // is not: someone who cut the tour short is not asking for more.
+          if (!useOnboardingStore.getState().done) useOnboardingStore.getState().start();
           return;
         }
         set({ stepIndex: stepIndex + 1 });
       },
       prev: () => set((s) => ({ stepIndex: Math.max(0, s.stepIndex - 1) })),
       skip: () => set({ isActive: false, hasSeenTour: true }),
-      finish: () => set({ isActive: false, hasSeenTour: true }),
+      finish: () => {
+        set({ isActive: false, hasSeenTour: true });
+        if (!useOnboardingStore.getState().done) useOnboardingStore.getState().start();
+      },
     }),
     {
       name: "maestro-deck.tour",

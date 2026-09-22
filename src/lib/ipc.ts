@@ -167,6 +167,10 @@ export const ipc = {
   /** Installs every missing managed tool into the app's own directory. One
    *  failure does not stop the others; each reports through setup:done. */
   setupTools: () => call<void>("setup_tools"),
+  /** Installs the bundled onboarding sample app on a device. Returns its appId. */
+  installSampleApp: (serial: string) => call<string>("install_sample_app", { serial }),
+  /** Path to the bundled sample APK, for the cloud path to upload. */
+  sampleAppApk: () => call<string>("sample_app_apk"),
   managedTools: () => call<ManagedToolPaths>("managed_tools"),
   /** PUT a local file to a pre-signed GCS URL. Lives in Rust because the
    *  webview has no binary read permission and an APK has no business being
