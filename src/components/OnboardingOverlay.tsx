@@ -12,7 +12,7 @@ import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
-import { ONBOARDING_FLOW, useOnboardingStore } from "@/stores/onboardingStore";
+import { ONBOARDING_FLOW, onboardingRunState, useOnboardingStore } from "@/stores/onboardingStore";
 import { useRunStore } from "@/stores/runStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -224,6 +224,7 @@ function RunStep() {
   const target = useOnboardingStore((s) => s.target);
   const running = useRunStore((s) => s.running || s.starting);
   const exitCode = useRunStore((s) => s.exitCode);
+  const state = onboardingRunState(running, exitCode);
 
   // Selecting the cloud target here means Run sends it there, exactly as it
   // would any other day — no special path for the walkthrough.
@@ -231,26 +232,40 @@ function RunStep() {
     if (target === "cloud") useCloudTargetStore.getState().select("android");
   }, [target]);
 
-  const passed = exitCode === 0;
+  const titles: Record<typeof state, string> = {
+    waiting: "Run it",
+    running: "Run it",
+    passed: "That was it.",
+    failed: "It did not pass — and that is worth seeing too",
+  };
+
+  const subs: Record<typeof state, string> = {
+    waiting:
+      target === "cloud"
+        ? "Press Run in cloud. There is no live view, so watch the console: it reports each status, then the log when the run ends."
+        : "Press Run in the toolbar. Watch the mirror, and the steps light up in the editor as they pass.",
+    running: "Watching it go.",
+    passed: "",
+    failed:
+      "The console below says which step failed, and the failing line is marked in the editor. That is exactly how you will debug your own flows.",
+  };
 
   return (
     <>
-      <Title
-        sub={
-          target === "cloud"
-            ? "Press Run in cloud. There is no live view, so watch the console: it reports each status, then the log when the run ends."
-            : "Press Run in the toolbar. Watch the mirror, and the steps light up in the editor as they pass."
-        }
-      >
-        {passed ? "That was it." : "Run it"}
-      </Title>
+      <Title sub={subs[state]}>{titles[state]}</Title>
 
-      {running ? (
+      {state === "running" ? (
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Running…
         </div>
-      ) : passed ? (
+      ) : null}
+
+      {state === "waiting" ? (
+        <p className="text-[11px] text-muted-foreground">Waiting for you to press Run.</p>
+      ) : null}
+
+      {state === "passed" ? (
         <>
           <p className="mb-3 text-[13px] leading-snug text-muted-foreground">
             You wrote a test and ran it on a real device. Everything else in Maestro Deck is that
@@ -258,9 +273,15 @@ function RunStep() {
           </p>
           <StepButton onClick={() => useOnboardingStore.getState().quit()}>Done</StepButton>
         </>
-      ) : (
-        <p className="text-[11px] text-muted-foreground">Waiting for you to press Run.</p>
-      )}
+      ) : null}
+
+      {state === "failed" ? (
+        // No pretending it passed, and no dead end either: pressing Run again
+        // is the whole loop, and leaving is always available.
+        <StepButton onClick={() => useOnboardingStore.getState().quit()}>
+          Close and take a look
+        </StepButton>
+      ) : null}
     </>
   );
 }

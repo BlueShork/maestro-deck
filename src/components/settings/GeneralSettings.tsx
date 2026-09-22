@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
+import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useTourStore } from "@/stores/tourStore";
 
 const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> = [
@@ -23,6 +24,7 @@ const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; icon: typeof Sun }
 export function GeneralSettings() {
   const navigate = useNavigate();
   const startTour = useTourStore((s) => s.start);
+  const startWalkthrough = useOnboardingStore((s) => s.start);
 
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
@@ -142,6 +144,27 @@ export function GeneralSettings() {
             }}
           >
             Replay tutorial
+          </Button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col">
+            <span>Hands-on walkthrough</span>
+            <span className="text-xs text-muted-foreground">
+              Install the sample app, write a flow and run it, step by step.
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              // It installs apps and writes into the workspace, so it belongs
+              // on the main screen rather than over the settings page.
+              navigate("/");
+              startWalkthrough();
+            }}
+          >
+            Start walkthrough
           </Button>
         </div>
       </SettingsSubgroup>

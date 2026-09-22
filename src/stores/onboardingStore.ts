@@ -36,6 +36,23 @@ appId: ${SAMPLE_APP_ID}
 - assertVisible: "Welcome back!"
 `;
 
+/**
+ * What the last step should say, from the run's own state.
+ *
+ * A first run that fails is the moment a new user decides whether this tool
+ * works. Saying "waiting for you to press Run" while their run sits failed
+ * behind the dialog is the worst answer available, so failure gets named and
+ * pointed at the console.
+ */
+export function onboardingRunState(
+  running: boolean,
+  exitCode: number | null,
+): "waiting" | "running" | "passed" | "failed" {
+  if (running) return "running";
+  if (exitCode === null) return "waiting";
+  return exitCode === 0 ? "passed" : "failed";
+}
+
 /** Where the user chose to run their first test. */
 export type OnboardingTarget = "device" | "cloud";
 

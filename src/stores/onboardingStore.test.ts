@@ -15,7 +15,7 @@ vi.hoisted(() => {
   };
 });
 
-import { ONBOARDING_FLOW, useOnboardingStore } from "./onboardingStore";
+import { ONBOARDING_FLOW, onboardingRunState, useOnboardingStore } from "./onboardingStore";
 
 beforeEach(() => {
   useOnboardingStore.setState({
@@ -122,5 +122,25 @@ describe("the generated flow", () => {
     // A flow that taps before asserting teaches a habit that produces flaky
     // tests, which is the opposite of the lesson.
     expect(ONBOARDING_FLOW.indexOf("assertVisible")).toBeLessThan(ONBOARDING_FLOW.indexOf("tapOn"));
+  });
+});
+
+describe("onboardingRunState", () => {
+  it("waits before the first run", () => {
+    expect(onboardingRunState(false, null)).toBe("waiting");
+  });
+
+  it("follows a run in flight", () => {
+    expect(onboardingRunState(true, null)).toBe("running");
+  });
+
+  it("celebrates a pass", () => {
+    expect(onboardingRunState(false, 0)).toBe("passed");
+  });
+
+  it("names a failure instead of asking again for a run that already happened", () => {
+    // The old behaviour showed "waiting for you to press Run" over a failed
+    // run — the worst possible answer at the moment a new user is deciding.
+    expect(onboardingRunState(false, 1)).toBe("failed");
   });
 });
