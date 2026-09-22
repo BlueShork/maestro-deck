@@ -21,6 +21,7 @@ pub mod ios_session;
 pub mod ipc;
 pub mod maestro_health;
 pub mod metrics;
+pub mod onboarding;
 pub mod process_ext;
 pub mod prockill;
 pub mod runner;
@@ -107,6 +108,8 @@ pub fn run() {
             bank::ipc::load_bank_image,
             bank::ipc::delete_bank_image,
             bank::ipc::delete_bank_device,
+            onboarding::install_sample_app,
+            onboarding::sample_app_apk,
             tool_setup::install::setup_tools,
             tool_setup::install::managed_tools,
             cloud::cloud_upload_file,
