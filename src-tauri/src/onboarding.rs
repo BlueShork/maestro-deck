@@ -47,39 +47,66 @@ pub fn sample_apk_path(app: &AppHandle) -> AppResult<std::path::PathBuf> {
     )))
 }
 
+async fn adb_install(adb: &str, serial: &str, apk: &std::path::Path) -> AppResult<(bool, String)> {
+    let out = tokio::process::Command::new(adb)
+        .args(["-s", serial, "install", "-r"])
+        .arg(apk)
+        .output()
+        .await
+        .map_err(|e| AppError::AdbFailed(format!("installing the sample app: {e}")))?;
+
+    // adb exits 0 and prints "Failure [...]" on a refused install, so the exit
+    // status alone would report success for an app that is not there.
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    let combined = format!("{stdout}{stderr}");
+    Ok((
+        out.status.success() && !combined.contains("Failure"),
+        combined,
+    ))
+}
+
 /// Installs the sample app on `serial`.
 ///
-/// `-r` so a second onboarding replaces the first install rather than failing,
-/// and so a user who ran it on an older build gets the current one.
+/// `-r` so a second walkthrough replaces the first install rather than failing.
+///
+/// A copy signed by a different build cannot be upgraded in place — Android
+/// answers INSTALL_FAILED_UPDATE_INCOMPATIBLE — so that one case is retried
+/// after removing the old copy. The package is ours and holds nothing the user
+/// put there, which is why removing it is safe to do without asking.
 #[tauri::command]
 pub async fn install_sample_app(app: AppHandle, serial: String) -> AppResult<String> {
     let apk = sample_apk_path(&app)?;
     let adb = tool_paths::adb_bin();
 
-    let out = tokio::process::Command::new(&adb)
-        .args(["-s", &serial, "install", "-r"])
-        .arg(&apk)
-        .output()
-        .await
-        .map_err(|e| AppError::AdbFailed(format!("installing the sample app: {e}")))?;
+    let (ok, output) = adb_install(&adb, &serial, &apk).await?;
+    if ok {
+        info!(serial, "sample app installed");
+        return Ok(SAMPLE_APP_ID.to_string());
+    }
 
-    // adb exits 0 and prints "Failure [...]" on a refused install, so the
-    // status alone would report success for an app that is not there.
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    if !out.status.success() || stdout.contains("Failure") {
-        let detail = if stderr.trim().is_empty() {
-            stdout.trim()
-        } else {
-            stderr.trim()
-        };
+    if output.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") {
+        info!(serial, "removing a sample app from an earlier build");
+        let _ = tokio::process::Command::new(&adb)
+            .args(["-s", &serial, "uninstall", SAMPLE_APP_ID])
+            .output()
+            .await;
+
+        let (ok, retry_output) = adb_install(&adb, &serial, &apk).await?;
+        if ok {
+            info!(serial, "sample app reinstalled");
+            return Ok(SAMPLE_APP_ID.to_string());
+        }
         return Err(AppError::AdbFailed(format!(
-            "could not install the sample app: {detail}"
+            "could not install the sample app: {}",
+            retry_output.trim()
         )));
     }
 
-    info!(serial, "sample app installed");
-    Ok(SAMPLE_APP_ID.to_string())
+    Err(AppError::AdbFailed(format!(
+        "could not install the sample app: {}",
+        output.trim()
+    )))
 }
 
 /// The APK the cloud path uploads as its job artefact.

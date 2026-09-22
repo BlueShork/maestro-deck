@@ -39,11 +39,16 @@ find "$OUT/classes" -name '*.class' > "$OUT/classlist.txt"
 (cd "$OUT/dex" && zip -q "$OUT/base.apk" classes.dex)
 "$BT/zipalign" -f 4 "$OUT/base.apk" "$OUT/aligned.apk"
 
-# A throwaway debug key: this app is a demo fixture, never published, and the
+# A fixed key, committed next to this script on purpose.
+#
+# Regenerating it per build — which this script used to do — gives every build
+# a different signature, and Android then refuses to upgrade an install made by
+# an earlier one (INSTALL_FAILED_UPDATE_INCOMPATIBLE). That would hit every user
+# who had run the walkthrough before updating Maestro Deck.
+#
+# It guards nothing: this app is a demo fixture, never published, and the
 # signature only has to satisfy `adb install`.
-KS="$OUT/debug.keystore"
-keytool -genkeypair -keystore "$KS" -alias sample -storepass android -keypass android \
-  -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Maestro Deck Sample" >/dev/null 2>&1
+KS="$HERE/demo.keystore"
 
 "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
   --out "$HERE/../src-tauri/resources/sample-app.apk" "$OUT/aligned.apk"
