@@ -18,14 +18,33 @@ use crate::tool_paths;
 /// frontend, which writes it into the flow it generates.
 pub const SAMPLE_APP_ID: &str = "com.maestrodeck.sample";
 
-/// Absolute path to the bundled APK, wherever the installer put it.
+/// Absolute path to the bundled APK.
+///
+/// Resource resolution points inside the bundle, which only exists once the app
+/// has been packaged: under `tauri dev` it resolves to `target/debug/resources`
+/// and nothing has been copied there. Falling back to the source tree keeps the
+/// walkthrough working in development, where it is most often exercised.
 pub fn sample_apk_path(app: &AppHandle) -> AppResult<std::path::PathBuf> {
-    app.path()
-        .resolve(
-            "resources/sample-app.apk",
-            tauri::path::BaseDirectory::Resource,
-        )
-        .map_err(|e| AppError::Other(format!("sample app missing from the bundle: {e}")))
+    const REL: &str = "resources/sample-app.apk";
+
+    let bundled = app
+        .path()
+        .resolve(REL, tauri::path::BaseDirectory::Resource)
+        .ok()
+        .filter(|p| p.is_file());
+    if let Some(path) = bundled {
+        return Ok(path);
+    }
+
+    let in_tree = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(REL);
+    if in_tree.is_file() {
+        return Ok(in_tree);
+    }
+
+    Err(AppError::Other(format!(
+        "sample app not found — neither in the bundle nor at {}",
+        in_tree.display()
+    )))
 }
 
 /// Installs the sample app on `serial`.
