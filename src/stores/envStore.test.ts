@@ -21,10 +21,12 @@ vi.hoisted(() => {
 
 const mockStatus = vi.fn();
 const mockInstall = vi.fn();
+const mockSetupTools = vi.fn();
 vi.mock("@/lib/ipc", () => ({
   ipc: {
     environmentStatus: (...a: unknown[]) => mockStatus(...a),
     installTool: (...a: unknown[]) => mockInstall(...a),
+    setupTools: (...a: unknown[]) => mockSetupTools(...a),
   },
 }));
 
@@ -174,6 +176,72 @@ describe("automatic first-launch setup", () => {
     useEnvStore.getState().onSetupDone({ tool: "java", label: "Java", ok: false, error: "boom" });
     useEnvStore.getState().onSetupDone({ tool: "java", label: "Java", ok: true, error: null });
     expect(useEnvStore.getState().setupFailures).toHaveLength(0);
+  });
+});
+
+describe("runSetup", () => {
+  beforeEach(() => {
+    useEnvStore.setState({
+      minimalOk: null,
+      setupRunning: false,
+      setupTool: null,
+      setupPercent: null,
+      setupFailures: [],
+    });
+    mockStatus.mockReset();
+    mockSetupTools.mockReset();
+    mockStatus.mockResolvedValue({
+      checks: [okCheck("maestro"), okCheck("java")],
+      minimalOk: true,
+    });
+  });
+
+  it("re-probes the environment once the install finished", async () => {
+    mockSetupTools.mockResolvedValue(undefined);
+
+    await useEnvStore.getState().runSetup();
+
+    expect(mockStatus).toHaveBeenCalledTimes(1);
+    expect(useEnvStore.getState().minimalOk).toBe(true);
+  });
+
+  it("does not start a second install while one is running", async () => {
+    let finish!: () => void;
+    mockSetupTools.mockReturnValue(new Promise<void>((r) => (finish = r)));
+
+    const first = useEnvStore.getState().runSetup();
+    await useEnvStore.getState().runSetup();
+    finish();
+    await first;
+
+    expect(mockSetupTools).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the progress chip when done, even if the command itself failed", async () => {
+    mockSetupTools.mockImplementation(async () => {
+      useEnvStore
+        .getState()
+        .onSetupProgress({ tool: "java", label: "Java", phase: "download", percent: 40 });
+      throw new Error("command not found");
+    });
+
+    await useEnvStore.getState().runSetup();
+
+    expect(useEnvStore.getState()).toMatchObject({
+      setupRunning: false,
+      setupTool: null,
+      setupPercent: null,
+    });
+    expect(mockStatus).toHaveBeenCalled();
+  });
+
+  it("forgets the failures of a previous attempt when retrying", async () => {
+    useEnvStore.setState({ setupFailures: [{ tool: "java", label: "Java", error: "timeout" }] });
+    mockSetupTools.mockResolvedValue(undefined);
+
+    await useEnvStore.getState().runSetup();
+
+    expect(useEnvStore.getState().setupFailures).toEqual([]);
   });
 });
 
