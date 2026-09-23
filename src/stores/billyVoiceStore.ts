@@ -37,6 +37,13 @@ interface BillyVoiceState {
 
 let recording: Recording | null = null;
 
+/** Live level (0…1) and elapsed seconds of the recording in progress, read
+ *  by the meter on each animation frame rather than pushed through the store
+ *  (which would re-render the chat 60 times a second). */
+export function recordingMeter(): { level: number; elapsed: number } | null {
+  return recording ? { level: recording.level(), elapsed: recording.elapsed() } : null;
+}
+
 const reportError = (err: unknown) =>
   useChatStore.setState({ error: err instanceof Error ? err.message : String(err) });
 

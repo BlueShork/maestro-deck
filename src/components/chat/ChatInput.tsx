@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { useBillyVoiceStore } from "@/stores/billyVoiceStore";
 import { useChatStore } from "@/stores/chatStore";
 
+import { RecordingMeter } from "./RecordingMeter";
+
 const MAX_HEIGHT = 180;
 
 export function ChatInput() {
@@ -91,16 +93,9 @@ export function ChatInput() {
         />
         <div className="mt-1 flex items-center justify-between gap-2">
           {recordingActive ? (
-            <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-destructive motion-safe:animate-pulse" />
-              Listening… click <Square className="inline h-2.5 w-2.5 fill-current" /> to send,{" "}
-              <kbd className="rounded border border-border bg-background px-1 font-mono text-[9px]">
-                Esc
-              </kbd>{" "}
-              to cancel
-            </span>
+            <RecordingMeter />
           ) : voicePhase === "transcribing" ? (
-            <span className="text-[10px] text-muted-foreground">Billy is listening back…</span>
+            <span className="text-[10px] text-muted-foreground">Transcribing…</span>
           ) : (
             <span className="text-[10px] text-muted-foreground/70">
               <kbd className="rounded border border-border bg-background px-1 font-mono text-[9px]">

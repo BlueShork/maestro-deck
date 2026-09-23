@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/cloudAuth", () => ({ CLOUD_DASHBOARD_URL: "", getCloudIdToken: vi.fn() }));
 
-import { encodeWav } from "./voice";
+import { encodeWav, levelOf } from "./voice";
 
 const ascii = (bytes: Uint8Array, from: number, to: number) =>
   String.fromCharCode(...bytes.subarray(from, to));
@@ -34,5 +34,17 @@ describe("encodeWav", () => {
     expect(view.getInt16(44, true)).toBe(Math.trunc(0.5 * 0x7fff));
     expect(view.getInt16(46, true)).toBe(-0x8000);
     expect(view.getInt16(48, true)).toBe(0);
+  });
+});
+
+describe("levelOf", () => {
+  it("reads silence as 0 and a full-scale signal as 1", () => {
+    expect(levelOf(new Float32Array(512))).toBe(0);
+    expect(levelOf(new Float32Array(512).fill(1))).toBe(1);
+  });
+
+  it("maps -25 dBFS to the middle of the meter", () => {
+    const amplitude = 10 ** (-25 / 20);
+    expect(levelOf(new Float32Array(512).fill(amplitude))).toBeCloseTo(0.5, 5);
   });
 });

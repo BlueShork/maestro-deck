@@ -80,6 +80,20 @@ export interface Recording {
   /** Stop and return the WAV, or null when nothing usable was captured. */
   finish(): Blob | null;
   cancel(): void;
+  /** Input level right now, 0 (silence) to 1, for the live meter. */
+  level(): number;
+  /** Seconds recorded so far. */
+  elapsed(): number;
+}
+
+/** RMS of a block of samples in dBFS, mapped to 0…1 with -50 dB as silence
+ *  (the same scale as the iOS app's meter). */
+export function levelOf(samples: Float32Array): number {
+  let sum = 0;
+  for (const s of samples) sum += s * s;
+  const rms = Math.sqrt(sum / Math.max(1, samples.length));
+  const db = 20 * Math.log10(Math.max(rms, 1e-8));
+  return Math.max(0, Math.min(1, (db + 50) / 50));
 }
 
 export class MicDeniedError extends Error {
@@ -118,6 +132,12 @@ export async function startRecording(onMaxDuration: () => void): Promise<Recordi
     if (captured >= limit) onMaxDuration();
   };
   source.connect(processor);
+  // A separate tap for the meter: the processor's blocks (~85 ms) are too
+  // coarse to animate from.
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  const block = new Float32Array(analyser.fftSize);
+  source.connect(analyser);
   // Some engines only run a processor that reaches the destination; its
   // output buffer is left silent, so nothing is heard.
   processor.connect(ctx.destination);
@@ -127,6 +147,7 @@ export async function startRecording(onMaxDuration: () => void): Promise<Recordi
     processor.onaudioprocess = null;
     source.disconnect();
     processor.disconnect();
+    analyser.disconnect();
     for (const track of stream.getTracks()) track.stop();
   };
 
@@ -145,6 +166,12 @@ export async function startRecording(onMaxDuration: () => void): Promise<Recordi
       return new Blob([encodeWav(samples, ctx.sampleRate)], { type: "audio/wav" });
     },
     cancel: release,
+    level() {
+      if (stopped) return 0;
+      analyser.getFloatTimeDomainData(block);
+      return levelOf(block);
+    },
+    elapsed: () => captured / ctx.sampleRate,
   };
 }
 
