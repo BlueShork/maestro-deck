@@ -116,9 +116,9 @@ function ChooseTarget() {
         >
           <Cloud className="mb-2 h-4 w-4 text-muted-foreground" />
           <div className="text-xs font-semibold">In the cloud</div>
-          {/* Said here, not discovered later: no live view, and it is billed. */}
+          {/* Said here, not discovered later: a slow live view, and it is billed. */}
           <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-            No phone needed. There is no live view of a cloud run yet, it needs an account, and it
+            No phone needed. You watch the emulator about once a second, it needs an account, and it
             spends one of your runs.
           </p>
         </button>
@@ -290,7 +290,7 @@ function RunStep() {
 
   const subs: Record<typeof state, string> = {
     waiting: cloud
-      ? "Press Run in cloud, up in the toolbar. There is no live view, so watch the console: it reports each status, then the log when the run ends."
+      ? "Press Run in cloud, up in the toolbar. The emulator takes a few minutes to boot, then its screen shows where the mirror would be. The console reports each status, then the log when the run ends."
       : "Press Run, up in the toolbar. Watch the mirror, and the steps light up in the editor as they pass.",
     running: "Watching it go.",
     passed: "",

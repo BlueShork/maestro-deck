@@ -172,6 +172,19 @@ export function fetchJobStatus(jobId: string): Promise<CloudJobStatus> {
   return authedJson<CloudJobStatus>(`/api/jobs/${jobId}/status`);
 }
 
+export interface CloudLiveFrame {
+  /** A `data:image/jpeg` URL, or null until the emulator has booted. */
+  frame: string | null;
+  updatedAt: string | null;
+}
+
+/** The latest screen of a running Android emulator job, which the runner
+ *  refreshes about once a second. Base64 in JSON because the Rust proxy only
+ *  carries text. Only the `android` fleet writes frames. */
+export function fetchLiveFrame(jobId: string): Promise<CloudLiveFrame> {
+  return authedJson<CloudLiveFrame>(`/api/jobs/${jobId}/live`);
+}
+
 export interface CloudRunDetail {
   status: string;
   summary: { total: number; passed: number; failed: number } | null;

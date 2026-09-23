@@ -5,6 +5,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { tempDir } from "@tauri-apps/api/path";
 import { useCallback, useMemo } from "react";
 
+import { CloudLivePreview } from "@/components/CloudLivePreview";
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
@@ -51,6 +52,9 @@ export function MainView() {
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const panels = usePanelsStore((s) => s.visible);
   const chatOpen = useChatStore((s) => s.isOpen);
+  const cloudJob = useRunStore((s) => s.cloud);
+  // Only the emulator fleet uploads frames; the farm and iOS have no live view.
+  const cloudLive = useCloudTargetStore((s) => s.target) === "android" ? cloudJob : null;
 
   // `defaultSize` values within a PanelGroup must sum to 100 — react-
   // resizable-panels warns and normalizes otherwise. Since any panel
@@ -271,6 +275,9 @@ export function MainView() {
                             className="items-center justify-center bg-card p-4"
                           >
                             <DeviceView />
+                            {cloudLive ? (
+                              <CloudLivePreview jobId={cloudLive.jobId} status={cloudLive.status} />
+                            ) : null}
                           </PanelShell>
                         </Panel>
                         {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
