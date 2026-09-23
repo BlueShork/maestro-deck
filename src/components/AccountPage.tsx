@@ -103,8 +103,6 @@ function ProfileView({ email }: { email: string | null }) {
         error={billingError}
         onRetry={() => void refreshBilling()}
       />
-
-      <RoadmapStrip />
     </div>
   );
 }
@@ -186,27 +184,6 @@ function BillingCard({
   );
 }
 
-function RoadmapStrip() {
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-      <span className="font-medium text-foreground">Coming to this account soon</span>
-      <div className="flex flex-wrap gap-2">
-        <RoadmapPill icon={Cloud} label="Run flows in the cloud" />
-        <RoadmapPill icon={Smartphone} label="Preview on real devices" />
-      </div>
-    </div>
-  );
-}
-
-function RoadmapPill({ icon: Icon, label }: { icon: typeof Cloud; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-1">
-      <Icon className="h-3 w-3" />
-      {label}
-    </span>
-  );
-}
-
 function PitchView() {
   return (
     <div className="grid grid-cols-1 gap-10 md:grid-cols-2 md:items-start">
@@ -215,11 +192,22 @@ function PitchView() {
           <h1 className="text-xl font-semibold">Maestro Deck Cloud</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Maestro Deck runs fully offline without an account — signing in is entirely optional.
-            Connect one if you want your cloud runs and credits visible right here in the app.
+            Connect one to run flows in the cloud and keep your runs and credits right here in the
+            app.
           </p>
         </div>
 
         <ul className="space-y-4">
+          <Benefit
+            icon={Cloud}
+            title="Run flows in the cloud"
+            description="Kick off a flow from the app and let it run on a hosted emulator, simulator or real phone."
+          />
+          <Benefit
+            icon={Smartphone}
+            title="Preview on real devices"
+            description="Watch a flow execute on a real physical device, streamed back to the app."
+          />
           <Benefit
             icon={Gauge}
             title="Track runs & credits"
@@ -229,18 +217,6 @@ function PitchView() {
             icon={ShoppingCart}
             title="Buy more in one click"
             description="Out of runs? Buy more runs without leaving Maestro Deck."
-          />
-          <Benefit
-            icon={Cloud}
-            title="Run flows in the cloud"
-            description="Kick off a flow from the app and let it run on managed infrastructure."
-            comingSoon
-          />
-          <Benefit
-            icon={Smartphone}
-            title="Preview on real devices"
-            description="Watch a flow execute on a real physical device, streamed back to the app."
-            comingSoon
           />
         </ul>
       </div>
@@ -254,12 +230,10 @@ function Benefit({
   icon: Icon,
   title,
   description,
-  comingSoon,
 }: {
   icon: typeof Gauge;
   title: string;
   description: string;
-  comingSoon?: boolean;
 }) {
   return (
     <li className="flex gap-3">
@@ -267,14 +241,7 @@ function Benefit({
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{title}</span>
-          {comingSoon ? (
-            <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Coming soon
-            </span>
-          ) : null}
-        </div>
+        <span className="text-sm font-medium">{title}</span>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
     </li>
