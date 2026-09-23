@@ -10,7 +10,7 @@ export interface Toast {
   title: string;
   description?: string;
   variant: ToastVariant;
-  /** Controlled open state so Radix can run the exit animation. */
+  /** Controlled open state so SwipeToast can run the exit animation. */
   open: boolean;
   /** If true, skip the auto-dismiss timer — caller is responsible for
    *  calling `dismiss(id)` explicitly (used for long-running ops like
@@ -21,14 +21,14 @@ export interface Toast {
 interface ToastState {
   toasts: Toast[];
   push: (t: Omit<Toast, "id" | "open">) => string;
-  /** Trigger the exit animation; the toast is removed from the list when Radix
-   *  signals it has finished closing via `setClosed`. */
+  /** Trigger the exit animation; the toast is removed from the list when
+   *  SwipeToast signals it has finished closing via `setClosed`. */
   dismiss: (id: string) => void;
   setClosed: (id: string) => void;
 }
 
-// Time the slide-out animation needs to complete before the new toast slides
-// in. Has to match Tailwind's `animate-out fade-out-0` default (~150ms).
+// Head start the outgoing toast gets to sink out before the new one rises in
+// its place (SwipeToast's full exit is ~340ms; the overlap is intentional).
 const SWAP_DELAY_MS = 180;
 
 export const useToastStore = create<ToastState>((set, get) => ({
