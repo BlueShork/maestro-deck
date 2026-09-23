@@ -12,10 +12,12 @@ vi.mock("@/lib/cloudAuth", () => ({
 }));
 
 const { ipc } = await import("@/lib/ipc");
-const { submitCloudJob, CloudJobError, fetchJobStatus } = await import("./cloudJobs");
+const { submitCloudJob, CloudJobError, fetchJobStatus, fetchRunDetail, fetchArtifactText } =
+  await import("./cloudJobs");
 
 const uploadFile = vi.mocked(ipc.cloudUploadFile);
 const apiRequest = vi.mocked(ipc.cloudApiRequest);
+const downloadText = vi.mocked(ipc.cloudDownloadText);
 
 /** Shapes the real routes return (maestro-nightly/dashboard/app/api/jobs). */
 const INIT_OK = {
@@ -134,6 +136,42 @@ describe("submitCloudJob", () => {
     expect((err as Error).message).toMatch(/expired/i);
   });
 
+  it("stops before uploading when the server hands back no app upload URL", async () => {
+    apiRequest.mockResolvedValueOnce(jsonResponse({ ...INIT_OK, apk: undefined }));
+
+    await expect(submitCloudJob(INPUT)).rejects.toMatchObject({ code: "REQUEST_FAILED" });
+    expect(uploadFile).not.toHaveBeenCalled();
+  });
+
+  it("reports the status when an error page is not JSON", async () => {
+    apiRequest.mockResolvedValueOnce({ status: 502, body: "<html>Bad Gateway</html>" });
+
+    const err = await submitCloudJob(INPUT).catch((e: unknown) => e);
+    expect((err as InstanceType<typeof CloudJobError>).code).toBe("REQUEST_FAILED");
+    expect((err as Error).message).toContain("502");
+  });
+
+  it("uploads each flow to the URL issued for it, in order", async () => {
+    apiRequest
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...INIT_OK,
+          yamls: [
+            { name: "a.yaml", uploadUrl: "https://gcs.test/a", gsPath: "gs://b/a.yaml" },
+            { name: "b.yaml", uploadUrl: "https://gcs.test/b", gsPath: "gs://b/b.yaml" },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    await submitCloudJob({ ...INPUT, yamlPaths: ["/f/a.yaml", "/f/b.yaml"] });
+
+    expect(uploadFile.mock.calls.slice(1)).toEqual([
+      ["https://gcs.test/a", "/f/a.yaml"],
+      ["https://gcs.test/b", "/f/b.yaml"],
+    ]);
+  });
+
   it("flags a failure that already cost the user a run", async () => {
     // Anything after finalize is billed: the caller needs to tell the user why
     // their balance moved.
@@ -152,5 +190,33 @@ describe("fetchJobStatus", () => {
 
     await expect(fetchJobStatus("job-123")).resolves.toMatchObject({ status: "running" });
     expect(apiRequest.mock.calls[0][1]).toBe("/api/jobs/job-123/status");
+  });
+});
+
+describe("fetchRunDetail", () => {
+  it("looks the run up by its job id", async () => {
+    apiRequest.mockResolvedValueOnce(
+      jsonResponse({ status: "success", summary: null, logsUrl: null }),
+    );
+
+    await fetchRunDetail("job-123");
+
+    expect(apiRequest.mock.calls[0][1]).toBe("/api/runs/job-123");
+  });
+});
+
+describe("fetchArtifactText", () => {
+  it("returns the downloaded text", async () => {
+    downloadText.mockResolvedValueOnce("line 1\nline 2");
+    await expect(fetchArtifactText("https://gcs.test/log")).resolves.toBe("line 1\nline 2");
+  });
+
+  it("wraps a failed download so the console can say what went missing", async () => {
+    downloadText.mockRejectedValueOnce(new Error("403 Forbidden"));
+
+    const err = await fetchArtifactText("https://gcs.test/log").catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(CloudJobError);
+    expect((err as Error).message).toMatch(/run log.*403 Forbidden/);
   });
 });

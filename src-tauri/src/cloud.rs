@@ -144,3 +144,162 @@ pub async fn cloud_download_text(url: String) -> AppResult<String> {
         .await
         .map_err(|e| AppError::Other(format!("download unreadable: {e}")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    /// Serves exactly one request with `status`, and hands back the raw request
+    /// (headers and body) it received.
+    async fn one_shot_server(status: &'static str) -> (String, tokio::task::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!(
+            "http://{}/bucket/object?sig=1",
+            listener.local_addr().unwrap()
+        );
+        let handle = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut raw = Vec::new();
+            let mut buf = [0u8; 4096];
+            loop {
+                let n = sock.read(&mut buf).await.unwrap();
+                raw.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&raw).to_string();
+                if let Some(head_end) = text.find("\r\n\r\n") {
+                    let len = text[..head_end]
+                        .lines()
+                        .find_map(|l| {
+                            l.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap_or(0);
+                    if raw.len() >= head_end + 4 + len {
+                        break;
+                    }
+                }
+                if n == 0 {
+                    break;
+                }
+            }
+            let reply =
+                format!("HTTP/1.1 {status}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
+            sock.write_all(reply.as_bytes()).await.unwrap();
+            String::from_utf8_lossy(&raw).to_string()
+        });
+        (url, handle)
+    }
+
+    fn temp_file(contents: &[u8]) -> tempfile::NamedTempFile {
+        let mut f = tempfile::NamedTempFile::new().unwrap();
+        std::io::Write::write_all(&mut f, contents).unwrap();
+        f
+    }
+
+    #[tokio::test]
+    async fn upload_puts_the_file_with_its_exact_length_and_no_auth() {
+        let (url, server) = one_shot_server("200 OK").await;
+        let file = temp_file(b"fake apk bytes");
+
+        cloud_upload_file(url, file.path().to_string_lossy().into_owned())
+            .await
+            .unwrap();
+
+        let request = server.await.unwrap();
+        let lower = request.to_ascii_lowercase();
+        assert!(
+            request.starts_with("PUT /bucket/object?sig=1 "),
+            "{request}"
+        );
+        // GCS refuses a chunked PUT on a v4 signature.
+        assert!(lower.contains("content-length: 14"), "{request}");
+        assert!(!lower.contains("transfer-encoding: chunked"), "{request}");
+        // An extra auth header would invalidate the signature.
+        assert!(!lower.contains("authorization:"), "{request}");
+        assert!(request.ends_with("fake apk bytes"), "{request}");
+    }
+
+    #[tokio::test]
+    async fn an_expired_upload_link_tells_the_user_to_run_again() {
+        let (url, server) = one_shot_server("403 Forbidden").await;
+        let file = temp_file(b"x");
+
+        let err = cloud_upload_file(url, file.path().to_string_lossy().into_owned())
+            .await
+            .unwrap_err()
+            .to_string();
+        server.await.unwrap();
+
+        assert!(err.contains("403"), "{err}");
+        assert!(err.contains("start the run again"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn other_upload_failures_carry_no_expiry_hint() {
+        let (url, server) = one_shot_server("500 Internal Server Error").await;
+        let file = temp_file(b"x");
+
+        let err = cloud_upload_file(url, file.path().to_string_lossy().into_owned())
+            .await
+            .unwrap_err()
+            .to_string();
+        server.await.unwrap();
+
+        assert!(err.contains("500"), "{err}");
+        assert!(!err.contains("expired"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn upload_of_a_missing_file_fails_before_any_request() {
+        let err = cloud_upload_file(
+            "http://127.0.0.1:9/never".into(),
+            "/nonexistent/app.apk".into(),
+        )
+        .await;
+        assert!(err.is_err());
+    }
+
+    #[tokio::test]
+    async fn api_request_refuses_a_path_that_could_change_the_host() {
+        // Without the leading slash, "@evil.test/x" would turn the URL into
+        // https://dashboard.maestrodeck.cloud@evil.test/x — credentials for,
+        // and a request to, another host.
+        for path in ["@evil.test/api", ".evil.test/api", "api/jobs"] {
+            let err = cloud_api_request("GET".into(), path.into(), "tok".into(), None)
+                .await
+                .err()
+                .unwrap_or_else(|| panic!("{path} was accepted"))
+                .to_string();
+            assert!(err.contains("invalid API path"), "{path}: {err}");
+        }
+    }
+
+    #[tokio::test]
+    async fn api_request_only_allows_get_and_post() {
+        let err = cloud_api_request("DELETE".into(), "/api/jobs/1".into(), "tok".into(), None)
+            .await
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(err.contains("unsupported method"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn download_refuses_anything_but_cloud_storage() {
+        for url in [
+            "https://storage.googleapis.com.evil.test/log",
+            "http://storage.googleapis.com/bucket/log",
+            "https://dashboard.maestrodeck.cloud/api/billing/me",
+            "file:///etc/passwd",
+        ] {
+            let err = cloud_download_text(url.into())
+                .await
+                .err()
+                .unwrap_or_else(|| panic!("{url} was accepted"))
+                .to_string();
+            assert!(err.contains("refusing"), "{url}: {err}");
+        }
+    }
+}

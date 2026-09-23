@@ -326,3 +326,154 @@ pub fn apply_managed_java_env() {
 pub fn managed_tools() -> ToolManifest {
     MANIFEST.read().map(|m| m.clone()).unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn zip_with(path: &Path, entries: &[(&str, &[u8])]) {
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
+        // No unix mode recorded: the way Windows-built zips arrive.
+        let opts = zip::write::SimpleFileOptions::default();
+        for (name, data) in entries {
+            zip.start_file(*name, opts).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    fn tar_gz_with(path: &Path, entries: &[(&str, &[u8], u32)]) {
+        let gz = flate2::write::GzEncoder::new(
+            std::fs::File::create(path).unwrap(),
+            flate2::Compression::fast(),
+        );
+        let mut tar = tar::Builder::new(gz);
+        for (name, data, mode) in entries {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(data.len() as u64);
+            header.set_mode(*mode);
+            header.set_cksum();
+            tar.append_data(&mut header, name, *data).unwrap();
+        }
+        tar.into_inner().unwrap().finish().unwrap();
+    }
+
+    #[test]
+    fn a_macos_jdk_tarball_yields_its_launcher() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("java.tar.gz");
+        tar_gz_with(
+            &archive,
+            &[
+                ("jdk-21.0.5+11/Contents/Home/lib/java", b"decoy", 0o644),
+                ("jdk-21.0.5+11/Contents/Home/bin/java", b"launcher", 0o755),
+            ],
+        );
+        let dest = dir.path().join("java");
+
+        extract(&archive, ArchiveKind::TarGz, &dest).unwrap();
+        let java = find_binary(&dest, "java", SEARCH_DEPTH).unwrap();
+
+        assert!(
+            java.ends_with("Contents/Home/bin/java"),
+            "{}",
+            java.display()
+        );
+        assert_eq!(std::fs::read(&java).unwrap(), b"launcher");
+    }
+
+    #[test]
+    fn a_zip_yields_every_file_at_its_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("maestro.zip");
+        zip_with(
+            &archive,
+            &[
+                ("maestro/bin/maestro", b"#!/bin/sh"),
+                ("maestro/lib/maestro.jar", b"jar"),
+            ],
+        );
+        let dest = dir.path().join("maestro");
+
+        extract(&archive, ArchiveKind::Zip, &dest).unwrap();
+
+        assert_eq!(
+            std::fs::read(dest.join("maestro/bin/maestro")).unwrap(),
+            b"#!/bin/sh"
+        );
+        assert!(dest.join("maestro/lib/maestro.jar").is_file());
+    }
+
+    #[test]
+    fn a_corrupt_download_is_reported_rather_than_half_extracted() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("adb.zip");
+        std::fs::write(&archive, b"<html>rate limited</html>").unwrap();
+
+        let err = extract(&archive, ArchiveKind::Zip, &dir.path().join("adb"))
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("archive unreadable"), "{err}");
+    }
+
+    #[test]
+    fn a_zip_entry_cannot_escape_the_tool_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("evil.zip");
+        zip_with(&archive, &[("../escaped.txt", b"pwned")]);
+        let mut check = zip::ZipArchive::new(std::fs::File::open(&archive).unwrap()).unwrap();
+        assert_eq!(check.by_index(0).unwrap().name(), "../escaped.txt");
+        let dest = dir.path().join("tools/adb");
+
+        let _ = extract(&archive, ArchiveKind::Zip, &dest);
+
+        assert!(!dir.path().join("tools/escaped.txt").exists());
+        assert!(!dir.path().join("escaped.txt").exists());
+    }
+
+    #[test]
+    fn a_tar_entry_cannot_escape_the_tool_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("evil.tar.gz");
+        // tar::Builder refuses `..` itself, so write the name into the header raw.
+        let gz = flate2::write::GzEncoder::new(
+            std::fs::File::create(&archive).unwrap(),
+            flate2::Compression::fast(),
+        );
+        let mut tar = tar::Builder::new(gz);
+        let mut header = tar::Header::new_gnu();
+        header.as_gnu_mut().unwrap().name[..14].copy_from_slice(b"../escaped.txt");
+        header.set_size(5);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append(&header, &b"pwned"[..]).unwrap();
+        tar.into_inner().unwrap().finish().unwrap();
+        let mut check = tar::Archive::new(flate2::read::GzDecoder::new(
+            std::fs::File::open(&archive).unwrap(),
+        ));
+        let first = check.entries().unwrap().next().unwrap().unwrap();
+        assert_eq!(&*first.path_bytes(), b"../escaped.txt");
+        let dest = dir.path().join("tools/java");
+
+        let _ = extract(&archive, ArchiveKind::TarGz, &dest);
+
+        assert!(!dir.path().join("tools/escaped.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn make_executable_fixes_a_binary_unpacked_without_its_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("java");
+        std::fs::write(&bin, b"launcher").unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        make_executable(&bin).unwrap();
+
+        let mode = std::fs::metadata(&bin).unwrap().permissions().mode();
+        assert_eq!(mode & 0o111, 0o111, "mode {mode:o}");
+    }
+}
