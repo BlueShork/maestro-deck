@@ -3,7 +3,7 @@
 
 import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
-import { Camera, House, Loader2, Moon, Smartphone, Sun } from "lucide-react";
+import { Camera, House, Moon, Smartphone, Sun } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -20,6 +20,7 @@ import {
 import { DottedGrid } from "@/components/effects/DottedGrid";
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { Logo } from "@/components/Logo";
+import LatticeLoader from "@/components/ui/LatticeLoader";
 import { H264Decoder } from "@/lib/decoder";
 import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
@@ -896,47 +897,64 @@ function EmptyState({
       </DottedGrid>
     );
   }
+  if (lightweight) {
+    return (
+      <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+        <Smartphone className="h-10 w-10 text-muted-foreground/60" />
+        <div className="text-sm font-medium">Lightweight mode</div>
+        <div className="max-w-[16rem] text-xs text-muted-foreground">
+          Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle
+          in Settings to re-enable mirroring.
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
-      <Smartphone className="h-10 w-10 text-muted-foreground/60" />
-      <div className="text-sm font-medium">
-        {lightweight ? "Lightweight mode" : "Waiting for frames…"}
-      </div>
+      <PreviewLoader label="Waiting for the first frame" />
       <div className="max-w-[16rem] text-xs text-muted-foreground">
-        {lightweight
-          ? "Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle in Settings to re-enable mirroring."
-          : "The stream will appear here once scrcpy pushes the first frame."}
+        The stream will appear here once scrcpy pushes the first frame.
       </div>
     </div>
   );
 }
 
+/** The same loader the cloud preview waits with, so every "the screen is on
+ *  its way" reads the same, local or cloud. */
+function PreviewLoader({ label }: { label: string }) {
+  return (
+    <LatticeLoader
+      label={label}
+      grid={4}
+      pattern="pulse"
+      cellSize={8}
+      gap={3}
+      fontSize={13}
+      className="flex-col text-foreground"
+    />
+  );
+}
+
 /// Physical-iPhone preview placeholder. The first connect builds the XCTest driver
-/// on the device (~10 min), so we show an animated spinner, a phase message, and a
-/// running elapsed timer to make clear it's progressing — not frozen.
+/// on the device (~10 min), so the loader's stopwatch and a phase message make
+/// clear it's progressing — not frozen.
 function IosPhysicalWaiting() {
-  const [elapsed, setElapsed] = useState(0);
+  // After ~25s the bridge is almost certainly in the xcodebuild phase. Only the
+  // label changes, so the loader keeps counting from the first connect.
+  const [building, setBuilding] = useState(false);
   useEffect(() => {
-    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => window.clearInterval(id);
+    const id = window.setTimeout(() => setBuilding(true), 25_000);
+    return () => window.clearTimeout(id);
   }, []);
-  // After ~25s the bridge is almost certainly in the xcodebuild phase.
-  const building = elapsed >= 25;
-  const mm = Math.floor(elapsed / 60);
-  const ss = String(elapsed % 60).padStart(2, "0");
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
-      <Loader2 className="h-10 w-10 animate-spin text-muted-foreground/70" />
-      <div className="text-sm font-medium">
-        {building ? "Building the test driver on your iPhone…" : "Connecting to your iPhone…"}
-      </div>
+      <PreviewLoader
+        label={building ? "Building the test driver on your iPhone" : "Connecting to your iPhone"}
+      />
       <div className="max-w-[18rem] text-xs text-muted-foreground">
         {building
           ? "First connect builds the XCTest driver on the device — this can take up to ~10 min. Keep the iPhone unlocked and plugged in; tap Trust if prompted."
           : "Starting the device bridge…"}
-      </div>
-      <div className="font-mono text-xs text-muted-foreground/80">
-        Elapsed {mm}:{ss}
       </div>
     </div>
   );
