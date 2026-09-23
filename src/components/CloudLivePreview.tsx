@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Cloud } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import LatticeLoader from "@/components/ui/LatticeLoader";
 import { fetchLiveFrame } from "@/lib/cloudJobs";
 
 /** Matches the capture interval of runner.py and ios-worker/worker.py
@@ -70,10 +70,17 @@ export function CloudLivePreview({
         />
       ) : (
         <div className="flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
-          <Cloud className="h-10 w-10 animate-pulse text-muted-foreground/60" />
-          <div className="text-sm font-medium">
-            {running ? `Starting the cloud ${device}…` : `Waiting for a free ${device}…`}
-          </div>
+          <LatticeLoader
+            // Remounted per phase so the stopwatch counts the current wait.
+            key={running ? "booting" : "queued"}
+            label={running ? `Starting the cloud ${device}` : `Waiting for a free ${device}`}
+            grid={4}
+            pattern={running ? "pulse" : "rain"}
+            cellSize={8}
+            gap={3}
+            fontSize={13}
+            className="flex-col text-foreground"
+          />
           <div className="max-w-[16rem] text-xs text-muted-foreground">
             {running
               ? platform === "ios"

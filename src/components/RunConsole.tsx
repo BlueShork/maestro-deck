@@ -5,6 +5,7 @@ import { Activity, Ban, CheckCircle2, Eraser, List, Terminal, XCircle } from "lu
 import { memo, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { CloudRunStatus } from "@/components/CloudRunStatus";
 import { MetricsBody } from "@/components/MetricsPanel";
 import { renderAnsi } from "@/lib/ansi";
 import { humanLabel, formatDuration } from "@/lib/stepRenderer";
@@ -125,6 +126,8 @@ export function RunConsole() {
           </Button>
         </div>
       </div>
+
+      <CloudRunStatus />
 
       <div
         ref={scrollRef}
