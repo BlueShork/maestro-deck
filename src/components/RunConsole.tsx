@@ -6,6 +6,7 @@ import { memo, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
 import RubberSegment from "@/components/ui/RubberSegment";
+import StatusMark, { type StatusMarkStatus } from "@/components/ui/StatusMark";
 import { RunStatus } from "@/components/RunStatus";
 import { MetricsBody } from "@/components/MetricsPanel";
 import { renderAnsi } from "@/lib/ansi";
@@ -218,19 +219,17 @@ const SimpleConsoleBody = memo(function SimpleConsoleBody({
   );
 });
 
+const stepMark: Record<StepRunState["status"], StatusMarkStatus> = {
+  pending: "pending",
+  running: "running",
+  done: "done",
+  failed: "failed",
+  skipped: "cancelled",
+};
+
 // Memoized: steps are updated immutably (unchanged steps keep their reference),
 // so only the step whose status/duration changed re-renders.
 const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunState }) {
-  const icon =
-    step.status === "running"
-      ? "▶"
-      : step.status === "done"
-        ? "✓"
-        : step.status === "failed"
-          ? "✗"
-          : step.status === "skipped"
-            ? "⊘"
-            : " ";
   const colorClass =
     step.status === "done"
       ? "text-emerald-600 dark:text-emerald-400"
@@ -247,8 +246,13 @@ const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunSta
         ? "skipped"
         : formatDuration(step.durationMs);
   return (
-    <div className={cn("flex items-baseline gap-2 whitespace-pre", colorClass)}>
-      <span className="w-3 text-center">{icon}</span>
+    <div className={cn("flex items-center gap-2 whitespace-pre", colorClass)}>
+      <StatusMark
+        status={stepMark[step.status]}
+        size={14}
+        doneColor="currentColor"
+        errorColor="currentColor"
+      />
       <span className="flex-1 truncate">{label}</span>
       <span className="tabular-nums text-muted-foreground">{duration}</span>
       {step.status === "failed" && step.error ? (
@@ -274,19 +278,26 @@ function SimpleSummary({
   failedAt: number;
 }) {
   if (stopRequested) {
-    return <div className="mt-2 text-muted-foreground">⏹ Test stopped</div>;
+    return (
+      <div className="mt-2 flex items-center gap-2 text-muted-foreground">
+        <StatusMark status="cancelled" size={14} />
+        Test stopped
+      </div>
+    );
   }
   if (exitCode === 0 && failedAt === -1) {
     return (
-      <div className="mt-2 text-emerald-600 dark:text-emerald-400">
-        ✅ Test passed — {totalSteps} step{totalSteps === 1 ? "" : "s"} in{" "}
+      <div className="mt-2 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+        <StatusMark status="done" size={14} doneColor="currentColor" />
+        Test passed — {totalSteps} step{totalSteps === 1 ? "" : "s"} in{" "}
         {formatDuration(totalMs) || "<0.1s"}
       </div>
     );
   }
   return (
-    <div className="mt-2 text-red-600 dark:text-red-400">
-      ❌ Test failed{failedAt >= 0 ? ` at step ${failedAt + 1}` : ""}
+    <div className="mt-2 flex items-center gap-2 text-red-600 dark:text-red-400">
+      <StatusMark status="failed" size={14} errorColor="currentColor" />
+      Test failed{failedAt >= 0 ? ` at step ${failedAt + 1}` : ""}
     </div>
   );
 }
