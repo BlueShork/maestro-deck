@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 export type ThemeMode = "light" | "dark" | "system";
-export type ConsoleMode = "simple" | "technical";
+export type ConsoleMode = "simple" | "technical" | "performance";
 
 interface SettingsState {
   inspectKey: string;

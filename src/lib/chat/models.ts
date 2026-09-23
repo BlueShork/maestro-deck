@@ -13,6 +13,15 @@ import generated from "./models.generated.json";
  * The runtime never reaches out to models.dev — important for enterprise
  * deployments behind strict outbound policies.
  */
-export const MODELS: ModelInfo[] = generated.models as ModelInfo[];
+/** Billy on Maestro Deck Cloud. The server picks the actual model; this is
+ *  the one entry the picker shows for it. */
+export const MAESTRODECK_MODEL: ModelInfo = {
+  id: "billy",
+  label: "Billy",
+  provider: "maestrodeck",
+  contextWindow: 128_000,
+};
+
+export const MODELS: ModelInfo[] = [MAESTRODECK_MODEL, ...(generated.models as ModelInfo[])];
 
 export const modelsByProvider = (p: ProviderId) => MODELS.filter((m) => m.provider === p);

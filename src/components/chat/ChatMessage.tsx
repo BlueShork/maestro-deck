@@ -1,13 +1,16 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Sparkles } from "lucide-react";
+import { Mic, Sparkles, Square, Volume2 } from "lucide-react";
 import { isValidElement, memo, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { ChatMessage as ChatMessageT, ContentBlock } from "@/types/chat";
 import { messageText } from "@/lib/chat/content";
+import { cn } from "@/lib/utils";
+import { useBillyVoiceStore } from "@/stores/billyVoiceStore";
+import { useChatStore } from "@/stores/chatStore";
 
 import { CodeBlock } from "./CodeBlock";
 import { ToolCallCard } from "./ToolCallCard";
@@ -156,6 +159,12 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
     return (
       <div className="flex justify-end motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
+          {message.viaVoice && (
+            <Mic
+              aria-label="Asked by voice"
+              className="mr-1.5 inline h-3 w-3 -translate-y-px opacity-70"
+            />
+          )}
           {messageText(message)}
         </div>
       </div>
@@ -168,7 +177,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
     const hasVisibleContent = blocks.some((b) => b.type === "text" || b.type === "tool_use");
 
     return (
-      <AssistantShell>
+      <AssistantShell messageId={message.id}>
         {hasVisibleContent ? (
           <div className="text-sm leading-relaxed text-foreground">
             {blocks.map((block, i) => {
@@ -193,7 +202,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
 
   // ── assistant: string content ───────────────────────────────────────────────
   return (
-    <AssistantShell>
+    <AssistantShell messageId={message.id}>
       {messageText(message) ? (
         <div className="text-sm leading-relaxed text-foreground">
           <Markdown text={messageText(message)} />
@@ -209,7 +218,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
  *  full panel width. The previous side-by-side avatar column indented every
  *  assistant message (text, tool cards, code blocks) by ~38px — too much for
  *  a narrow chat panel. */
-function AssistantShell({ children }: { children: ReactNode }) {
+function AssistantShell({ messageId, children }: { messageId: string; children: ReactNode }) {
   return (
     <div className="min-w-0 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
       <div className="mb-1.5 flex items-center gap-2">
@@ -217,9 +226,40 @@ function AssistantShell({ children }: { children: ReactNode }) {
           <Sparkles className="h-3 w-3" />
         </div>
         <span className="text-[11px] font-medium text-muted-foreground">Billy</span>
+        <SpeakButton messageId={messageId} />
       </div>
       {children}
     </div>
+  );
+}
+
+/** Listen to / stop the spoken answer. Shown on answers to a voice question
+ *  (read aloud automatically) and on any finished answer while the chat is
+ *  on Maestro Deck, the provider that can speak. */
+function SpeakButton({ messageId }: { messageId: string }) {
+  const speaking = useBillyVoiceStore((s) => s.speakingId === messageId);
+  const hasAudio = useBillyVoiceStore((s) => messageId in s.audio);
+  const toggleSpeech = useBillyVoiceStore((s) => s.toggleSpeech);
+  const canSpeak = useChatStore(
+    (s) =>
+      s.currentProvider === "maestrodeck" &&
+      !(s.isStreaming && s.messages[s.messages.length - 1]?.id === messageId),
+  );
+  if (!speaking && !hasAudio && !canSpeak) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => void toggleSpeech(messageId)}
+      aria-label={speaking ? "Stop reading aloud" : "Read aloud"}
+      title={speaking ? "Stop" : "Read aloud"}
+      className={cn(
+        "inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+        speaking && "text-primary",
+      )}
+    >
+      {speaking ? <Square className="h-2.5 w-2.5 fill-current" /> : <Volume2 className="h-3 w-3" />}
+    </button>
   );
 }
 

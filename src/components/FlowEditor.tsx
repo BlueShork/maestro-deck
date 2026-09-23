@@ -30,6 +30,7 @@ import {
 import {
   Decoration,
   type DecorationSet,
+  drawSelection,
   EditorView,
   GutterMarker,
   gutterLineClass,
@@ -168,6 +169,11 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
         indentUnit.of("  "),
         bracketMatching(),
         closeBrackets(),
+        // Let CodeMirror draw the caret and selection itself. The native
+        // WebKit caret leaves a ghost behind when the selection is moved
+        // programmatically (every inspector insert does), and the theme's
+        // .cm-cursor / .cm-selectionLayer rules only apply to drawn ones.
+        drawSelection(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
         search({ top: true }),
@@ -209,14 +215,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
           if (v.selectionSet && !syncingFromStore.current) {
             const head = v.state.selection.main.head;
             const line = v.state.doc.lineAt(head);
-            // Only user gestures (click, keyboard move, typing, deleting)
-            // count as "placing" the cursor — mount focus and store sync
-            // dispatches must not flip cursorPlaced.
-            const userDriven = v.transactions.some(
-              (tr) =>
-                tr.isUserEvent("select") || tr.isUserEvent("input") || tr.isUserEvent("delete"),
-            );
-            setCursor(line.number, head - line.from + 1, userDriven);
+            setCursor(line.number, head - line.from + 1);
           }
         }),
       ],
@@ -255,6 +254,10 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: content },
       selection: EditorSelection.cursor(anchor),
+      // A full-document replace loses CodeMirror's scroll anchor, so the
+      // viewport would land back at the top of a long flow. Ask explicitly
+      // for the caret to be revealed.
+      scrollIntoView: true,
     });
     syncingFromStore.current = false;
   }, [content]);

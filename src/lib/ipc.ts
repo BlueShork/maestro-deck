@@ -164,6 +164,32 @@ export const ipc = {
   // Environment prerequisites for the onboarding setup popup.
   environmentStatus: () => call<EnvStatusResult>("environment_status"),
   installTool: (id: "maestro" | "java") => call<void>("install_tool", { id }),
+  /** Installs every missing managed tool into the app's own directory. One
+   *  failure does not stop the others; each reports through setup:done. */
+  setupTools: () => call<void>("setup_tools"),
+  /** Installs the bundled onboarding sample app on a device. Returns its appId. */
+  installSampleApp: (serial: string) => call<string>("install_sample_app", { serial }),
+  /** Path to the bundled sample APK, for the cloud path to upload. */
+  sampleAppApk: () => call<string>("sample_app_apk"),
+  managedTools: () => call<ManagedToolPaths>("managed_tools"),
+  /** PUT a local file to a pre-signed GCS URL. Lives in Rust because the
+   *  webview has no binary read permission and an APK has no business being
+   *  loaded into WebKit memory to be sent straight back out. */
+  cloudUploadFile: (uploadUrl: string, path: string) =>
+    call<void>("cloud_upload_file", { uploadUrl, path }),
+  /** Call the cloud dashboard API. In Rust because the API answers a CORS
+   *  preflight on /api/billing/me only, so a webview fetch to any other route
+   *  is blocked before it leaves. Returns the raw status and body — the
+   *  mapping to user-facing errors stays in TypeScript. */
+  cloudApiRequest: (method: "GET" | "POST", path: string, token: string, body?: string) =>
+    call<{ status: number; body: string }>("cloud_api_request", {
+      method,
+      path,
+      token,
+      body: body ?? null,
+    }),
+  /** Fetch a text artifact from its signed GCS URL — same CORS story. */
+  cloudDownloadText: (url: string) => call<string>("cloud_download_text", { url }),
 };
 
 export interface IosPhysicalSetupStatus {
@@ -172,6 +198,29 @@ export interface IosPhysicalSetupStatus {
   // serde `rename_all = "camelCase"` turns `maestro_is_2_5_1` into `maestroIs251`.
   maestroIs251: boolean;
   maestroPatched: boolean;
+}
+
+/** Absolute paths to the tools the app installed for itself; null when a tool
+ *  has not been installed, or its file has since been removed. */
+export interface ManagedToolPaths {
+  java: string | null;
+  maestro: string | null;
+  adb: string | null;
+}
+
+export interface SetupProgress {
+  tool: string;
+  label: string;
+  phase: "download" | "extract";
+  /** Absent while extracting, whose duration cannot honestly be reported. */
+  percent: number | null;
+}
+
+export interface SetupDone {
+  tool: string;
+  label: string;
+  ok: boolean;
+  error: string | null;
 }
 
 export type EnvCheckId = "maestro" | "java" | "adb" | "xcode";
@@ -248,6 +297,10 @@ export const events = {
     listen<{ id: string; line: string }>("env:install:output", (e) => handler(e.payload)),
   onEnvInstallDone: (handler: (p: { id: string; code: number | null }) => void) =>
     listen<{ id: string; code: number | null }>("env:install:done", (e) => handler(e.payload)),
+  onSetupProgress: (handler: (p: SetupProgress) => void): Promise<UnlistenFn> =>
+    listen<SetupProgress>("setup:progress", (e) => handler(e.payload)),
+  onSetupDone: (handler: (p: SetupDone) => void): Promise<UnlistenFn> =>
+    listen<SetupDone>("setup:done", (e) => handler(e.payload)),
   onRunnerStderr: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stderr", (e) => handler(e.payload)),
   onRunnerExit: (handler: (payload: RunnerExitPayload) => void): Promise<UnlistenFn> =>

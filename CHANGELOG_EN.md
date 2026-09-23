@@ -1,3 +1,32 @@
+# What's New in v0.9.0
+
+## Maestro Deck Cloud
+- **Optional sign-in** with a Maestro Deck Cloud account, plus an account page with your plan and remaining runs.
+- **Run flows in the cloud** — on a hosted Android emulator, a hosted iOS simulator, or a real phone from the device farm. A label next to Run says where the flow is about to go.
+- **Live preview of cloud runs** — watch the Android emulator, iOS simulator or device-farm phone while your flow runs remotely.
+- **Clearer cloud results** — failed runs say why, passing runs are no longer marked as failed, and finished runs stop polling.
+
+## Billy
+- **Maestro Deck as an AI provider** — use Billy with your Maestro Deck account, no API key needed. It is the default on fresh installs; bring-your-own-key providers are still available.
+- **Voice input**, with a live meter while Billy is listening.
+
+## Getting started
+- **Automatic toolchain setup** — on first launch the app installs what it needs (Java, Maestro, …) in its own folder, with a progress chip next to Run.
+- **Guided first test** — a walkthrough with a sample app takes you from writing your first flow to running it, locally or in the cloud. It shows once, and you can reopen it anytime.
+
+## Interface
+- **New update prompt** — updates now arrive as a ticket with the release notes: tear off the stub to install.
+- **Animated step status** in the console, and a segmented control to switch console views.
+- **Loaders** while a device's first frame arrives and while a run uploads, queues and runs.
+- **New toasts** that rise from the bottom and can be swiped away.
+- Refreshed splash screen, empty device state, image bank gallery and console tabs.
+
+## Fixes
+- The editor draws its own caret, and inspector actions are inserted at the last cursor position.
+- Screenshot bank images are aligned correctly.
+
+---
+
 # What's New in v0.8.0
 
 ## Devices panel redesign

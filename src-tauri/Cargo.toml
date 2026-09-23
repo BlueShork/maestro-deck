@@ -1,6 +1,6 @@
 [package]
 name = "maestro-deck"
-version = "0.8.0"
+version = "0.9.0"
 description = "Source-available visual IDE for Maestro mobile tests"
 authors = ["Ethan Morisset <blueshork.dev@gmail.com>"]
 license = "BUSL-1.1"
@@ -41,8 +41,11 @@ jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 # only the bundled Mozilla roots, so corporate TLS-inspection proxies (whose
 # MITM CA lives in the OS trust store) break every request — downloads and
 # Vertex token exchange fail on work machines while the browser works fine.
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
 base64 = "0.22"
+# Wraps a tokio file as a byte stream so an APK is streamed to GCS instead of
+# being read into memory first.
+tokio-util = { version = "0.7", features = ["codec"] }
 
 # Async runtime
 tokio = { version = "1.41", features = ["full"] }
@@ -90,6 +93,9 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # driver is kept alive by a background `maestro studio` process).
 tonic = { version = "0.12", default-features = false, features = ["codegen", "prost", "transport"] }
 prost = "0.13"
+zip = "2"
+flate2 = "1"
+tar = "0.4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 # Auto-update is desktop-only. The plugin downloads the new bundle from

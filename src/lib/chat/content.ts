@@ -12,6 +12,18 @@ export function messageText(m: Pick<ChatMessage, "content">): string {
     .join("");
 }
 
+/** The answer itself: the text after Billy's last tool call, which is what
+ *  gets read aloud. Narration between tool steps ("Je tape…") is left out. */
+export function finalAnswerText(m: Pick<ChatMessage, "content">): string {
+  if (typeof m.content === "string") return m.content;
+  let start = m.content.length;
+  while (start > 0 && m.content[start - 1].type === "text") start--;
+  return m.content
+    .slice(start)
+    .map((b) => (b.type === "text" ? b.text : ""))
+    .join("");
+}
+
 const KEEP_FULL = 4;
 const MAX_CHARS = 2000;
 

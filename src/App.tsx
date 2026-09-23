@@ -5,8 +5,11 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
+import { AccountPage } from "@/components/AccountPage";
+import { CloudInviteDialog } from "@/components/CloudInviteDialog";
 import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
+import { OnboardingOverlay } from "@/components/OnboardingOverlay";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { SetupPopup } from "@/components/SetupPopup";
@@ -18,6 +21,8 @@ import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
+import { startCloudAuthListener, useCloudAuthStore } from "@/stores/cloudAuthStore";
+import { useCloudInviteStore } from "@/stores/cloudInviteStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useReviewStore } from "@/stores/reviewStore";
 import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRegressionStore";
@@ -28,6 +33,8 @@ import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast, useToastStore } from "@/stores/toastStore";
+import { shouldAutoStartWalkthrough, useOnboardingStore } from "@/stores/onboardingStore";
+import { useEnvStore } from "@/stores/envStore";
 import { useTourStore } from "@/stores/tourStore";
 import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -48,10 +55,11 @@ export default function App() {
   const location = useLocation();
   const settingsOpen = location.pathname.startsWith("/settings");
   const imageBankOpen = location.pathname.startsWith("/image-bank");
+  const accountOpen = location.pathname.startsWith("/account");
   useEffect(() => {
-    setShortcutsSuppressed(settingsOpen || imageBankOpen);
+    setShortcutsSuppressed(settingsOpen || imageBankOpen || accountOpen);
     return () => setShortcutsSuppressed(false);
-  }, [settingsOpen, imageBankOpen]);
+  }, [settingsOpen, imageBankOpen, accountOpen]);
   const theme = useSettingsStore((s) => s.theme);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
@@ -72,6 +80,30 @@ export default function App() {
     if (!useTourStore.getState().hasSeenTour) {
       useTourStore.getState().start();
     }
+  }, []);
+
+  // Everyone should meet the hands-on walkthrough once, including the users
+  // who went through the tour before it existed — their tour ended long ago
+  // and will never hand over. It waits for the toolchain, since it ends on
+  // "press Run". Marked done as soon as it is seen, so it never returns.
+  const toolsReady = useEnvStore((s) => s.minimalOk === true);
+  const walkthroughDone = useOnboardingStore((s) => s.done);
+  useEffect(() => {
+    if (
+      shouldAutoStartWalkthrough({
+        hasSeenTour: useTourStore.getState().hasSeenTour,
+        walkthroughDone,
+        toolsReady,
+      })
+    ) {
+      useOnboardingStore.getState().start();
+    }
+  }, [toolsReady, walkthroughDone]);
+
+  // Optional Maestro Deck Cloud sign-in: Firebase persists the session
+  // itself, this just keeps cloudAuthStore in sync with it.
+  useEffect(() => {
+    startCloudAuthListener();
   }, []);
 
   // Silent update check on startup. Skipped if the user disabled it in
@@ -153,6 +185,15 @@ export default function App() {
         if (wasStopped) toast.success("Flow stopped");
         else if (code === 0) toast.success("Flow completed");
         else toast.error("Flow failed", `exit code ${code}`);
+
+        // First run that actually worked, and only for signed-out users: the
+        // one moment the cloud offer is worth hearing. Delayed so the success
+        // toast lands first — the ask should follow the win, not cover it.
+        if (code === 0 && !wasStopped && !useCloudAuthStore.getState().user) {
+          setTimeout(() => {
+            if (!useCloudAuthStore.getState().user) useCloudInviteStore.getState().offer();
+          }, 1600);
+        }
         if (code === 0 && !wasStopped && useVisualRegressionStore.getState().enabled) {
           const target = useRunStore.getState().runTarget;
           const ws = useWorkspaceStore.getState().folderPath;
@@ -310,19 +351,22 @@ export default function App() {
     <>
       {/* Always mounted; hidden (not unmounted) while settings is open so the
           editor + video decoder survive and returning is instant. */}
-      <div className={settingsOpen || imageBankOpen ? "hidden" : "contents"}>
+      <div className={settingsOpen || imageBankOpen || accountOpen ? "hidden" : "contents"}>
         <MainView />
       </div>
       <Routes>
         <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
         <Route path="/image-bank" element={<ImageBankPage />} />
+        <Route path="/account" element={<AccountPage />} />
         {/* MainView already covers "/"; redirect any other unknown path there. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <UpdateDialog />
+      <CloudInviteDialog />
       <QuitConfirmDialog />
       <TourOverlay />
+      <OnboardingOverlay />
       <SetupPopup />
       <Toaster />
     </>

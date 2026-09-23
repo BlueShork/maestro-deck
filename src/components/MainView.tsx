@@ -3,14 +3,12 @@
 
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { tempDir } from "@tauri-apps/api/path";
-import { Suspense, lazy, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
+import { CloudLivePreview } from "@/components/CloudLivePreview";
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
-const MetricsPanel = lazy(() =>
-  import("@/components/MetricsPanel").then((m) => ({ default: m.MetricsPanel })),
-);
 import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
 import { ScreenshotReview } from "@/components/ScreenshotReview";
@@ -27,6 +25,8 @@ import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { startCloudRun, stopWatchingCloudRun } from "@/lib/cloudRunner";
+import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -52,6 +52,11 @@ export function MainView() {
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const panels = usePanelsStore((s) => s.visible);
   const chatOpen = useChatStore((s) => s.isOpen);
+  const cloudJob = useRunStore((s) => s.cloud);
+  // Every cloud fleet uploads frames: the emulator runner, the Mac worker and
+  // the device-farm worker all write the same live.jpg.
+  const cloudTarget = useCloudTargetStore((s) => s.target);
+  const cloudLive = cloudJob && cloudTarget ? { ...cloudJob, platform: cloudTarget } : null;
 
   // `defaultSize` values within a PanelGroup must sum to 100 — react-
   // resizable-panels warns and normalizes otherwise. Since any panel
@@ -91,6 +96,11 @@ export function MainView() {
       resetSteps();
       initSteps(parseFlow(content).steps);
       useRunStore.getState().setRunTarget({ path, kind: "flow" });
+      const cloudTarget = useCloudTargetStore.getState().target;
+      if (cloudTarget) {
+        await startCloudRun(cloudTarget, [path]);
+        return;
+      }
       const pid = await ipc.runFlow(path, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · ${path}]`);
@@ -170,6 +180,12 @@ export function MainView() {
     // Read the pid at call time (via getState) rather than subscribing to it,
     // so MainView — which owns the whole panel layout — doesn't re-render on
     // every run start/stop.
+    // A cloud run has no local process and no cancel endpoint: the most the
+    // app can do is stop watching, which stopWatchingCloudRun says out loud.
+    if (useRunStore.getState().cloud) {
+      stopWatchingCloudRun();
+      return;
+    }
     const pid = useRunStore.getState().pid;
     if (pid === null) return;
     useRunStore.getState().requestStop();
@@ -261,6 +277,13 @@ export function MainView() {
                             className="items-center justify-center bg-card p-4"
                           >
                             <DeviceView />
+                            {cloudLive ? (
+                              <CloudLivePreview
+                                jobId={cloudLive.jobId}
+                                status={cloudLive.status}
+                                platform={cloudLive.platform}
+                              />
+                            ) : null}
                           </PanelShell>
                         </Panel>
                         {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
@@ -294,40 +317,9 @@ export function MainView() {
                       defaultSize={mainBottomSize}
                       minSize={BOTTOM_MIN}
                     >
-                      <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
-                        {panels.console ? (
-                          <Panel
-                            id="console"
-                            order={1}
-                            defaultSize={panels.metrics ? 70 : 100}
-                            minSize={20}
-                          >
-                            <PanelShell id="console">
-                              <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
-                            </PanelShell>
-                          </Panel>
-                        ) : null}
-
-                        {panels.metrics ? (
-                          <>
-                            {panels.console ? (
-                              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-                            ) : null}
-                            <Panel
-                              id="metrics"
-                              order={2}
-                              defaultSize={panels.console ? 30 : 100}
-                              minSize={15}
-                            >
-                              <PanelShell id="metrics">
-                                <Suspense fallback={null}>
-                                  <MetricsPanel />
-                                </Suspense>
-                              </PanelShell>
-                            </Panel>
-                          </>
-                        ) : null}
-                      </PanelGroup>
+                      <PanelShell id="console">
+                        <RunConsole />
+                      </PanelShell>
                     </Panel>
                   </>
                 ) : null}

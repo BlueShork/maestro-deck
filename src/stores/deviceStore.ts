@@ -5,6 +5,7 @@ import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
 import { flowUrl } from "@/lib/utils";
+import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
@@ -104,6 +105,9 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
         device?.platform ?? "android",
         url,
       );
+      // Connecting a device is the gesture for "run here now": it takes the
+      // run target back from the cloud, so the two can never both look chosen.
+      useCloudTargetStore.getState().clear();
       set({
         current: connected,
         connecting: false,

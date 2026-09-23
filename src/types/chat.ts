@@ -26,6 +26,8 @@ export interface ChatMessage {
   role: ChatRole;
   content: string | ContentBlock[];
   createdAt: number;
+  /** A user question that came in by voice (shows a mic badge). */
+  viaVoice?: boolean;
 }
 
 export interface ToolSpec {
@@ -40,7 +42,11 @@ export type ProviderEvent =
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | { type: "stop"; reason: "end_turn" | "tool_use" | "max_tokens" };
 
-export type ProviderId = "anthropic" | "vertex";
+/** Providers the user brings their own key for (stored in the OS keychain). */
+export type ByokProviderId = "anthropic" | "vertex";
+
+/** `maestrodeck` is Billy served by Maestro Deck Cloud, on the user's account. */
+export type ProviderId = "maestrodeck" | ByokProviderId;
 
 export interface AnthropicCredentials {
   apiKey: string;

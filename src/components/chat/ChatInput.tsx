@@ -1,11 +1,14 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, Loader2, Mic, Square } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { cn } from "@/lib/utils";
+import { useBillyVoiceStore } from "@/stores/billyVoiceStore";
 import { useChatStore } from "@/stores/chatStore";
+
+import { RecordingMeter } from "./RecordingMeter";
 
 const MAX_HEIGHT = 180;
 
@@ -17,6 +20,24 @@ export function ChatInput() {
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
   const bumpScroll = useChatStore((s) => s.bumpScroll);
+
+  // Voice goes through Maestro Deck Cloud (Voxtral), so the mic is only
+  // offered with that provider.
+  const voiceAvailable = useChatStore((s) => s.currentProvider === "maestrodeck");
+  const voicePhase = useBillyVoiceStore((s) => s.phase);
+  const startRecording = useBillyVoiceStore((s) => s.startRecording);
+  const sendRecording = useBillyVoiceStore((s) => s.sendRecording);
+  const cancelRecording = useBillyVoiceStore((s) => s.cancelRecording);
+  const recordingActive = voicePhase === "recording";
+
+  useEffect(() => {
+    if (!recordingActive) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") cancelRecording();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recordingActive, cancelRecording]);
 
   // Auto-grow textarea up to MAX_HEIGHT. Whenever the height actually
   // changes, ping MessageList to re-anchor its scroll to the bottom —
@@ -71,41 +92,73 @@ export function ChatInput() {
           )}
         />
         <div className="mt-1 flex items-center justify-between gap-2">
-          <span className="text-[10px] text-muted-foreground/70">
-            <kbd className="rounded border border-border bg-background px-1 font-mono text-[9px]">
-              Enter
-            </kbd>{" "}
-            to send,{" "}
-            <kbd className="rounded border border-border bg-background px-1 font-mono text-[9px]">
-              Shift + Enter
-            </kbd>{" "}
-            for newline
-          </span>
-          {isStreaming ? (
-            <button
-              type="button"
-              onClick={cancel}
-              aria-label="Stop"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-80"
-            >
-              <Square className="h-3.5 w-3.5 fill-current" />
-            </button>
+          {recordingActive ? (
+            <RecordingMeter />
+          ) : voicePhase === "transcribing" ? (
+            <span className="text-[10px] text-muted-foreground">Transcribing…</span>
           ) : (
-            <button
-              type="button"
-              onClick={submit}
-              disabled={!canSend}
-              aria-label="Send"
-              className={cn(
-                "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
-                canSend
-                  ? "bg-primary text-primary-foreground hover:scale-105"
-                  : "bg-muted text-muted-foreground/50 cursor-not-allowed",
-              )}
-            >
-              <ArrowUp className="h-4 w-4" />
-            </button>
+            <span className="text-[10px] text-muted-foreground/70">
+              <kbd className="rounded border border-border bg-background px-1 font-mono text-[9px]">
+                Enter
+              </kbd>{" "}
+              to send,{" "}
+              <kbd className="rounded border border-border bg-background px-1 font-mono text-[9px]">
+                Shift + Enter
+              </kbd>{" "}
+              for newline
+            </span>
           )}
+          <div className="flex items-center gap-1.5">
+            {voiceAvailable && !isStreaming && (
+              <button
+                type="button"
+                onClick={() => void (recordingActive ? sendRecording() : startRecording())}
+                disabled={voicePhase === "transcribing"}
+                aria-label={recordingActive ? "Send voice question" : "Ask by voice"}
+                title={recordingActive ? "Send" : "Ask Billy by voice"}
+                className={cn(
+                  "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
+                  recordingActive
+                    ? "bg-destructive text-destructive-foreground hover:opacity-80"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  "disabled:cursor-wait disabled:opacity-60",
+                )}
+              >
+                {voicePhase === "transcribing" ? (
+                  <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" />
+                ) : recordingActive ? (
+                  <Square className="h-3 w-3 fill-current" />
+                ) : (
+                  <Mic className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={cancel}
+                aria-label="Stop"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-80"
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={!canSend}
+                aria-label="Send"
+                className={cn(
+                  "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
+                  canSend
+                    ? "bg-primary text-primary-foreground hover:scale-105"
+                    : "bg-muted text-muted-foreground/50 cursor-not-allowed",
+                )}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

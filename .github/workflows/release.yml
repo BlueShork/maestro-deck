@@ -70,6 +70,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Extract release notes from CHANGELOG_EN.md
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "body<<__NOTES__"
+            node scripts/release-notes.mjs "${{ github.ref_name }}"
+            echo "__NOTES__"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build, sign, and publish
         uses: tauri-apps/tauri-action@v0
         env:
@@ -91,9 +102,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Maestro Deck ${{ github.ref_name }}"
-          # Body is taken from CHANGELOG_EN.md by the manifest script
-          # below; tauri-action also pulls it as the release body.
-          releaseBody: "See CHANGELOG_EN.md for details."
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           # We disable the action's updater JSON because it silently
@@ -142,6 +151,7 @@ jobs:
   #   needs: release
   #   runs-on: ubuntu-latest
   #   steps:
+  #     - uses: actions/checkout@v7
   #     - name: Generate and upload latest.json
   #       env:
   #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -164,7 +174,7 @@ jobs:
   #           --arg win_sig "$WIN_SIG" --arg win_url "$WIN_URL" \
   #           '{
   #             version: $version,
-  #             notes: "See CHANGELOG_EN.md for details.",
+  #             notes: "",
   #             pub_date: $pubdate,
   #             platforms: {
   #               "darwin-x86_64":  { signature: $mac_sig, url: $mac_url },
@@ -172,4 +182,5 @@ jobs:
   #               "windows-x86_64": { signature: $win_sig, url: $win_url }
   #             }
   #           }' > latest.json
+  #         node scripts/release-notes.mjs "$VERSION" latest.json
   #         gh release upload "$TAG" latest.json --repo "$REPO" --clobber

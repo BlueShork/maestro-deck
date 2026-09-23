@@ -92,7 +92,10 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         padding: "10px 0",
       },
       ".cm-content": {
-        caretColor: c.caret,
+        // drawSelection() renders the caret as a .cm-cursor element; the
+        // native one has to stay hidden or both show at once. This overrides
+        // drawSelection's own base theme, which sets the same thing.
+        caretColor: "transparent",
         padding: "0",
       },
       ".cm-line": { padding: "0 14px" },

@@ -11,8 +11,12 @@ import {
   MousePointer2,
   Play,
   Settings,
+  Cloud,
+  Sparkle,
   Sparkles,
   Square,
+  User,
+  Zap,
 } from "lucide-react";
 
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -30,8 +34,13 @@ import {
 } from "@/components/ui/DropdownMenu";
 import { Separator } from "@/components/ui/Separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip";
+import { tierLabel } from "@/lib/cloudAuth";
+import { CLOUD_ARTIFACTS, CLOUD_TARGET_LABELS } from "@/lib/cloudRunner";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
+import { useCloudAuthStore } from "@/stores/cloudAuthStore";
+import { useCloudTargetStore } from "@/stores/cloudTargetStore";
+import { selectSetupChip, useEnvStore } from "@/stores/envStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
@@ -55,6 +64,54 @@ interface ToolbarProps {
   onRun: () => void;
   onRunAll: () => void;
   onStop: () => void;
+}
+
+/**
+ * Current Maestro Deck Cloud plan, always on screen so the free tier stays
+ * visible without nagging: it's a status pill, not a prompt. Signed out it
+ * reads "Free Tier"; signed in it shows the live pack. Either way it opens
+ * the account page.
+ */
+function PackBadge() {
+  const navigate = useNavigate();
+  const user = useCloudAuthStore((s) => s.user);
+  const billing = useCloudAuthStore((s) => s.billing);
+
+  // Signed in but the balance hasn't arrived: show the pill in a resting
+  // state rather than briefly claiming the user is on the free tier.
+  const pending = Boolean(user) && !billing;
+  const paid = Boolean(billing) && billing?.tier !== "free";
+  const label = !user
+    ? "Free Tier"
+    : pending
+      ? "Plan"
+      : (billing?.currentPack?.displayName ?? tierLabel(billing?.tier ?? "free"));
+  const Icon = paid ? Zap : Sparkle;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={() => navigate("/account")}
+          aria-label={user ? `Plan: ${label}` : "Sign in to Maestro Deck Cloud"}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            paid
+              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+              : "border-border bg-muted/40 text-muted-foreground hover:text-foreground",
+            pending && "opacity-70",
+          )}
+        >
+          <Icon className="h-3 w-3" />
+          {label}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {user ? "Your Maestro Deck Cloud plan" : "Sign in to Maestro Deck Cloud"}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /** Isolated so the periodic fps updates (4 Hz while a device streams)
@@ -100,16 +157,29 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const toggleInspect = useInspectorStore((s) => s.toggle);
   const running = useRunStore((s) => s.running);
   const starting = useRunStore((s) => s.starting);
+  const cloudRun = useRunStore((s) => s.cloud);
+  const cloudTarget = useCloudTargetStore((s) => s.target);
+  // Per platform: iOS installs a zipped .app, Android an .apk. Reading the
+  // apk field for an iOS target would keep Run disabled with a build chosen.
+  const cloudApk = useWorkspaceStore((s) =>
+    cloudTarget === "ios" ? s.cloudIosAppPath : s.cloudApkPath,
+  );
   const folderPath = useWorkspaceStore((s) => s.folderPath);
   const showAllPanels = usePanelsStore((s) => s.showAll);
   const updatePhase = useUpdateStore((s) => s.phase);
   const checkUpdate = useUpdateStore((s) => s.check);
+  const cloudUser = useCloudAuthStore((s) => s.user);
+  const setupChip = useEnvStore(selectSetupChip);
+  // A cloud run uploads the flow and needs nothing installed here, so the
+  // local toolchain must never gate it.
+  const localToolsMissing = useEnvStore((s) => s.minimalOk === false);
 
   return (
     <TooltipProvider delayDuration={200}>
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-3">
         <div className="flex items-center gap-2">
           <Logo className="h-7 w-auto text-foreground" />
+          <PackBadge />
           <Separator orientation="vertical" className="mx-1 h-5" />
           <Tooltip>
             <TooltipTrigger asChild>
@@ -165,6 +235,26 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
           <Separator orientation="vertical" className="mx-1 h-5" />
 
+          {/* Beside Run, because that is where someone reaches when nothing
+              happens. Clicking opens the setup panel with the detail. */}
+          {setupChip ? (
+            <button
+              type="button"
+              onClick={() => useEnvStore.getState().setCollapsed(false)}
+              className={cn(
+                "mr-1 flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors",
+                setupChip.state === "failed"
+                  ? "border-destructive/40 bg-destructive/10 text-destructive-foreground"
+                  : "border-border text-muted-foreground hover:bg-accent/40",
+              )}
+            >
+              {setupChip.state === "installing" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : null}
+              {setupChip.text}
+            </button>
+          ) : null}
+
           <div data-tour="run-controls" className="flex items-center gap-1">
             {starting ? (
               <Button size="default" variant="destructive" disabled>
@@ -176,21 +266,46 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                 <TooltipTrigger asChild>
                   <Button size="default" variant="destructive" onClick={onStop}>
                     <Square className="h-4 w-4" fill="currentColor" />
-                    Stop
+                    {cloudRun ? "Stop watching" : "Stop"}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Stop flow</TooltipContent>
+                {/* The cloud has no cancel endpoint and the run is already
+                    paid for, so this only detaches — say so rather than
+                    implying the job dies with the click. */}
+                <TooltipContent>
+                  {cloudRun ? "Stop watching — the run continues in the cloud" : "Stop flow"}
+                </TooltipContent>
               </Tooltip>
             ) : (
               <>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="default" variant="default" onClick={onRun}>
-                      <Play className="h-4 w-4" fill="currentColor" />
-                      Run
+                    {/* The button names its destination. Running in the cloud
+                        costs a run and cannot be cancelled, so the difference
+                        has to be visible before the click, not after. */}
+                    <Button
+                      size="default"
+                      variant="default"
+                      onClick={onRun}
+                      disabled={cloudTarget !== null ? !cloudApk : localToolsMissing}
+                    >
+                      {cloudTarget ? (
+                        <Cloud className="h-4 w-4" />
+                      ) : (
+                        <Play className="h-4 w-4" fill="currentColor" />
+                      )}
+                      {cloudTarget ? "Run in cloud" : "Run"}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Run flow (Cmd/Ctrl+R)</TooltipContent>
+                  <TooltipContent>
+                    {!cloudTarget
+                      ? localToolsMissing
+                        ? (setupChip?.text ?? "Setting up the tools needed to run locally")
+                        : "Run flow (Cmd/Ctrl+R)"
+                      : !cloudApk
+                        ? `${CLOUD_ARTIFACTS[cloudTarget].prompt}, under Cloud in the device panel`
+                        : `Runs on ${CLOUD_TARGET_LABELS[cloudTarget]} — spends 1 run once it starts, and cannot be cancelled`}
+                  </TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -198,14 +313,18 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                       size="default"
                       variant="outline"
                       onClick={onRunAll}
-                      disabled={!folderPath}
+                      disabled={!folderPath || cloudTarget !== null}
                     >
                       <ListChecks className="h-4 w-4" />
                       Run all
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {folderPath ? "Run every flow in the workspace" : "Open a folder to enable"}
+                    {cloudTarget
+                      ? "Run all is local-only for now — clear the cloud target to use it"
+                      : folderPath
+                        ? "Run every flow in the workspace"
+                        : "Open a folder to enable"}
                   </TooltipContent>
                 </Tooltip>
               </>
@@ -277,6 +396,22 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
               </Button>
             </TooltipTrigger>
             <TooltipContent>Image bank</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant={cloudUser ? "secondary" : "ghost"}
+                onClick={() => navigate("/account")}
+                aria-label="Maestro Deck Cloud account"
+              >
+                <User className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {cloudUser ? `Signed in as ${cloudUser.email}` : "Sign in to Maestro Deck Cloud"}
+            </TooltipContent>
           </Tooltip>
 
           <Tooltip>

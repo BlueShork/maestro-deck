@@ -15,10 +15,11 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
+import { FlowScrollGrid } from "@/components/effects/FlowScrollGrid";
 import { Button } from "@/components/ui/Button";
 import { filterGroups, filterImages } from "@/lib/bankFilter";
 import { ipc } from "@/lib/ipc";
@@ -64,6 +65,7 @@ function Thumb({
   deviceKey,
   image,
   index,
+  aspect,
   onOpen,
   onDelete,
 }: {
@@ -71,6 +73,8 @@ function Thumb({
   deviceKey: string;
   image: BankImage;
   index: number;
+  /** Width / height of the screen mat, shared by the whole device group. */
+  aspect: number;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -100,7 +104,8 @@ function Thumb({
         type="button"
         onClick={onOpen}
         aria-label={`Open ${image.name}`}
-        className="relative flex aspect-[3/4] items-center justify-center overflow-hidden bg-[radial-gradient(120%_120%_at_50%_0%,hsl(var(--muted))_0%,hsl(var(--background))_100%)] p-3"
+        style={{ aspectRatio: aspect }}
+        className="relative flex items-center justify-center overflow-hidden bg-[radial-gradient(120%_120%_at_50%_0%,hsl(var(--muted))_0%,hsl(var(--background))_100%)] p-2"
       >
         {src ? (
           <img
@@ -351,6 +356,7 @@ export function ImageBankPage() {
   const [confirmGroup, setConfirmGroup] = useState(false);
   const [query, setQuery] = useState("");
   const mountedRef = useRef(true);
+  const galleryScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Reset on (re)mount too — React 18 StrictMode mounts, unmounts, then
@@ -403,6 +409,16 @@ export function ImageBankPage() {
   const totalImages = groups.reduce((n, g) => n + g.images.length, 0);
   const activeMeta = activeGroup ? parseDeviceKey(activeGroup.device_key) : null;
   const activeSize = activeGroup?.images.reduce((n, i) => n + i.size_bytes, 0) ?? 0;
+  // Size the mats to the group's typical screenshot shape (median, so one odd
+  // capture doesn't reshape the grid) instead of a fixed 3:4 box that leaves
+  // landscape web captures floating in empty space.
+  const groupAspect = useMemo(() => {
+    const ratios = (activeGroup?.images ?? [])
+      .filter((i) => i.width > 0 && i.height > 0)
+      .map((i) => i.width / i.height)
+      .sort((a, b) => a - b);
+    return ratios.length ? ratios[Math.floor(ratios.length / 2)] : 3 / 4;
+  }, [activeGroup]);
 
   const visibleGroups = filterGroups(groups, query);
   const visibleImages = activeGroup ? filterImages(activeGroup.images, query) : [];
@@ -543,7 +559,7 @@ export function ImageBankPage() {
           </nav>
 
           {/* Gallery */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={galleryScrollRef} className="min-h-0 flex-1 overflow-y-auto">
             {activeGroup && activeMeta ? (
               <div className="p-5">
                 <div className="mb-4 flex items-end justify-between gap-3">
@@ -588,7 +604,10 @@ export function ImageBankPage() {
                     No screenshot matches "{query.trim()}" in this device group.
                   </EmptyState>
                 ) : (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4">
+                  <FlowScrollGrid
+                    scrollContainerRef={galleryScrollRef}
+                    minItemWidth={groupAspect < 1 ? 150 : 300}
+                  >
                     {visibleImages.map((img) => (
                       <Thumb
                         key={img.name}
@@ -596,6 +615,7 @@ export function ImageBankPage() {
                         deviceKey={activeGroup.device_key}
                         image={img}
                         index={activeGroup.images.indexOf(img)}
+                        aspect={groupAspect}
                         onOpen={() => setLightboxIndex(activeGroup.images.indexOf(img))}
                         onDelete={() =>
                           void ipc
@@ -604,7 +624,7 @@ export function ImageBankPage() {
                         }
                       />
                     ))}
-                  </div>
+                  </FlowScrollGrid>
                 )}
               </div>
             ) : null}
