@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import { runAgentLoop, TURN_LIMIT_NOTICE } from "@/lib/chat/agentLoop";
+import { MAESTRODECK_MODEL } from "@/lib/chat/models";
 import { getProvider } from "@/lib/chat/registry";
 import { getEffectiveBillyPrompt } from "@/lib/chat/systemPrompt";
 import { ALL_TOOLS, executeTool } from "@/lib/chat/tools";
@@ -50,15 +51,19 @@ interface ChatState {
   toggle: () => void;
   setOpen: (open: boolean) => void;
   setProvider: (provider: ProviderId, model: string) => void;
-  sendMessage: (text: string) => Promise<void>;
+  /** Resolves with the answer's message id once Billy has finished, or null
+   *  when nothing was sent, it failed, or the user stopped it. */
+  sendMessage: (text: string, opts?: { viaVoice?: boolean }) => Promise<string | null>;
   cancel: () => void;
   clear: () => void;
   bumpScroll: () => void;
 }
 
+// Billy on Maestro Deck Cloud needs no key, only an account, so it's what a
+// fresh install starts on. A choice already made is persisted and kept.
 const DEFAULTS = {
-  provider: "anthropic" as ProviderId,
-  model: "claude-sonnet-4-6",
+  provider: "maestrodeck" as ProviderId,
+  model: MAESTRODECK_MODEL.id,
 };
 
 export const useChatStore = create<ChatState>()(
@@ -79,14 +84,19 @@ export const useChatStore = create<ChatState>()(
       setProvider: (provider, model) =>
         set({ currentProvider: provider, currentModel: model, error: null }),
 
-      sendMessage: async (text) => {
+      sendMessage: async (text, opts) => {
         const trimmed = text.trim();
-        if (!trimmed || get().isStreaming) return;
+        if (!trimmed || get().isStreaming) return null;
 
         const provider = await getProvider(get().currentProvider);
         if (!provider) {
-          set({ error: "No credentials configured for this provider. Open Settings to add them." });
-          return;
+          set({
+            error:
+              get().currentProvider === "maestrodeck"
+                ? "Sign in to your Maestro Deck account to use Billy, or pick your own key in Settings → AI."
+                : "No credentials configured for this provider. Open Settings to add them.",
+          });
+          return null;
         }
 
         const userMsg: ChatMessage = {
@@ -94,6 +104,7 @@ export const useChatStore = create<ChatState>()(
           role: "user",
           content: trimmed,
           createdAt: Date.now(),
+          ...(opts?.viaVoice ? { viaVoice: true } : {}),
         };
         const assistantId = crypto.randomUUID();
         const assistantPlaceholder: ChatMessage = {
@@ -138,6 +149,14 @@ export const useChatStore = create<ChatState>()(
           if (flow.content.trim()) {
             contextParts.push(
               `# Currently open file\n\nThe editor is showing \`${flow.filePath ?? "(unsaved)"}\` with this content:\n\n\`\`\`yaml\n${flow.content}\n\`\`\``,
+            );
+          }
+          if (opts?.viaVoice) {
+            contextParts.push(
+              `# Voice\n\n` +
+                `The user asked this out loud, and your final answer (the text after your last tool call) will be read aloud by a voice synthesizer. ` +
+                `Keep that final answer to 2 to 4 short, natural sentences: no lists, tables, headings or emojis. ` +
+                `Put any YAML or command in a code block after the explanation: it is shown on screen, not read.`,
             );
           }
           contextParts.push(
@@ -202,6 +221,8 @@ export const useChatStore = create<ChatState>()(
               appendBlock({ type: "text", text: `\n\n_${TURN_LIMIT_NOTICE}_` });
             }
           }
+          // The loop can also return early on a stop, without throwing.
+          return abort.signal.aborted ? null : assistantId;
         } catch (err) {
           if (abort.signal.aborted) {
             set((s) => ({
@@ -232,6 +253,7 @@ export const useChatStore = create<ChatState>()(
               error: message,
             }));
           }
+          return null;
         } finally {
           set({ isStreaming: false, abort: null });
         }

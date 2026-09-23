@@ -9,5 +9,8 @@
 	     touched. No actual camera images are ever accessed. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Maestro Deck mirrors the screen of a USB-connected iPhone for the live device preview. macOS exposes the device screen as a capture device, which requires camera access. The phone's camera itself is never used.</string>
+	<!-- Asking Billy a question out loud (chat, Maestro Deck provider). -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Maestro Deck uses the microphone when you ask Billy a question out loud. The recording is only sent to Maestro Deck Cloud to be transcribed.</string>
 </dict>
 </plist>

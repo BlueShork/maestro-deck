@@ -97,6 +97,10 @@ export async function fetchCloudBilling(): Promise<CloudBillingInfo> {
   return (await res.json()) as CloudBillingInfo;
 }
 
+export function isCloudSignedIn(): boolean {
+  return auth.currentUser !== null;
+}
+
 export function onCloudAuthStateChanged(callback: (user: CloudUser | null) => void) {
   return onFirebaseAuthStateChanged(auth, callback);
 }

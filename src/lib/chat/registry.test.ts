@@ -5,6 +5,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getAnthropic = vi.fn();
 const getVertex = vi.fn();
+const isCloudSignedIn = vi.fn();
+
+vi.mock("@/lib/cloudAuth", () => ({
+  isCloudSignedIn: () => isCloudSignedIn(),
+}));
+
+vi.mock("./MaestroDeckProvider", () => ({
+  MaestroDeckProvider: class {
+    kind = "maestrodeck";
+  },
+}));
 
 vi.mock("./credentials", () => ({
   credentials: {
@@ -39,6 +50,23 @@ async function freshRegistry() {
 beforeEach(() => {
   getAnthropic.mockReset();
   getVertex.mockReset();
+  isCloudSignedIn.mockReset();
+});
+
+describe("getProvider — maestrodeck", () => {
+  it("returns null when not signed in to a Maestro Deck account", async () => {
+    isCloudSignedIn.mockReturnValue(false);
+    const { getProvider } = await freshRegistry();
+    expect(await getProvider("maestrodeck")).toBeNull();
+  });
+
+  it("returns a provider once signed in, and null again after signing out", async () => {
+    isCloudSignedIn.mockReturnValue(true);
+    const { getProvider } = await freshRegistry();
+    expect(await getProvider("maestrodeck")).not.toBeNull();
+    isCloudSignedIn.mockReturnValue(false);
+    expect(await getProvider("maestrodeck")).toBeNull();
+  });
 });
 
 describe("getProvider — anthropic", () => {

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ChatMessage } from "@/types/chat";
 
-import { messageText, truncateToolResults } from "./content";
+import { finalAnswerText, messageText, truncateToolResults } from "./content";
 
 const msg = (content: ChatMessage["content"]): ChatMessage => ({
   id: "x",
@@ -61,5 +61,31 @@ describe("truncateToolResults", () => {
       msg([{ type: "tool_result", toolUseId: "1", name: "tap", content: "ok" }]),
     ];
     expect(truncateToolResults(messages)).toEqual(messages);
+  });
+});
+
+describe("finalAnswerText", () => {
+  it("returns string content as-is", () => {
+    expect(finalAnswerText(msg("Bonjour"))).toBe("Bonjour");
+  });
+
+  it("keeps only the text after the last tool call", () => {
+    expect(
+      finalAnswerText(
+        msg([
+          { type: "text", text: "Je regarde l'écran." },
+          { type: "tool_use", id: "1", name: "get_screen", input: {} },
+          { type: "tool_result", toolUseId: "1", name: "get_screen", content: "…" },
+          { type: "text", text: "Le bouton " },
+          { type: "text", text: "Login est visible." },
+        ]),
+      ),
+    ).toBe("Le bouton Login est visible.");
+  });
+
+  it("is empty when the answer ends on a tool call", () => {
+    expect(
+      finalAnswerText(msg([{ type: "tool_use", id: "1", name: "get_screen", input: {} }])),
+    ).toBe("");
   });
 });

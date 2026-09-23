@@ -16,6 +16,7 @@ import { useChatStore } from "@/stores/chatStore";
 import type { ProviderId } from "@/types/chat";
 
 const PROVIDER_LABEL: Record<ProviderId, string> = {
+  maestrodeck: "Maestro Deck",
   anthropic: "Anthropic",
   vertex: "Vertex AI",
 };
@@ -28,7 +29,11 @@ export function ModelPicker() {
   const current = MODELS.find((m) => m.id === model && m.provider === provider);
   const label = current ? `${PROVIDER_LABEL[provider]} · ${current.label}` : "Select model";
 
-  const grouped: Record<ProviderId, typeof MODELS> = { anthropic: [], vertex: [] };
+  const grouped: Record<ProviderId, typeof MODELS> = {
+    maestrodeck: [],
+    anthropic: [],
+    vertex: [],
+  };
   for (const m of MODELS) grouped[m.provider].push(m);
 
   return (
