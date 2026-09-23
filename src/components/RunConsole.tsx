@@ -5,6 +5,7 @@ import { Activity, Ban, CheckCircle2, Eraser, List, Terminal, XCircle } from "lu
 import { memo, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
+import RubberSegment from "@/components/ui/RubberSegment";
 import { RunStatus } from "@/components/RunStatus";
 import { MetricsBody } from "@/components/MetricsPanel";
 import { renderAnsi } from "@/lib/ansi";
@@ -94,25 +95,24 @@ export function RunConsole() {
           ) : null}
         </div>
         <div className="flex items-center gap-1">
-          <div className="mr-1 flex overflow-hidden rounded border border-border">
-            {CONSOLE_TABS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setConsoleMode(id)}
-                aria-pressed={consoleMode === id}
-                className={cn(
-                  "flex items-center gap-1 px-2 py-0.5 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  consoleMode === id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-transparent text-muted-foreground hover:bg-muted",
-                )}
-              >
-                <Icon className="h-3 w-3" />
-                {label}
-              </button>
-            ))}
-          </div>
+          <RubberSegment
+            aria-label="Console view"
+            size="sm"
+            radius={6}
+            inset={2}
+            items={CONSOLE_TABS.map(({ id, label, icon: Icon }) => ({
+              value: id,
+              label,
+              icon: <Icon className="h-3 w-3" />,
+            }))}
+            value={consoleMode}
+            onChange={(id) => setConsoleMode(id as ConsoleMode)}
+            trackColor="hsl(var(--border))"
+            thumbColor="hsl(var(--primary))"
+            textColor="hsl(var(--muted-foreground))"
+            activeTextColor="hsl(var(--primary-foreground))"
+            className="mr-1 text-[11px]"
+          />
           <Button
             size="xs"
             variant="ghost"
