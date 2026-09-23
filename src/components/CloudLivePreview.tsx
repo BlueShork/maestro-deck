@@ -4,18 +4,32 @@
 import { useEffect, useState } from "react";
 
 import LatticeLoader from "@/components/ui/LatticeLoader";
-import { fetchLiveFrame } from "@/lib/cloudJobs";
+import { fetchLiveFrame, type CloudJobPlatform } from "@/lib/cloudJobs";
 
-/** Matches the capture interval of runner.py and ios-worker/worker.py
- *  (LiveScreen in both). */
+/** Matches the capture interval of runner.py, ios-worker/worker.py and
+ *  android-physical-worker/worker.py (LiveScreen in all three). */
 const LIVE_POLL_MS = 1000;
 
+/** What the placeholder calls the device it is waiting on. */
+const DEVICE_NAME: Record<CloudJobPlatform, string> = {
+  android: "emulator",
+  android_physical: "phone",
+  ios: "simulator",
+};
+
+/** Only the emulator makes the wait long enough to warn about. */
+const BOOT_HINT: Record<CloudJobPlatform, string> = {
+  android: "Its screen shows here once it has booted, which takes a few minutes.",
+  android_physical: "Its screen shows here in a moment.",
+  ios: "Its screen shows here once it has booted.",
+};
+
 /**
- * Read-only view of a cloud emulator or simulator run, laid over the device
- * panel.
+ * Read-only view of a cloud run, laid over the device panel.
  *
- * The runner (Android) or the Mac worker (iOS) uploads a downscaled screenshot
- * about once a second; this polls for it. An <img>, not the device canvas: the canvas belongs to the local
+ * The runner (Android emulator), the Mac worker (iOS) or the device-farm
+ * worker (physical Android) uploads a downscaled screenshot about once a
+ * second; this polls for it. An <img>, not the device canvas: the canvas belongs to the local
  * device, and its taps would land on the phone on the desk, not in the cloud.
  *
  * No frame arrives while the job is queued or while the device boots — several
@@ -29,9 +43,9 @@ export function CloudLivePreview({
 }: {
   jobId: string;
   status: string;
-  platform: "android" | "ios";
+  platform: CloudJobPlatform;
 }) {
-  const device = platform === "ios" ? "simulator" : "emulator";
+  const device = DEVICE_NAME[platform];
   const [frame, setFrame] = useState<string | null>(null);
   const running = status === "running";
 
@@ -73,7 +87,13 @@ export function CloudLivePreview({
           <LatticeLoader
             // Remounted per phase so the stopwatch counts the current wait.
             key={running ? "booting" : "queued"}
-            label={running ? `Starting the cloud ${device}` : `Waiting for a free ${device}`}
+            label={
+              running
+                ? platform === "android_physical"
+                  ? "Connecting to the phone"
+                  : `Starting the cloud ${device}`
+                : `Waiting for a free ${device}`
+            }
             grid={4}
             pattern={running ? "pulse" : "rain"}
             cellSize={8}
@@ -83,9 +103,7 @@ export function CloudLivePreview({
           />
           <div className="max-w-[16rem] text-xs text-muted-foreground">
             {running
-              ? platform === "ios"
-                ? "Its screen shows here once it has booted."
-                : "Its screen shows here once it has booted, which takes a few minutes."
+              ? BOOT_HINT[platform]
               : "The job is queued. Its screen shows here once it starts."}
           </div>
         </div>

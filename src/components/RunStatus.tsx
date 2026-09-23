@@ -23,7 +23,7 @@ const WAITING_FOR: Record<CloudJobPlatform, string> = {
 /** What the wait is made of, so a long one reads as progress, not a hang. */
 const RUNNING_HINT: Record<CloudJobPlatform, string> = {
   android: "The emulator boots first, a few minutes. Its screen shows in the device panel.",
-  android_physical: "The log arrives when the run ends.",
+  android_physical: "Its screen shows in the device panel. The log arrives when the run ends.",
   ios: "The simulator boots first. Its screen shows in the device panel.",
 };
 
