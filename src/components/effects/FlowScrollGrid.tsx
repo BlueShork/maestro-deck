@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { motion, type MotionValue, useScroll, useTransform } from "motion/react";
-import { type ReactNode, type RefObject } from "react";
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
-const ITEMS_PER_ROW = 3;
+const GAP_PX = 16;
 
 function FlowScrollCell({
   index,
   totalItems,
+  itemsPerRow: ITEMS_PER_ROW,
   scrollYProgress,
   children,
 }: {
   index: number;
   totalItems: number;
+  itemsPerRow: number;
   scrollYProgress: MotionValue<number>;
   children: ReactNode;
 }) {
@@ -68,32 +70,60 @@ function FlowScrollCell({
   );
 }
 
+/**
+ * Grid whose column count follows its own width: as many columns as fit at
+ * `minItemWidth`. The count is measured (not left to CSS auto-fill) because
+ * the scroll animation needs to know which cells sit on the row edges.
+ */
 export function FlowScrollGrid({
   children,
   scrollContainerRef,
+  minItemWidth = 280,
   className,
 }: {
   children: ReactNode[];
   scrollContainerRef: RefObject<HTMLElement | null>;
+  minItemWidth?: number;
   className?: string;
 }) {
   const { scrollYProgress } = useScroll({
     container: scrollContainerRef,
     offset: ["start start", "end end"],
   });
-  const gridClassName = className ? className : "grid grid-cols-3 gap-4 md:gap-6";
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [itemsPerRow, setItemsPerRow] = useState(3);
 
-  if (children.length < ITEMS_PER_ROW * 2) {
-    return <div className={gridClassName}>{children}</div>;
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () => {
+      const cols = Math.floor((el.clientWidth + GAP_PX) / (minItemWidth + GAP_PX));
+      setItemsPerRow(Math.max(1, cols));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [minItemWidth]);
+
+  const gridProps = {
+    ref: gridRef,
+    className: className ?? "grid",
+    style: { gridTemplateColumns: `repeat(${itemsPerRow}, minmax(0, 1fr))`, gap: GAP_PX },
+  };
+
+  if (children.length < itemsPerRow * 2) {
+    return <div {...gridProps}>{children}</div>;
   }
 
   return (
-    <div className={gridClassName}>
+    <div {...gridProps}>
       {children.map((child, index) => (
         <FlowScrollCell
           key={index}
           index={index}
           totalItems={children.length}
+          itemsPerRow={itemsPerRow}
           scrollYProgress={scrollYProgress}
         >
           {child}
