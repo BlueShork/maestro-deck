@@ -3,7 +3,7 @@
 ## Maestro Deck Cloud
 - **Optional sign-in** with a Maestro Deck Cloud account, plus an account page with your plan and remaining runs.
 - **Run flows in the cloud** — on a hosted Android emulator, a hosted iOS simulator, or a real phone from the device farm. A label next to Run says where the flow is about to go.
-- **Live preview of cloud runs** — watch the Android emulator or iOS simulator while your flow runs remotely.
+- **Live preview of cloud runs** — watch the Android emulator, iOS simulator or device-farm phone while your flow runs remotely.
 - **Clearer cloud results** — failed runs say why, passing runs are no longer marked as failed, and finished runs stop polling.
 
 ## Billy
