@@ -53,8 +53,12 @@ export function MainView() {
   const panels = usePanelsStore((s) => s.visible);
   const chatOpen = useChatStore((s) => s.isOpen);
   const cloudJob = useRunStore((s) => s.cloud);
-  // Only the emulator fleet uploads frames; the farm and iOS have no live view.
-  const cloudLive = useCloudTargetStore((s) => s.target) === "android" ? cloudJob : null;
+  // Only the hosted emulator and simulator upload frames; the farm has no live view.
+  const cloudTarget = useCloudTargetStore((s) => s.target);
+  const cloudLive =
+    cloudJob && (cloudTarget === "android" || cloudTarget === "ios")
+      ? { ...cloudJob, platform: cloudTarget }
+      : null;
 
   // `defaultSize` values within a PanelGroup must sum to 100 — react-
   // resizable-panels warns and normalizes otherwise. Since any panel
@@ -276,7 +280,11 @@ export function MainView() {
                           >
                             <DeviceView />
                             {cloudLive ? (
-                              <CloudLivePreview jobId={cloudLive.jobId} status={cloudLive.status} />
+                              <CloudLivePreview
+                                jobId={cloudLive.jobId}
+                                status={cloudLive.status}
+                                platform={cloudLive.platform}
+                              />
                             ) : null}
                           </PanelShell>
                         </Panel>
