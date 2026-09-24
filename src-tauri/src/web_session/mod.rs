@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+#[cfg(any(target_os = "macos", windows))]
 use tokio::process::Command;
 use tokio::sync::oneshot;
 use tokio::time::sleep;
