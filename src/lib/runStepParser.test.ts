@@ -146,6 +146,41 @@ describe("parseLine (step events)", () => {
     });
   });
 
+  // maestro 2.8+ appends the element-relative start point (`point:`).
+  it("parses swipe on an element with a relative point", () => {
+    expect(parseLine(`Swiping in UP direction on "Card" at 50%,90%... COMPLETED`)).toMatchObject({
+      command: "swipe",
+      arg: "Card",
+    });
+    expect(parseLine(`Swiping in UP direction on id: card at 50%, 90%... COMPLETED`)).toMatchObject(
+      {
+        command: "swipe",
+        arg: "card",
+      },
+    );
+    // A quoted text that merely contains " at " is not a point suffix.
+    expect(parseLine(`Swiping in UP direction on "Look at me"... COMPLETED`)).toMatchObject({
+      command: "swipe",
+      arg: "Look at me",
+    });
+  });
+
+  // maestro 2.9 dark-mode commands.
+  it("parses setDarkMode, toggleDarkMode, assertDarkMode and assertLightMode", () => {
+    expect(parseLine(`Enable dark mode... COMPLETED`)).toMatchObject({ command: "setDarkMode" });
+    expect(parseLine(`Disable dark mode... COMPLETED`)).toMatchObject({ command: "setDarkMode" });
+    expect(parseLine(`Toggle dark mode... COMPLETED`)).toMatchObject({
+      command: "toggleDarkMode",
+    });
+    expect(parseLine(`Assert dark mode is enabled... FAILED`)).toMatchObject({
+      command: "assertDarkMode",
+      kind: "failed",
+    });
+    expect(parseLine(`Assert dark mode is disabled... COMPLETED`)).toMatchObject({
+      command: "assertLightMode",
+    });
+  });
+
   it("parses pressKey (Press {Key} key) and back (Press back)", () => {
     expect(parseLine(`Press Enter key... COMPLETED`)).toMatchObject({
       command: "pressKey",

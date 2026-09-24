@@ -43,7 +43,7 @@ describe("settingsStore defaults", () => {
     expect(s.theme).toBe("system");
     expect(s.streamEnabled).toBe(true);
     // Fast hierarchy is on by default — it falls back to the CLI path if
-    // the studio keeper fails, so there's no downside to opting everyone in.
+    // the driver keeper fails, so there's no downside to opting everyone in.
     expect(s.fastHierarchyEnabled).toBe(true);
     expect(s.autoSaveEnabled).toBe(true);
     expect(s.consoleMode).toBe("simple");

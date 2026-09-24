@@ -24,7 +24,7 @@ pub(crate) fn parse_java_major(out: &str) -> Option<u32> {
 
 use serde::Serialize;
 
-pub(crate) const REQUIRED_MAESTRO: &str = "2.5.1";
+pub(crate) const REQUIRED_MAESTRO: &str = "2.10.0";
 pub(crate) const MIN_JAVA_MAJOR: u32 = 17;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -353,11 +353,16 @@ mod tests {
     }
 
     #[test]
-    fn maestro_251_is_ok_other_versions_are_wrong_version() {
-        assert_eq!(maestro_check(Some("2.5.1".into()), None).status, "ok");
-        let c = maestro_check(Some("2.6.0".into()), None);
+    fn maestro_2_10_0_is_ok_other_versions_are_wrong_version() {
+        assert_eq!(maestro_check(Some("2.10.0".into()), None).status, "ok");
+        // 2.5.1 still ships `maestro studio`, which the app no longer uses.
+        let c = maestro_check(Some("2.5.1".into()), None);
         assert_eq!(c.status, "wrong-version");
-        assert_eq!(c.detail.as_deref(), Some("need 2.5.1"));
+        assert_eq!(c.detail.as_deref(), Some("need 2.10.0"));
+        assert_eq!(
+            maestro_check(Some("2.9.0".into()), None).status,
+            "wrong-version"
+        );
         assert_eq!(maestro_check(None, None).status, "missing");
     }
 

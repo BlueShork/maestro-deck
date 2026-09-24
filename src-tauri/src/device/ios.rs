@@ -5,7 +5,7 @@
 //! physical iPhones via `xcrun devicectl list devices`. Both surface as
 //! `Platform::Ios`; physical devices carry `physical: true` so the connect /
 //! keeper / screenshot paths select the `maestro-ios-device` bridge instead of
-//! the simulator's `simctl` + `maestro studio`.
+//! the simulator's `simctl` + `maestro mcp`.
 
 use std::collections::BTreeMap;
 use std::process::Command;

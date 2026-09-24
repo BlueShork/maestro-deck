@@ -3,6 +3,8 @@
     "label": "addMedia",
     "info": "Add images or videos to the device gallery for media picker testing."
   },
+  { "label": "assertDarkMode", "info": "Assert that the device is in dark mode." },
+  { "label": "assertLightMode", "info": "Assert that the device is in light mode." },
   {
     "label": "assertNoDefectsWithAI",
     "info": "AI-powered visual testing to detect UI defects and anomalies."
@@ -88,6 +90,7 @@
     "label": "setClipboard",
     "info": "Set the device clipboard content to a specified text value."
   },
+  { "label": "setDarkMode", "info": "Switch the device theme to dark or light mode." },
   {
     "label": "setLocation",
     "info": "Set device GPS location to specific coordinates for location testing."
@@ -122,6 +125,7 @@
     "label": "toggleAirplaneMode",
     "info": "Toggle airplane mode on or off during test execution."
   },
+  { "label": "toggleDarkMode", "info": "Toggle the device theme between dark and light mode." },
   { "label": "travel", "info": "Simulate time travel by adjusting the device system clock." },
   {
     "label": "waitForAnimationToEnd",

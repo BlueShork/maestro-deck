@@ -50,6 +50,35 @@ describe("toastStore.push", () => {
   });
 });
 
+describe("toastStore.dismiss during the swap delay", () => {
+  // Regression: a quick op (driver recovery ~100 ms) dismissed its toast
+  // before the delayed insert ran; the dismiss hit nothing and the toast
+  // then appeared — persistent — and never went away.
+  it("a toast dismissed before it is inserted never shows up", () => {
+    useToastStore.getState().push({ title: "inspecting", variant: "action", persistent: true });
+    const id = useToastStore
+      .getState()
+      .push({ title: "Recovering driver…", variant: "default", persistent: true });
+    useToastStore.getState().dismiss(id);
+
+    vi.advanceTimersByTime(180);
+
+    expect(useToastStore.getState().toasts.some((t) => t.id === id && t.open)).toBe(false);
+  });
+
+  it("dismissing one pending toast does not drop a later one", () => {
+    useToastStore.getState().push({ title: "old", variant: "default" });
+    const a = useToastStore.getState().push({ title: "a", variant: "default" });
+    useToastStore.getState().dismiss(a);
+    const b = useToastStore.getState().push({ title: "b", variant: "default" });
+
+    vi.advanceTimersByTime(180);
+
+    const open = useToastStore.getState().toasts.filter((t) => t.open);
+    expect(open.map((t) => t.id)).toEqual([b]);
+  });
+});
+
 describe("toastStore.dismiss / setClosed", () => {
   it("dismiss flips open=false but keeps the toast", () => {
     const id = useToastStore.getState().push({ title: "x", variant: "default" });

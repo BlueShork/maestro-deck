@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { useEnvStore } from "@/stores/envStore";
 
 const LABELS: Record<string, string> = {
-  maestro: "maestro CLI (required: 2.5.1)",
+  maestro: "maestro CLI (required: 2.10.0)",
   java: "Java runtime (required: 17+)",
   adb: "adb — Android platform tools",
   xcode: "Xcode — iOS simulators",

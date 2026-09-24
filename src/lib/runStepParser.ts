@@ -3,8 +3,8 @@
 
 // Parser for the Maestro CLI's *plain-text* result view — the format the CLI
 // uses whenever stdout is not a TTY, which is always the case here since the
-// runner pipes it. Verified against maestro 2.5.1 real output and the
-// PlainTextResultView source:
+// runner pipes it. Verified against maestro 2.5.1 and 2.10.0 real output
+// (identical) and the PlainTextResultView source:
 //
 //   Running on iPhone 16 Pro - iOS 18.2 - <udid>
 //    > Flow settings-check                          ← flow header (1 space)
@@ -48,7 +48,7 @@ interface Pattern {
 }
 
 // Description → command patterns, ordered most-specific-first. Templates come
-// from maestro-orchestra-models Commands.kt (v2.5.1) `description()` methods.
+// from maestro-orchestra-models Commands.kt (v2.10.0) `description()` methods.
 // For arg-bearing commands, `re` captures the raw *target* in group 1 — a
 // quoted text selector (`"Welcome"`), an unquoted id selector
 // (`id: welcomeMessage`), or an unquoted value (`Alice` for inputText).
@@ -103,7 +103,12 @@ const PATTERNS: Pattern[] = [
     re: /^Scrolling (?:UP|DOWN|LEFT|RIGHT) until (.+?) is visible/,
   },
   { command: "scrollUntilVisible", re: /^Scroll until (.+?) is visible/ },
-  { command: "swipe", re: /^Swiping in (?:UP|DOWN|LEFT|RIGHT) direction on (.+?)$/ },
+  // 2.8+ appends ` at {point}` when the swipe starts at an element-relative
+  // point; strip it so the arg stays the bare selector.
+  {
+    command: "swipe",
+    re: /^Swiping in (?:UP|DOWN|LEFT|RIGHT) direction on (.+?)(?: at [\d.%,\s-]+)?$/,
+  },
   { command: "swipe", re: null, bareRe: /^Swiping in (?:UP|DOWN|LEFT|RIGHT) direction/ },
   { command: "swipe", re: null, bareRe: /^Swipe from \(.+?\) to \(.+?\)/ },
   { command: "swipe", re: null, bareRe: /^Invalid input to swipe command/ },
@@ -122,6 +127,10 @@ const PATTERNS: Pattern[] = [
   { command: "travel", re: null, bareRe: /^Travel path / },
   { command: "setAirplaneMode", re: null, bareRe: /^(?:Enable|Disable) airplane mode/ },
   { command: "toggleAirplaneMode", re: null, bareRe: /^Toggle airplane mode/ },
+  { command: "setDarkMode", re: null, bareRe: /^(?:Enable|Disable) dark mode/ },
+  { command: "toggleDarkMode", re: null, bareRe: /^Toggle dark mode/ },
+  { command: "assertDarkMode", re: null, bareRe: /^Assert dark mode is enabled/ },
+  { command: "assertLightMode", re: null, bareRe: /^Assert dark mode is disabled/ },
   { command: "addMedia", re: null, bareRe: /^Adding media files/ },
   { command: "setOrientation", re: /^Set orientation (.+?)$/ },
   { command: "setPermissions", re: null, bareRe: /^Set permissions/ },
