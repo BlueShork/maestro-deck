@@ -18,7 +18,7 @@ import type { HierarchyTree, Selector, UINode } from "@/types";
 const fastMode = () => useSettingsStore.getState().fastHierarchyEnabled;
 
 // A `maestro test` run owns the iOS simulator driver exclusively; an inspect
-// dump mid-run would spawn a competing `maestro studio` and deadlock both on
+// dump mid-run would spawn a competing `maestro mcp` keeper and deadlock both on
 // :22087 (the run then never starts). Pause dumps while a run is in flight.
 const runInFlight = () => {
   const s = useRunStore.getState();

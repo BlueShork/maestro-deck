@@ -189,7 +189,7 @@ pub async fn spawn_runner(
         };
         RUNNERS.lock().await.remove(&pid);
         // Fire the optional post-exit hook BEFORE emitting the exit event.
-        // The hook may schedule background work (e.g. studio restart) that
+        // The hook may schedule background work (e.g. keeper restart) that
         // we want kicked off as early as possible — the frontend doesn't
         // need to wait for it, since the hook just spawns and returns.
         if let Some(hook) = on_exit_hook {
@@ -308,7 +308,7 @@ pub async fn spawn_web_runner(
         };
         RUNNERS.lock().await.remove(&pid);
         // Run finished — release the keeper, stop the CDP mirror and hand
-        // the canvas back to the (still-warm) studio preview.
+        // the canvas back to the (still-warm) keeper preview.
         {
             use tauri::Manager;
             let state = app_exit.state::<crate::state::AppState>();
@@ -318,7 +318,7 @@ pub async fn spawn_web_runner(
             if let Some(mirror) = state.web_run_mirror_abort.lock().await.take() {
                 let _ = mirror.send(());
             }
-            // Resume the studio preview poller (only if none is running —
+            // Resume the keeper preview poller (only if none is running —
             // e.g. the user disconnected mid-run and teardown already ran).
             let keeper = state.web_driver.lock().await.clone();
             if let Some(keeper) = keeper {
@@ -339,7 +339,7 @@ pub async fn spawn_web_runner(
 
 /// Spawn `maestro --udid <udid> test <flow>` for an iOS simulator. Like
 /// [`spawn_runner`] but without the adb emulator-ghost preamble (irrelevant to
-/// iOS). The caller stops the studio keeper first so `maestro test` can bring up
+/// iOS). The caller stops the driver keeper first so `maestro test` can bring up
 /// its own XCTest driver on :22087 without contention. Streams stdout/stderr and
 /// emits `runner:exit` exactly like the other runners.
 pub async fn spawn_ios_runner(

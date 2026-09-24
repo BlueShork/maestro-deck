@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Web input forwarding via Maestro Studio's `POST /api/run-command`.
+//! Web input forwarding via the web keeper's MCP `run` tool.
 //! Frontend coords arrive in screenshot-pixel space; we convert taps to
 //! percentage points (`x%,y%`) which Maestro resolves independent of the
 //! browser viewport size.
@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use super::InputEvent;
 use crate::error::AppResult;
-use crate::web_session::WebStudioKeeper;
+use crate::web_session::WebDriverKeeper;
 
 /// Clamp a 0..=100 percentage with one decimal of precision.
 fn pct(coord: f32, span: u16) -> f32 {
@@ -75,7 +75,7 @@ fn element_selector_at(elements: &serde_json::Value, cx: i32, cy: i32) -> Option
 /// second SSE consumer, no wait); falls back to a percentage point tap when
 /// no element resolves or no snapshot is available.
 async fn tap_command(
-    keeper: &WebStudioKeeper,
+    keeper: &WebDriverKeeper,
     x: f32,
     y: f32,
     screen_w: u16,
@@ -104,14 +104,6 @@ async fn tap_command(
         ),
         None => resolve_tap(None, (0, 0), x, y, screen_w, screen_h),
     }
-}
-
-/// Build the run-command body. Maestro Studio expects `{ "yaml": "<command>",
-/// "dryRun": bool }` where `<command>` is a SINGLE command line
-/// (`"<name>: <options>"`) — NOT a flow list. A leading `- ` is rejected with
-/// 400 "Invalid command format".
-fn command_body(yaml: String) -> serde_json::Value {
-    serde_json::json!({ "yaml": yaml, "dryRun": false })
 }
 
 fn tap_yaml(x_pct: f32, y_pct: f32) -> String {
@@ -166,20 +158,19 @@ pub(crate) fn resolve_tap(
 
 pub async fn send(
     event: &InputEvent,
-    keeper: &WebStudioKeeper,
+    keeper: &WebDriverKeeper,
     screen_w: u16,
     screen_h: u16,
     app: &tauri::AppHandle,
 ) -> AppResult<()> {
     use tauri::Emitter;
-    let http = keeper.http();
     match event {
         InputEvent::Tap { x, y } => {
             let tap = tap_command(keeper, *x, *y, screen_w, screen_h).await;
             if tap.degraded {
                 let _ = app.emit("web:tap_fallback", ());
             }
-            http.run_command(command_body(tap.yaml)).await
+            keeper.run_command(&tap.yaml).await
         }
         InputEvent::Swipe {
             x1,
@@ -195,12 +186,9 @@ pub async fn send(
                 pct(*y2, screen_h),
                 *duration_ms,
             );
-            http.run_command(command_body(yaml)).await
+            keeper.run_command(&yaml).await
         }
-        InputEvent::Text { text } => {
-            http.run_command(command_body(format!("inputText: {text}")))
-                .await
-        }
+        InputEvent::Text { text } => keeper.run_command(&format!("inputText: {text}")).await,
         // No general key-injection over the web driver in V1 (Android-only).
         InputEvent::Key { .. } => Ok(()),
     }
@@ -220,13 +208,6 @@ mod tests {
     #[test]
     fn pct_is_zero_when_span_zero() {
         assert_eq!(pct(100.0, 0), 0.0);
-    }
-
-    #[test]
-    fn command_body_wraps_yaml_with_dryrun() {
-        let b = command_body("inputText: hi".to_string());
-        assert_eq!(b["yaml"], "inputText: hi");
-        assert_eq!(b["dryRun"], false);
     }
 
     #[test]
@@ -262,7 +243,7 @@ mod tests {
 
     #[test]
     fn commands_are_single_line_not_flows() {
-        // Studio rejects a leading "- " (flow list) with 400.
+        // `inline_flow` adds the "- " list marker itself.
         let tap = tap_yaml(50.0, 50.0);
         assert_eq!(tap, "tapOn: {point: \"50%,50%\"}");
         assert!(!tap.starts_with("- "));

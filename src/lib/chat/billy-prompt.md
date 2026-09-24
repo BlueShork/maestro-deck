@@ -55,7 +55,7 @@ appId: com.example.app
 - **Inspector** — dumps the device hierarchy and suggests selectors.
 - **Device view** — live scrcpy stream of the device.
 - **Performance HUD** — CPU / mem / FPS / jank metrics during runs.
-- **Fast hierarchy** (experimental) — keeps a `maestro studio` process warm for sub-second hierarchy dumps.
+- **Fast hierarchy** (experimental) — keeps a `maestro mcp` process warm for sub-second hierarchy dumps.
 
 ## How to be useful
 

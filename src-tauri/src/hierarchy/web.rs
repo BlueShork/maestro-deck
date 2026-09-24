@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Web hierarchy: Maestro Studio's `device-screen` SSE event carries a **flat
-//! list** of elements (`{id, bounds:{x,y,width,height}, resourceId?, text?}`),
-//! not the nested `{attributes, children}` TreeNode the mobile drivers emit.
+//! Web hierarchy: the web keeper (`web_session`) flattens `inspect_screen`
+//! into a **flat list** of selector targets
+//! (`{bounds:{x,y,width,height}, resourceId?, text?}`), not the nested
+//! `{attributes, children}` TreeNode the mobile drivers emit.
 //! We wrap that list under a synthetic root so the existing R-tree,
 //! hit-testing, overlay, and selector ranking work unchanged.
 

@@ -13,13 +13,13 @@ interface SettingsState {
   theme: ThemeMode;
   streamEnabled: boolean;
   /**
-   * When enabled, inspect mode spawns `maestro studio` once at startup
+   * When enabled, inspect mode spawns a `maestro mcp` keeper once at startup
    * (slow: 10-15s) and then fetches the hierarchy over direct gRPC on
    * each subsequent dump (<500ms). When disabled, each dump shells out
    * to the `maestro hierarchy` CLI (simple but ~11s per dump).
    *
    * Experimental flag — depends on an undocumented port contract of
-   * the Maestro driver + a studio background process. Off by default
+   * the Maestro driver + a `maestro mcp` background process. Off by default
    * until we've validated output parity against the CLI path.
    */
   fastHierarchyEnabled: boolean;

@@ -3,7 +3,7 @@
 
 //! Direct gRPC client for the on-device Maestro driver.
 //!
-//! Once a background `maestro studio` process (see `studio` submodule)
+//! Once a background `maestro mcp` process (see `driver_keeper` submodule)
 //! has installed + started the driver and set up the adb forward,
 //! `localhost:7001` exposes the `maestro_android.MaestroDriver` service.
 //! This module connects a tonic client to that endpoint and exposes a
@@ -12,7 +12,7 @@
 //! the two paths based on a user setting.
 //!
 //! Why this is fast: the CLI invocation pays JVM cold-start (~3 s) and
-//! driver (re)install (~5-7 s) on every call. The studio process pays
+//! driver (re)install (~5-7 s) on every call. The keeper process pays
 //! those once up-front; subsequent gRPC calls just roundtrip the
 //! accessibility-tree XML through an already-warm pipe.
 
@@ -24,7 +24,7 @@ use tracing::{debug, info};
 
 use crate::error::{AppError, AppResult};
 use crate::hierarchy::proto::{maestro_driver_client::MaestroDriverClient, ViewHierarchyRequest};
-use crate::hierarchy::{parse_xml, studio::DRIVER_PORT, HierarchyTree};
+use crate::hierarchy::{driver_keeper::DRIVER_PORT, parse_xml, HierarchyTree};
 
 /// Per-RPC deadline. The driver normally responds in <300 ms; 10 s is
 /// a generous ceiling that still fails fast if the driver hangs (e.g.
@@ -35,7 +35,7 @@ const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 /// localhost so this should be sub-second.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 /// A real UiAutomator dump is at least a few hundred bytes (header +
-/// one window node with bounds). An orphan studio whose on-device
+/// one window node with bounds). An orphan keeper whose on-device
 /// driver has died still accepts the RPC but replies with the bare
 /// `<hierarchy rotation="0"/>` wrapper (~84 bytes). Below this
 /// threshold we treat the response as "driver is a zombie" and fail
@@ -48,9 +48,9 @@ async fn connect() -> AppResult<MaestroDriverClient<Channel>> {
         .map_err(|e| AppError::HierarchyParse(format!("invalid driver uri {uri}: {e}")))?
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(RPC_TIMEOUT)
-        // Studio keeps the driver alive for the whole inspect session;
+        // The keeper holds the driver for the whole inspect session;
         // HTTP/2 keepalive lets us notice socket death (device unplug,
-        // studio crash) without waiting for the first failed RPC.
+        // keeper crash) without waiting for the first failed RPC.
         .keep_alive_while_idle(true)
         .http2_keep_alive_interval(Duration::from_secs(30));
 
@@ -65,7 +65,7 @@ async fn connect() -> AppResult<MaestroDriverClient<Channel>> {
 /// return it in the same `HierarchyTree` shape the CLI path produces,
 /// so callers can drop-in swap between the two implementations.
 ///
-/// Expects `studio::StudioKeeper::start` to have completed recently —
+/// Expects `driver_keeper::DriverKeeper::start` to have completed recently —
 /// i.e. the driver is up, listening, and the adb forward is in place.
 pub async fn dump_hierarchy() -> AppResult<HierarchyTree> {
     let overall_start = Instant::now();

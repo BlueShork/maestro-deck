@@ -42,9 +42,9 @@ export function DevicePerformanceSettings() {
           }
           description={
             <>
-              Keeps a <code className="font-mono">maestro studio</code> process warm in background
-              and talks gRPC directly to the on-device driver. First inspect takes ~15 s, subsequent
-              dumps drop from ~11 s to &lt;1 s. Falls back to the CLI path if studio fails.
+              Keeps a <code className="font-mono">maestro mcp</code> process warm in background and
+              talks gRPC directly to the on-device driver. First inspect takes ~15 s, subsequent
+              dumps drop from ~11 s to &lt;1 s. Falls back to the CLI path if the keeper fails.
             </>
           }
           checked={fastHierarchyEnabled}

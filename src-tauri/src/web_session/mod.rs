@@ -1,293 +1,133 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Web driver session: keeps `maestro studio -p web` alive and talks to its
-//! HTTP API on 127.0.0.1:9999 (`GET /api/device-screen`, `POST /api/run-command`).
-//! The web analogue of `ios_session`. Screen + hierarchy come from one
-//! device-screen call; input goes through run-command.
+//! Web driver session: keeps a `maestro -p web mcp` keeper alive — its
+//! device session owns a Selenium-driven Chrome — and drives it through MCP
+//! tools (`run` for commands, `inspect_screen` for the hierarchy). The live
+//! preview is a CDP screencast of that same Chrome. The web analogue of
+//! `ios_session`. (Maestro ≤ 2.5 exposed all this through `maestro studio`'s
+//! HTTP API, removed in 2.6.)
 
+pub(crate) mod cdp;
 pub mod run_mirror;
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{AppHandle, Emitter};
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use tokio::sync::oneshot;
-use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::error::{AppError, AppResult};
+use crate::maestro_mcp::McpClient;
+#[cfg(windows)]
 use crate::process_ext::CommandExtNoWindow;
 
-/// Default port the Maestro Studio HTTP server binds to.
-pub const STUDIO_PORT: u16 = 9999;
+/// MCP device id of the browser session (`McpMaestroSessionManager`).
+const WEB_DEVICE_ID: &str = "chromium";
 
-/// Command-line needles (ordered substrings) identifying a **web** maestro
-/// studio — the `-p web` needle is what keeps a mobile studio session safe
-/// from this sweep. Matched against the JVM's full command line.
-pub(crate) const WEB_STUDIO_NEEDLES: &[&str] = &["maestro", "-p web", "studio"];
+/// Command-line needles (ordered substrings) identifying a **web** keeper
+/// (`maestro -p web mcp --no-viewer`) — the `-p web` needle is what keeps a
+/// mobile keeper, or a user's own `maestro mcp`, safe from this sweep.
+/// Matched against the JVM's full command line.
+pub(crate) const WEB_KEEPER_NEEDLES: &[&str] = &["maestro", "-p web", "mcp", "--no-viewer"];
 const CHROMEDRIVER_NEEDLES: &[&str] = &["selenium", "chromedriver"];
 const WEBDRIVER_CHROME_NEEDLES: &[&str] = &["test-type=webdriver"];
 
-/// Parsed `GET /api/device-screen` response.
-/// VERIFY (Task 1): field names/screenshot encoding against the captured fixture.
-#[derive(Debug, Clone, Deserialize)]
+/// First navigation launches Chromium, which can take tens of seconds (a cold
+/// start may download the browser + driver).
+const LAUNCH_TIMEOUT: Duration = Duration::from_secs(120);
+/// A single command. Generous: a `tapOn` on a missing element waits out
+/// maestro's own ~17 s lookup before failing.
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
+const INSPECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// A snapshot of the browser screen, in the flat element format the tap
+/// resolver (`input::web`) and the inspector (`hierarchy::web`) consume.
+#[derive(Debug, Clone)]
 pub struct DeviceScreen {
-    /// Screenshot location. Documented as a URL path (e.g. "/screenshot/<id>.png").
-    pub screenshot: String,
-    #[serde(default)]
+    /// Viewport size in CSS pixels — the space the element bounds live in.
     pub width: u32,
-    #[serde(default)]
     pub height: u32,
-    /// Raw hierarchy payload, kept as JSON so `hierarchy::web` can adapt it
-    /// without this module knowing the tree shape. VERIFY (Task 1): the key
-    /// is assumed to be `elements`.
-    #[serde(rename = "elements")]
+    /// Flat list of `{bounds:{x,y,width,height}, resourceId?, text?}`.
     pub elements: serde_json::Value,
-    /// Current page URL, present on every SSE event. Remembered so a
-    /// respawned keeper can restore the user's page.
-    #[serde(default)]
+    /// Current page URL, when known. Remembered so a respawned keeper can
+    /// restore the user's page.
     pub url: Option<String>,
 }
 
-/// True for Studio's own pages (`http://127.0.0.1:<port>/…`, `localhost`).
-/// Those must never be "remembered" as the user's page — restoring to them
-/// on respawn is exactly the bug: the browser reloads onto the Studio SPA.
-fn is_studio_local_url(url: &str, port: u16) -> bool {
-    url.starts_with(&format!("http://127.0.0.1:{port}"))
-        || url.starts_with(&format!("http://localhost:{port}"))
+/// Pages that must never be "remembered" as the user's page: Chrome's
+/// initial `data:,` and blank pages — restoring to them on respawn would
+/// lose the user's real page.
+fn is_placeholder_url(url: &str) -> bool {
+    url.starts_with("data:") || url.starts_with("about:") || url.starts_with("chrome:")
 }
 
-/// Typed client for the Maestro Studio web API.
-pub struct WebStudioClient {
-    base: String,
-    client: reqwest::Client,
-    /// Connect-timeout only — no total timeout, for held SSE connections.
-    sse_client: reqwest::Client,
+/// Parse maestro's `[left,top][right,bottom]` bounds string.
+fn parse_bounds(b: &str) -> Option<(i32, i32, i32, i32)> {
+    let nums: Vec<i32> = b
+        .split(|c: char| !(c.is_ascii_digit() || c == '-'))
+        .filter(|s| !s.is_empty())
+        .map(|s| s.parse().ok())
+        .collect::<Option<_>>()?;
+    match nums[..] {
+        [l, t, r, b] => Some((l, t, r, b)),
+        _ => None,
+    }
 }
 
-impl WebStudioClient {
-    pub fn new(port: u16) -> AppResult<Self> {
-        let client = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(1))
-            .timeout(Duration::from_secs(15))
-            .build()
-            .map_err(|e| AppError::Other(format!("web client build: {e}")))?;
-        let sse_client = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(1))
-            .build()
-            .map_err(|e| AppError::Other(format!("web sse client build: {e}")))?;
-        Ok(Self {
-            base: format!("http://127.0.0.1:{port}"),
-            client,
-            sse_client,
-        })
-    }
+/// Convert `inspect_screen`'s compact JSON (`{ui_schema, elements:[tree]}`,
+/// abbreviated keys, children under `c`) into the flat element list +
+/// viewport. Only elements a selector can target (text or id) are kept; the
+/// viewport is the root's extent.
+fn flatten_inspect_screen(json: &str) -> AppResult<(serde_json::Value, (u32, u32))> {
+    let v: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| AppError::HierarchyParse(format!("inspect_screen parse: {e}")))?;
+    let roots = v["elements"]
+        .as_array()
+        .ok_or_else(|| AppError::HierarchyParse("inspect_screen: no `elements`".into()))?;
 
-    fn url(&self, path: &str) -> String {
-        format!("{}/{}", self.base, path.trim_start_matches('/'))
-    }
-
-    /// Read one event from the Server-Sent-Events stream `GET
-    /// /api/device-screen/sse` — Maestro Studio pushes the current screen
-    /// (screenshot URL + flat element list) as `data: {json}\n\n`. We open the
-    /// stream, return the first complete event, and drop the connection.
-    pub async fn device_screen(&self) -> AppResult<DeviceScreen> {
-        let mut resp = self
-            .client
-            .get(self.url("api/device-screen/sse"))
-            .send()
-            .await
-            .map_err(|e| AppError::Other(format!("device-screen/sse: {e}")))?
-            .error_for_status()
-            .map_err(|e| AppError::Other(format!("device-screen/sse: {e}")))?;
-        let mut buf: Vec<u8> = Vec::new();
-        while let Some(chunk) = resp
-            .chunk()
-            .await
-            .map_err(|e| AppError::Other(format!("device-screen/sse read: {e}")))?
-        {
-            buf.extend_from_slice(&chunk);
-            if let Some(json) = extract_sse_data(&buf) {
-                return serde_json::from_str(&json)
-                    .map_err(|e| AppError::HierarchyParse(format!("device-screen parse: {e}")));
-            }
+    let mut viewport = (0u32, 0u32);
+    for r in roots {
+        if let Some((_, _, right, bottom)) = r["b"].as_str().and_then(parse_bounds) {
+            viewport.0 = viewport.0.max(right.max(0) as u32);
+            viewport.1 = viewport.1.max(bottom.max(0) as u32);
         }
-        Err(AppError::Other(
-            "device-screen/sse closed before delivering an event".into(),
-        ))
     }
 
-    /// Open (and keep open) the device-screen SSE stream. The caller reads
-    /// chunks until abort/EOF; Studio pushes a `data:` event per frame.
-    pub async fn open_screen_stream(&self) -> AppResult<reqwest::Response> {
-        self.sse_client
-            .get(self.url("api/device-screen/sse"))
-            .send()
-            .await
-            .map_err(|e| AppError::Other(format!("device-screen/sse: {e}")))?
-            .error_for_status()
-            .map_err(|e| AppError::Other(format!("device-screen/sse: {e}")))
-    }
-
-    /// Fetch PNG bytes for a screenshot path returned by `device_screen`.
-    /// If `screenshot` is already an absolute http URL, it is used as-is.
-    pub async fn screenshot_png(&self, location: &str) -> AppResult<Vec<u8>> {
-        let url = if location.starts_with("http") {
-            location.to_string()
-        } else {
-            self.url(location)
+    let mut out = Vec::new();
+    let mut stack: Vec<&serde_json::Value> = roots.iter().rev().collect();
+    while let Some(node) = stack.pop() {
+        if let Some(children) = node["c"].as_array() {
+            stack.extend(children.iter().rev());
+        }
+        let Some((l, t, r, b)) = node["b"].as_str().and_then(parse_bounds) else {
+            continue;
         };
-        let resp = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| AppError::Other(format!("screenshot: {e}")))?
-            .error_for_status()
-            .map_err(|e| AppError::Other(format!("screenshot: {e}")))?;
-        Ok(resp
-            .bytes()
-            .await
-            .map_err(|e| AppError::Other(e.to_string()))?
-            .to_vec())
-    }
-
-    /// `POST /api/run-command` — run a single maestro command. Studio expects
-    /// `{ "yaml": "<command yaml>", "dryRun": bool }`.
-    pub async fn run_command(&self, body: serde_json::Value) -> AppResult<()> {
-        let resp = self
-            .client
-            .post(self.url("api/run-command"))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| AppError::Other(format!("run-command: {e}")))?;
-        let status = resp.status();
-        if !status.is_success() {
-            // Surface the server's explanation (e.g. "Invalid command format")
-            // and the offending yaml — a bare status code is useless to debug.
-            let detail = resp.text().await.unwrap_or_default();
-            let sent = body
-                .get("yaml")
-                .and_then(|v| v.as_str())
-                .unwrap_or("<none>");
-            return Err(AppError::Other(format!(
-                "run-command {status}: {} | sent yaml: {sent}",
-                detail.trim()
-            )));
+        let non_empty = |k: &str| node[k].as_str().filter(|s| !s.is_empty());
+        let resource_id = non_empty("rid");
+        // `text:` selectors also match accessibility text and hints.
+        let text = non_empty("txt")
+            .or_else(|| non_empty("a11y"))
+            .or_else(|| non_empty("hint"));
+        if resource_id.is_none() && text.is_none() {
+            continue;
         }
-        Ok(())
-    }
-
-    /// Liveness: the SPA serves 200 on every path, so a bare GET can't tell us
-    /// the driver is ready. Reading a real device-screen event can.
-    pub async fn is_alive(&self) -> bool {
-        self.device_screen().await.is_ok()
-    }
-
-    /// Cheap API-readiness probe: `/api/banner-message` answers 200 as soon as
-    /// the Studio HTTP server is up — no browser needed. (The device-screen SSE
-    /// stays silent until Chromium launches, so it can't be the API probe.)
-    pub async fn api_ready(&self) -> bool {
-        self.client
-            .get(self.url("api/banner-message"))
-            .send()
-            .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
-    }
-
-    /// Navigate the automated browser. The FIRST navigation after a studio
-    /// spawn is what launches Chromium and can take tens of seconds (cold
-    /// start may download the driver) — use a generous per-request timeout
-    /// overriding the client's 15 s default.
-    pub async fn trigger_navigation(&self, url: &str) -> AppResult<()> {
-        let yaml = format!("openLink: {url}");
-        let resp = self
-            .client
-            .post(self.url("api/run-command"))
-            .timeout(Duration::from_secs(90))
-            .json(&serde_json::json!({ "yaml": yaml, "dryRun": false }))
-            .send()
-            .await
-            .map_err(|e| AppError::Other(format!("run-command: {e}")))?;
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let detail = resp.text().await.unwrap_or_default();
-            return Err(AppError::Other(format!(
-                "openLink {status}: {} | sent url: {url}",
-                detail.trim()
-            )));
+        let mut el = serde_json::json!({
+            "bounds": { "x": l, "y": t, "width": r - l, "height": b - t },
+        });
+        if let Some(id) = resource_id {
+            el["resourceId"] = id.into();
         }
-        Ok(())
-    }
-}
-
-/// Extract the JSON payload of the first complete `data: …` line in an SSE
-/// buffer. Returns `None` until a full line (terminated by `\n`) is present.
-fn extract_sse_data(buf: &[u8]) -> Option<String> {
-    let s = std::str::from_utf8(buf).ok()?;
-    let start = s.find("data: ")? + "data: ".len();
-    let rel_end = s[start..].find('\n')?;
-    Some(s[start..start + rel_end].trim().to_string())
-}
-
-/// Incremental SSE parser for a held `/api/device-screen/sse` connection.
-/// `push` appends raw bytes; `latest_event` drains every *complete* event
-/// (`data: …\n`) accumulated so far and returns only the newest — frames we
-/// fell behind on are intentionally skipped (coalescing), so the preview
-/// always shows the current page, never a backlog replay.
-#[derive(Default)]
-struct SseBuffer {
-    buf: Vec<u8>,
-}
-
-impl SseBuffer {
-    fn push(&mut self, chunk: &[u8]) {
-        self.buf.extend_from_slice(chunk);
-    }
-
-    fn latest_event(&mut self) -> Option<String> {
-        let s = String::from_utf8_lossy(&self.buf).into_owned();
-        let mut latest = None;
-        let mut consumed = 0;
-        for line in s.split_inclusive('\n') {
-            if !line.ends_with('\n') {
-                break; // trailing partial line — keep for the next push
-            }
-            consumed += line.len();
-            if let Some(data) = line.strip_prefix("data: ") {
-                latest = Some(data.trim().to_string());
-            }
+        if let Some(text) = text {
+            el["text"] = text.into();
         }
-        self.buf.drain(..consumed);
-        latest
+        out.push(el);
     }
-}
-
-/// Classify who (if anyone) is holding the web studio port.
-#[derive(Debug)]
-pub(crate) enum PortOwnerKind {
-    /// A leftover `maestro -p web studio` — safe to kill (our sweep does).
-    OrphanWebStudio,
-    /// A mobile (iOS/Android) studio — belongs to a live session, never kill.
-    MobileStudio,
-    /// Anything else (another tool squatting the port).
-    Foreign,
-}
-
-pub(crate) fn classify_port_owner(cmdline: &str) -> PortOwnerKind {
-    if crate::prockill::cmdline_matches(cmdline, WEB_STUDIO_NEEDLES) {
-        PortOwnerKind::OrphanWebStudio
-    } else if crate::prockill::cmdline_matches(cmdline, &["maestro", "studio"]) {
-        PortOwnerKind::MobileStudio
-    } else {
-        PortOwnerKind::Foreign
-    }
+    Ok((serde_json::Value::Array(out), viewport))
 }
 
 /// Connect-progress event consumed by the frontend toast layer.
@@ -302,45 +142,6 @@ fn emit_status(app: Option<&AppHandle>, stage: &str, message: &str) {
     }
 }
 
-const READY_ATTEMPTS: u32 = 240;
-const READY_BACKOFF_MS: u64 = 500;
-
-fn studio_args() -> Vec<String> {
-    // `-p web` is a GLOBAL flag and MUST precede the `studio` subcommand
-    // (`maestro -p web studio …`); placing it after `studio` is rejected
-    // ("Unknown options: '-p', 'web'") on maestro 2.5.1. `--no-window`
-    // suppresses Studio's own UI tab — we render our own canvas.
-    // `--no-ansi` keeps the stdout banner parseable (see `parse_studio_port`).
-    vec![
-        "-p".to_string(),
-        "web".to_string(),
-        "studio".to_string(),
-        "--no-window".to_string(),
-        "--no-ansi".to_string(),
-    ]
-}
-
-/// Extract the port from Studio's startup banner. Studio **auto-increments**
-/// its port when the default is busy (e.g. a mobile studio session on
-/// :9999) — assuming the default would silently talk to the wrong server.
-/// Banner line (inside a box-drawing frame):
-/// `│   Maestro Studio is running at http://localhost:10000   │`
-fn parse_studio_port(line: &str) -> Option<u16> {
-    let idx = line.find("running at http://localhost:")?;
-    let digits: String = line[idx + "running at http://localhost:".len()..]
-        .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
-    digits.parse().ok()
-}
-
-/// Where to point the browser when the flow has no `url:` — Studio's own
-/// interact page. Local, always reachable, and `openLink` requires an
-/// http(s) URL (about:blank / chrome:// are rejected with 400).
-fn default_trigger_url(port: u16) -> String {
-    format!("http://127.0.0.1:{port}/interact")
-}
-
 /// True for the driven Chrome's MAIN process: it carries the webdriver
 /// marker but no `--type=` (helpers/renderers/GPU children do). The main
 /// process is the one owning the window we want to hide.
@@ -348,8 +149,8 @@ fn is_main_browser_process(cmdline: &str) -> bool {
     cmdline.contains("test-type=webdriver") && !cmdline.contains("--type=")
 }
 
-/// Hide a process's window(s) at the OS level. `maestro studio` has no
-/// headless mode (Selenium factory is hardcoded headed for studio), so the
+/// Hide a process's window(s) at the OS level. `maestro mcp` has no
+/// headless mode (its web session is hardcoded headed), so the
 /// only way to keep the driven Chrome off the user's screen is to hide it
 /// after launch. Chrome keeps rendering while hidden — it is launched with
 /// `--disable-backgrounding-occluded-windows`, so the SSE preview stays live.
@@ -442,43 +243,38 @@ fn spawn_window_hider(app: Option<AppHandle>) {
     });
 }
 
-/// Kill orphaned Chromium automation processes left behind by
-/// `maestro studio -p web`. Maestro drives Chrome through a Selenium-managed
-/// `chromedriver`; killing the studio JVM reaps neither the driver nor the
-/// browser, so headed Chrome windows pile up across sessions. We match the
-/// Selenium chromedriver and the `--test-type=webdriver` Chrome it launches —
-/// markers a user's normal Chrome never carries. Cross-platform via
-/// `prockill` (`ps`+`kill` / PowerShell+`taskkill`).
+/// Kill orphaned Chromium automation processes left behind by a web keeper.
+/// Maestro drives Chrome through a Selenium-managed `chromedriver`; killing
+/// the keeper JVM reaps neither the driver nor the browser, so headed Chrome
+/// windows pile up across sessions. We match the Selenium chromedriver and
+/// the `--test-type=webdriver` Chrome it launches — markers a user's normal
+/// Chrome never carries. Cross-platform via `prockill`.
 async fn kill_orphan_web_browsers() {
     crate::prockill::kill_matching(CHROMEDRIVER_NEEDLES, "orphan chromedriver").await;
     crate::prockill::kill_matching(WEBDRIVER_CHROME_NEEDLES, "orphan webdriver Chrome").await;
 }
 
-/// Keeps `maestro studio -p web` alive and owns the HTTP client for the session.
-pub struct WebStudioKeeper {
-    http: WebStudioClient,
-    studio_child: AsyncMutex<Option<Child>>,
-    port: u16,
-    /// Latest device-screen event seen by the persistent poller, timestamped.
-    /// Tap/inspect reuse it when fresh instead of opening a second SSE
-    /// consumer and waiting (up to 15 s on a busy page) for an event.
+/// Keeps a `maestro -p web mcp` keeper (and the Chrome its session owns)
+/// alive for the web session.
+pub struct WebDriverKeeper {
+    mcp: McpClient,
+    /// DevTools port of the keeper's Chrome, found after launch.
+    devtools_port: parking_lot::Mutex<Option<u16>>,
+    /// Latest screen snapshot, timestamped. Tap/inspect reuse it when fresh
+    /// instead of paying an `inspect_screen` round-trip per click.
     latest_screen: std::sync::Mutex<Option<(std::time::Instant, DeviceScreen)>>,
+    /// Viewport (CSS px) from the latest screencast frame — the fallback
+    /// size when a page exposes no element to measure.
+    viewport: parking_lot::Mutex<(u32, u32)>,
 }
 
-impl WebStudioKeeper {
-    pub fn http(&self) -> &WebStudioClient {
-        &self.http
-    }
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    /// Record a device-screen event (called by the poller on every event).
+impl WebDriverKeeper {
+    /// Record a screen snapshot.
     pub fn note_screen(&self, screen: &DeviceScreen) {
         *self.latest_screen.lock().unwrap() = Some((std::time::Instant::now(), screen.clone()));
     }
 
-    /// The latest poller event if it is younger than `max_age`.
+    /// The latest snapshot if it is younger than `max_age`.
     pub fn recent_screen(&self, max_age: Duration) -> Option<DeviceScreen> {
         self.latest_screen
             .lock()
@@ -488,147 +284,182 @@ impl WebStudioKeeper {
             .map(|(_, s)| s.clone())
     }
 
-    /// A screen snapshot for tap/inspect: the poller's cache when fresh,
-    /// otherwise one fresh single-shot fetch.
+    /// A screen snapshot for tap/inspect: the cache when fresh, otherwise one
+    /// fresh `inspect_screen`.
     pub async fn snapshot(&self, max_age: Duration) -> AppResult<DeviceScreen> {
         if let Some(s) = self.recent_screen(max_age) {
             return Ok(s);
         }
-        let s = self.http.device_screen().await?;
+        let s = self.device_screen().await?;
         self.note_screen(&s);
         Ok(s)
+    }
+
+    /// Fetch the current hierarchy + viewport + URL.
+    pub async fn device_screen(&self) -> AppResult<DeviceScreen> {
+        let json = self
+            .mcp
+            .call_tool(
+                "inspect_screen",
+                serde_json::json!({ "device_id": WEB_DEVICE_ID }),
+                INSPECT_TIMEOUT,
+            )
+            .await?;
+        let (elements, (w, h)) = flatten_inspect_screen(&json)?;
+        let (width, height) = if w > 0 && h > 0 {
+            (w, h)
+        } else {
+            *self.viewport.lock()
+        };
+        let port = *self.devtools_port.lock();
+        let url = match port {
+            Some(port) => cdp::page_url(port).await,
+            None => None,
+        };
+        Ok(DeviceScreen {
+            width,
+            height,
+            elements,
+            url,
+        })
+    }
+
+    /// Run one maestro command (a single `"<name>: <options>"` line) in the
+    /// browser. Invalidates the cached snapshot: the page likely changed.
+    pub async fn run_command(&self, command: &str) -> AppResult<()> {
+        let yaml = crate::maestro_mcp::inline_flow("web", &[command.to_string()]);
+        let result = self
+            .mcp
+            .call_tool(
+                "run",
+                serde_json::json!({ "device_id": WEB_DEVICE_ID, "yaml": yaml }),
+                COMMAND_TIMEOUT,
+            )
+            .await;
+        *self.latest_screen.lock().unwrap() = None;
+        result
+            .map(|_| ())
+            .map_err(|e| AppError::Other(format!("{e} | sent: {command}")))
+    }
+
+    /// Liveness: the keeper process is running and its Chrome still answers
+    /// DevTools. Sub-second; a dead browser means the MCP session is stale.
+    pub async fn is_alive(&self) -> bool {
+        if !self.mcp.is_alive().await {
+            return false;
+        }
+        let port = *self.devtools_port.lock();
+        match port {
+            Some(port) => cdp::is_reachable(port).await,
+            None => false,
+        }
+    }
+
+    /// `webSocketDebuggerUrl` of the keeper's page, for the screencast.
+    async fn page_ws_url(&self) -> Option<String> {
+        let port = (*self.devtools_port.lock())?;
+        cdp::page_ws_url(port).await
+    }
+
+    /// Find the DevTools port of the Chrome launched by *this* keeper — a
+    /// descendant of the keeper JVM (`maestro` execs java, so the child pid
+    /// is the JVM's). Another headed webdriver Chrome (e.g. a user's own
+    /// `maestro mcp`) is never picked.
+    async fn discover_devtools_port(&self) -> Option<u16> {
+        let root = self.mcp.pid().await?;
+        for _ in 0..40 {
+            for (_pid, cmd) in
+                crate::prockill::descendants_matching(root, WEBDRIVER_CHROME_NEEDLES).await
+            {
+                if !is_main_browser_process(&cmd) {
+                    continue;
+                }
+                if let Some(port) = cdp::devtools_port(&cmd).await {
+                    return Some(port);
+                }
+            }
+            sleep(Duration::from_millis(250)).await;
+        }
+        None
     }
 
     #[cfg(test)]
     fn stub_for_tests() -> Self {
         Self {
-            http: WebStudioClient::new(9999).unwrap(),
-            studio_child: AsyncMutex::new(None),
-            port: 9999,
+            mcp: McpClient::stub_for_tests(),
+            devtools_port: parking_lot::Mutex::new(None),
             latest_screen: std::sync::Mutex::new(None),
+            viewport: parking_lot::Mutex::new((0, 0)),
         }
     }
 
-    pub async fn start(
-        port: u16,
-        url: Option<&str>,
-        app: Option<&AppHandle>,
-    ) -> AppResult<Arc<Self>> {
-        // Pre-flight (informational): Studio auto-increments its port when
-        // the default is busy, and we parse the actual one from its banner
-        // below — a busy port is no longer fatal, but knowing who holds it
-        // helps debugging (e.g. a live mobile studio session).
-        if let Some(owner) = crate::prockill::port_owner(port).await {
-            info!(
-                port,
-                pid = owner.pid,
-                kind = ?classify_port_owner(&owner.cmdline),
-                "default studio port busy — studio will pick the next free one"
-            );
-        }
-
-        // Cull any orphan studio from a crashed prior session. Scoped: only web studios;
-        // a live iOS/Android studio session belonging to this app (or anything else)
-        // is never touched.
-        crate::prockill::kill_matching(WEB_STUDIO_NEEDLES, "orphan web studio").await;
+    pub async fn start(url: Option<&str>, app: Option<&AppHandle>) -> AppResult<Arc<Self>> {
+        // Cull any orphan keeper from a crashed prior session. Scoped: only
+        // web keepers; a live iOS/Android keeper belonging to this app (or a
+        // user's own `maestro mcp`) is never touched.
+        crate::prockill::kill_matching(WEB_KEEPER_NEEDLES, "orphan web keeper").await;
         kill_orphan_web_browsers().await;
 
-        let maestro = crate::tool_paths::maestro_bin();
-        let mut studio = Command::new(&maestro)
-            .no_window()
-            .args(studio_args())
-            .stdout(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    AppError::RunnerNotFound
-                } else {
-                    AppError::Other(format!("maestro studio -p web: {e}"))
-                }
-            })?;
-
-        // Learn the ACTUAL port from the startup banner — Studio silently
-        // auto-increments when the default is busy, and probing the default
-        // would then talk to whatever else lives there (a stale or mobile
-        // studio) instead of ours.
-        let mut actual_port = port;
-        if let Some(out) = studio.stdout.take() {
-            use tokio::io::AsyncBufReadExt;
-            let mut lines = tokio::io::BufReader::new(out).lines();
-            let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-            // On EOF or 60 s without a banner the loop ends and we fall back
-            // to the default port; the API probe below still guards readiness.
-            while let Ok(Ok(Some(line))) =
-                tokio::time::timeout_at(deadline, lines.next_line()).await
-            {
-                if let Some(p) = parse_studio_port(&line) {
-                    if p != port {
-                        info!(requested = port, actual = p, "studio picked another port");
-                    }
-                    actual_port = p;
-                    break;
-                }
-            }
-            // Keep draining so the child never blocks on a full stdout pipe.
-            tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
-        }
-
-        let keeper = Arc::new(Self {
-            http: WebStudioClient::new(actual_port)?,
-            studio_child: AsyncMutex::new(Some(studio)),
-            port: actual_port,
-            latest_screen: std::sync::Mutex::new(None),
-        });
-        let port = actual_port;
-
-        // Phase 1: wait for the Studio HTTP API (fast — no browser involved).
         emit_status(app, "info", "Starting the web driver…");
-        let mut api_up = false;
-        for attempt in 0..READY_ATTEMPTS {
-            if keeper.http.api_ready().await {
-                api_up = true;
-                break;
+        let mcp = McpClient::spawn(&["-p", "web"], &[]).await?;
+        let keeper = Arc::new(Self {
+            mcp,
+            devtools_port: parking_lot::Mutex::new(None),
+            latest_screen: std::sync::Mutex::new(None),
+            viewport: parking_lot::Mutex::new((0, 0)),
+        });
+
+        // The first tool call opens the browser session, launching Chromium.
+        // Arm the window hider BEFORE the browser exists: it polls fast and
+        // hides the window within a blink of it appearing.
+        emit_status(app, "info", "Starting Chromium…");
+        spawn_window_hider(app.cloned());
+        let slow_hint = {
+            let app = app.cloned();
+            tokio::spawn(async move {
+                sleep(Duration::from_secs(10)).await;
+                emit_status(
+                    app.as_ref(),
+                    "info",
+                    "Still starting — first run may download Chromium…",
+                );
+            })
+        };
+        let launched = match url {
+            Some(u) => {
+                let yaml = crate::maestro_mcp::inline_flow("web", &[format!("openLink: {u}")]);
+                keeper
+                    .mcp
+                    .call_tool(
+                        "run",
+                        serde_json::json!({ "device_id": WEB_DEVICE_ID, "yaml": yaml }),
+                        LAUNCH_TIMEOUT,
+                    )
+                    .await
             }
-            // A studio that died (bad install, port race we lost) will never become
-            // ready — surface its exit immediately instead of waiting out the budget.
-            let exited = {
-                let mut guard = keeper.studio_child.lock().await;
-                guard.as_mut().and_then(|c| c.try_wait().ok().flatten())
-            };
-            if let Some(status) = exited {
+            None => {
+                keeper
+                    .mcp
+                    .call_tool(
+                        "inspect_screen",
+                        serde_json::json!({ "device_id": WEB_DEVICE_ID }),
+                        LAUNCH_TIMEOUT,
+                    )
+                    .await
+            }
+        };
+        slow_hint.abort();
+        if let Err(e) = launched {
+            // A failed `openLink` (bad URL, unreachable site) still leaves a
+            // usable browser — only a keeper that died is fatal.
+            if !keeper.mcp.is_alive().await || url.is_none() {
                 keeper.stop().await;
                 return Err(AppError::Other(format!(
-                    "maestro studio -p web exited during startup ({status}). \
-                     Run `maestro -p web studio` in a terminal to see its error."
+                    "the web browser did not start ({e}). Run `maestro -p web test` on a \
+                     flow in a terminal to check your maestro + Chrome setup."
                 )));
             }
-            if attempt % 10 == 0 {
-                info!(port, attempt, "waiting for web studio api...");
-            }
-            sleep(Duration::from_millis(READY_BACKOFF_MS)).await;
-        }
-        if !api_up {
-            keeper.stop().await;
-            return Err(AppError::Other(format!(
-                "maestro studio -p web did not bring up the API on :{port} in time. \
-                 Run `maestro -p web studio` in a terminal to check it works."
-            )));
-        }
-
-        // Phase 2: launch Chromium. Studio starts the browser only on the first
-        // command — without this the device-screen SSE never emits and readiness
-        // below would time out (the historical connect flakiness).
-        emit_status(app, "info", "Starting Chromium…");
-        // Arm the window hider BEFORE the browser exists: it polls fast and
-        // hides the window within a blink of it appearing. Hiding only after
-        // readiness left the window on screen for the whole page load.
-        spawn_window_hider(app.cloned());
-        let target = url
-            .map(str::to_string)
-            .unwrap_or_else(|| default_trigger_url(port));
-        if let Err(e) = keeper.http.trigger_navigation(&target).await {
-            warn!(error = %e, "web navigate failed (continuing — browser may still come up)");
+            warn!(error = %e, "web openLink failed (continuing on the current page)");
             emit_status(
                 app,
                 "warn",
@@ -636,46 +467,22 @@ impl WebStudioKeeper {
             );
         }
 
-        // Phase 3: first device-screen event = browser is actually up.
-        for attempt in 0..READY_ATTEMPTS {
-            if keeper.http.is_alive().await {
-                info!(port, "web studio ready");
-                emit_status(app, "info", "Web browser ready");
-                return Ok(keeper);
-            }
-            // A studio that died (bad install, port race we lost) will never become
-            // ready — surface its exit immediately instead of waiting out the budget.
-            let exited = {
-                let mut guard = keeper.studio_child.lock().await;
-                guard.as_mut().and_then(|c| c.try_wait().ok().flatten())
-            };
-            if let Some(status) = exited {
-                keeper.stop().await;
-                return Err(AppError::Other(format!(
-                    "maestro studio -p web exited during startup ({status}). \
-                     Run `maestro -p web studio` in a terminal to see its error."
-                )));
-            }
-            if attempt == 20 {
-                emit_status(
-                    app,
-                    "info",
-                    "Still starting — first run may download Chromium…",
-                );
-            }
-            sleep(Duration::from_millis(READY_BACKOFF_MS)).await;
+        let port = keeper.discover_devtools_port().await;
+        if port.is_none() {
+            keeper.stop().await;
+            return Err(AppError::Other(
+                "the web browser started but its DevTools endpoint was not found".into(),
+            ));
         }
-        keeper.stop().await;
-        Err(AppError::Other(
-            "the web browser did not become ready. Run `maestro -p web studio` in a terminal to check it works.".into(),
-        ))
+        *keeper.devtools_port.lock() = port;
+        info!(devtools_port = ?port, "web keeper ready");
+        emit_status(app, "info", "Web browser ready");
+        Ok(keeper)
     }
 
     pub async fn stop(&self) {
-        if let Some(mut c) = self.studio_child.lock().await.take() {
-            let _ = c.kill().await;
-        }
-        // Killing the studio JVM orphans the chromedriver + Chrome it spawned;
+        self.mcp.stop().await;
+        // Killing the keeper JVM orphans the chromedriver + Chrome it spawned;
         // reap them so the window closes instead of lingering.
         kill_orphan_web_browsers().await;
     }
@@ -693,114 +500,46 @@ pub struct WebFramePayload {
     pub height: u32,
 }
 
-/// Hold the device-screen SSE stream open and emit a `web_frame` per new
-/// screenshot until aborted. Near-real-time (no fixed poll interval): frames
-/// arrive as Studio pushes them; if we fall behind, `SseBuffer` coalesces to
-/// the newest. The screenshot URL is a per-frame UUID — we download the PNG
-/// only when it changes. Connection drops reconnect with backoff
-/// (500 ms → 5 s); the keeper's own `is_alive` handles full respawns.
+/// Stream the keeper's Chrome over a CDP screencast and emit a `web_frame`
+/// per page change until aborted. Also tracks the viewport (for snapshots of
+/// element-less pages) and the page URL (so a respawn restores it).
 pub fn spawn_screenshot_poller(
     app: AppHandle,
-    keeper: Arc<WebStudioKeeper>,
+    keeper: Arc<WebDriverKeeper>,
 ) -> oneshot::Sender<()> {
-    let (abort_tx, mut abort_rx) = oneshot::channel::<()>();
+    let (abort_tx, abort_rx) = oneshot::channel::<()>();
     tokio::spawn(async move {
-        let mut reconnect_ms: u64 = 500;
-        let mut last_shot: Option<String> = None;
-        'session: loop {
-            let resp = tokio::select! {
-                biased;
-                _ = &mut abort_rx => break 'session,
-                r = keeper.http().open_screen_stream() => r,
-            };
-            let mut resp = match resp {
-                Ok(r) => {
-                    reconnect_ms = 500;
-                    r
-                }
-                Err(e) => {
-                    warn!(error = %e, "web screen stream connect failed; retrying");
-                    tokio::select! {
-                        biased;
-                        _ = &mut abort_rx => break 'session,
-                        _ = sleep(Duration::from_millis(reconnect_ms)) => {}
-                    }
-                    reconnect_ms = (reconnect_ms * 2).min(5_000);
-                    continue 'session;
-                }
-            };
-            let mut sse = SseBuffer::default();
-            loop {
-                let chunk = tokio::select! {
-                    biased;
-                    _ = &mut abort_rx => break 'session,
-                    c = resp.chunk() => c,
-                };
-                match chunk {
-                    Ok(Some(bytes)) => {
-                        sse.push(&bytes);
-                        let Some(json) = sse.latest_event() else {
-                            continue;
-                        };
-                        let screen: DeviceScreen = match serde_json::from_str(&json) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                warn!(error = %e, "web sse event parse failed");
-                                continue;
-                            }
-                        };
-                        // Cache the event for tap/inspect and remember the
-                        // page URL so a later respawn restores it (never
-                        // Studio's own SPA).
-                        keeper.note_screen(&screen);
-                        if let Some(u) = screen
-                            .url
-                            .as_deref()
-                            .filter(|u| !is_studio_local_url(u, keeper.port()))
-                        {
-                            use tauri::Manager;
-                            *app.state::<crate::state::AppState>().web_last_url.write() =
-                                Some(u.to_string());
-                        }
-                        // Same page render → same UUID URL → skip the fetch.
-                        if last_shot.as_deref() == Some(screen.screenshot.as_str()) {
-                            continue;
-                        }
-                        let png = tokio::select! {
-                            biased;
-                            _ = &mut abort_rx => break 'session,
-                            r = keeper.http().screenshot_png(&screen.screenshot) => r,
-                        };
-                        match png {
-                            Ok(data) => {
-                                use base64::Engine as _;
-                                last_shot = Some(screen.screenshot.clone());
-                                let payload = WebFramePayload {
-                                    data: base64::engine::general_purpose::STANDARD.encode(&data),
-                                    width: screen.width,
-                                    height: screen.height,
-                                };
-                                if let Err(e) = app.emit(WEB_FRAME_EVENT, &payload) {
-                                    warn!(error = %e, "failed to emit web_frame");
-                                }
-                            }
-                            Err(e) => warn!(error = %e, "web screenshot fetch failed"),
-                        }
-                    }
-                    Ok(None) | Err(_) => {
-                        // Stream ended (studio restart/kill) — reconnect loop.
-                        warn!("web screen stream closed; reconnecting");
-                        tokio::select! {
-                            biased;
-                            _ = &mut abort_rx => break 'session,
-                            _ = sleep(Duration::from_millis(reconnect_ms)) => {}
-                        }
-                        reconnect_ms = (reconnect_ms * 2).min(5_000);
-                        continue 'session;
-                    }
-                }
+        let finder_keeper = keeper.clone();
+        let find = move || {
+            let k = finder_keeper.clone();
+            async move { k.page_ws_url().await }
+        };
+        let mut last_url_check: Option<std::time::Instant> = None;
+        cdp::screencast(find, abort_rx, |payload| {
+            if payload.width > 0 && payload.height > 0 {
+                *keeper.viewport.lock() = (payload.width, payload.height);
             }
-        }
+            if let Err(e) = app.emit(WEB_FRAME_EVENT, &payload) {
+                warn!(error = %e, "failed to emit web_frame");
+            }
+            // Frames only arrive when the page changes — a cheap moment to
+            // refresh the remembered URL (throttled).
+            if last_url_check.map_or(true, |t| t.elapsed() > Duration::from_secs(1)) {
+                last_url_check = Some(std::time::Instant::now());
+                let keeper = keeper.clone();
+                let app = app.clone();
+                tokio::spawn(async move {
+                    let Some(port) = *keeper.devtools_port.lock() else {
+                        return;
+                    };
+                    if let Some(u) = cdp::page_url(port).await.filter(|u| !is_placeholder_url(u)) {
+                        use tauri::Manager;
+                        *app.state::<crate::state::AppState>().web_last_url.write() = Some(u);
+                    }
+                });
+            }
+        })
+        .await;
         info!("web screenshot poller aborted");
     });
     abort_tx
@@ -810,44 +549,64 @@ pub fn spawn_screenshot_poller(
 mod tests {
     use super::*;
 
+    // Trimmed `inspect_screen` output captured from maestro 2.10.0 on
+    // en.wikipedia.org (2026-09-24). maestro reports `platform: ios` for web.
+    const INSPECT: &str = r#"{"ui_schema":{"platform":"ios","abbreviations":{"b":"bounds","txt":"text","rid":"resource-id"},"defaults":{"enabled":true}},"elements":[{"b":"[0,0][1200,762]","c":[{"b":"[0,0][1200,66]","c":[{"b":"[44,17][64,49]","rid":"Site","c":[{"b":"[38,17][70,49]","txt":"on","rid":"vector-main-menu-dropdown-checkbox"},{"b":"[44,23][64,43]"},{"b":"[53,108][118,124]","txt":"Main page"},{"b":"[10,10][20,20]","a11y":"Search Wikipedia"}]}]}]}]}"#;
+
     #[test]
-    fn parses_device_screen_event() {
-        // Shape captured from a real `maestro -p web studio` SSE event.
-        let json = r#"{"platform":"WEB","screenshot":"/screenshot/abc.png","width":1200,"height":766,"url":"https://x","elements":[{"id":"Search","bounds":{"x":413,"y":14,"width":338,"height":37},"resourceId":"Search","text":"Search…"}]}"#;
-        let s: DeviceScreen = serde_json::from_str(json).expect("parse");
-        assert_eq!(s.width, 1200);
-        assert_eq!(s.screenshot, "/screenshot/abc.png");
-        assert!(s.elements.is_array());
-        // The current page URL rides on every event — it's how a respawned
-        // keeper restores the user's page instead of Studio's own SPA.
-        assert_eq!(s.url.as_deref(), Some("https://x"));
+    fn flattens_inspect_screen_into_selector_targets() {
+        let (els, viewport) = flatten_inspect_screen(INSPECT).expect("parse");
+        assert_eq!(viewport, (1200, 762));
+        let els = els.as_array().unwrap();
+        // Containers and the bare icon (no text, no id) are dropped.
+        assert_eq!(els.len(), 4);
+        assert_eq!(els[0]["resourceId"], "Site");
+        assert_eq!(
+            els[0]["bounds"],
+            serde_json::json!({"x":44,"y":17,"width":20,"height":32})
+        );
+        assert_eq!(els[1]["text"], "on");
+        assert_eq!(els[1]["resourceId"], "vector-main-menu-dropdown-checkbox");
+        assert_eq!(els[2]["text"], "Main page");
+        assert!(els[2].get("resourceId").is_none());
+        // Accessibility text doubles as the `text:` selector.
+        assert_eq!(els[3]["text"], "Search Wikipedia");
     }
 
     #[test]
-    fn studio_local_urls_are_never_remembered() {
-        // Remembering Studio's own pages would "restore" the browser to the
-        // localhost SPA on respawn — the exact bug this exists to prevent.
-        assert!(is_studio_local_url("http://127.0.0.1:9999/interact", 9999));
-        assert!(is_studio_local_url("http://localhost:9999/", 9999));
-        assert!(!is_studio_local_url("https://www.bouyguestelecom.fr", 9999));
-        assert!(!is_studio_local_url("http://127.0.0.1:8080/app", 9999));
+    fn flattened_elements_feed_the_web_hierarchy() {
+        let (els, viewport) = flatten_inspect_screen(INSPECT).unwrap();
+        let tree = crate::hierarchy::web::parse_device_screen_hierarchy(&els, viewport).unwrap();
+        let root = tree.root.unwrap();
+        assert_eq!(root.bounds.right, 1200);
+        assert_eq!(root.children.len(), 4);
     }
 
     #[test]
-    fn parses_port_from_studio_banner() {
-        // Real banner line (2026-07-10, maestro 2.5.1, --no-ansi) — Studio
-        // auto-increments when the default port is busy.
-        let line = "│   Maestro Studio is running at http://localhost:10000   │";
-        assert_eq!(parse_studio_port(line), Some(10000));
-        assert_eq!(
-            parse_studio_port("Maestro Studio is running at http://localhost:9999"),
-            Some(9999)
-        );
-        assert_eq!(
-            parse_studio_port("Navigate to http://localhost:9999 in your browser"),
-            None
-        );
-        assert_eq!(parse_studio_port("random noise"), None);
+    fn empty_page_has_no_elements_and_no_viewport() {
+        let json = r#"{"ui_schema":{},"elements":[]}"#;
+        let (els, viewport) = flatten_inspect_screen(json).unwrap();
+        assert_eq!(els, serde_json::json!([]));
+        assert_eq!(viewport, (0, 0));
+        assert!(flatten_inspect_screen("Failed to inspect screen: boom").is_err());
+    }
+
+    #[test]
+    fn parses_bounds_strings() {
+        assert_eq!(parse_bounds("[0,0][1200,762]"), Some((0, 0, 1200, 762)));
+        assert_eq!(parse_bounds("[-5,10][20,30]"), Some((-5, 10, 20, 30)));
+        assert_eq!(parse_bounds("[1,2]"), None);
+        assert_eq!(parse_bounds(""), None);
+    }
+
+    #[test]
+    fn placeholder_pages_are_never_remembered() {
+        // Remembering Chrome's initial page would "restore" the browser to a
+        // blank tab on respawn instead of the user's real page.
+        assert!(is_placeholder_url("data:,"));
+        assert!(is_placeholder_url("about:blank"));
+        assert!(!is_placeholder_url("https://www.bouyguestelecom.fr"));
+        assert!(!is_placeholder_url("http://127.0.0.1:8080/app"));
     }
 
     #[test]
@@ -864,12 +623,14 @@ mod tests {
 
     #[test]
     fn recent_screen_respects_freshness_window() {
-        let keeper = WebStudioKeeper::stub_for_tests();
+        let keeper = WebDriverKeeper::stub_for_tests();
         assert!(keeper.recent_screen(Duration::from_secs(2)).is_none());
-        let screen: DeviceScreen = serde_json::from_str(
-            r#"{"screenshot":"/screenshot/a.png","width":10,"height":10,"url":"https://x","elements":[]}"#,
-        )
-        .unwrap();
+        let screen = DeviceScreen {
+            width: 10,
+            height: 10,
+            elements: serde_json::json!([]),
+            url: Some("https://x".into()),
+        };
         keeper.note_screen(&screen);
         // Just stored → fresh.
         assert!(keeper.recent_screen(Duration::from_secs(2)).is_some());
@@ -878,57 +639,95 @@ mod tests {
     }
 
     #[test]
-    fn extracts_first_sse_data_line() {
-        // Only a newline-terminated `data:` line counts as complete.
-        assert_eq!(extract_sse_data(b"data: {\"a\":1}"), None);
-        assert_eq!(
-            extract_sse_data(b"data: {\"a\":1}\n\n").as_deref(),
-            Some("{\"a\":1}")
+    fn web_sweep_needles_are_scoped_to_web_keepers() {
+        // Regression: a broad sweep once killed the iOS simulator session.
+        // The scoped needles must not — nor a user's own `maestro mcp`.
+        let ios = "java -classpath /opt/homebrew/Cellar/maestro/2.10.0/libexec/lib/* maestro.cli.AppKt --device ABC mcp --no-viewer";
+        let web = "java -classpath /opt/homebrew/Cellar/maestro/2.10.0/libexec/lib/* maestro.cli.AppKt -p web mcp --no-viewer";
+        let user = "java -classpath /opt/homebrew/Cellar/maestro/2.10.0/libexec/lib/* maestro.cli.AppKt mcp";
+        assert!(crate::prockill::cmdline_matches(web, WEB_KEEPER_NEEDLES));
+        assert!(!crate::prockill::cmdline_matches(ios, WEB_KEEPER_NEEDLES));
+        assert!(!crate::prockill::cmdline_matches(user, WEB_KEEPER_NEEDLES));
+    }
+
+    /// Live end-to-end check against a real `maestro mcp` + Chrome: launch on
+    /// a page, read the hierarchy, stream a frame, run a command, tear down.
+    ///   MAESTRO_BIN=/path/to/maestro-2.10.0 cargo test --manifest-path \
+    ///     src-tauri/Cargo.toml web_keeper_end_to_end -- --ignored --nocapture
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn web_keeper_end_to_end() {
+        let t = std::time::Instant::now();
+        let keeper = WebDriverKeeper::start(Some("https://en.wikipedia.org/wiki/Main_Page"), None)
+            .await
+            .expect("start web keeper");
+        eprintln!("started in {:?}", t.elapsed());
+        assert!(keeper.is_alive().await, "keeper not alive after start");
+
+        let screen = keeper.device_screen().await.expect("device screen");
+        eprintln!(
+            "screen {}x{}, {} elements, url {:?}",
+            screen.width,
+            screen.height,
+            screen.elements.as_array().map_or(0, Vec::len),
+            screen.url
         );
-        assert!(extract_sse_data(b":comment\n").is_none());
-    }
+        assert!(screen.width > 0 && screen.height > 0);
+        assert!(screen.elements.as_array().is_some_and(|a| !a.is_empty()));
+        assert!(screen
+            .url
+            .as_deref()
+            .is_some_and(|u| u.contains("wikipedia")));
 
-    #[test]
-    fn default_trigger_is_local_studio_page() {
-        assert_eq!(default_trigger_url(9999), "http://127.0.0.1:9999/interact");
-    }
-
-    #[test]
-    fn studio_args_select_web_platform() {
-        let a = studio_args();
-        // `-p web` must come before the `studio` subcommand.
-        assert_eq!(a[0], "-p");
-        assert_eq!(a[1], "web");
-        assert_eq!(a[2], "studio");
-    }
-
-    #[test]
-    fn web_sweep_needles_are_scoped_to_web_studios() {
-        // Regression: the old sweep (`pgrep maestro.*studio`) killed the iOS
-        // simulator studio session. The scoped needles must not.
-        let ios = "java -classpath /opt/homebrew/Cellar/maestro/2.5.1/libexec/lib/* maestro.cli.AppKt --device ABC studio --no-window";
-        let web = "java -classpath /opt/homebrew/Cellar/maestro/2.5.1/libexec/lib/* maestro.cli.AppKt -p web studio --no-window";
-        assert!(crate::prockill::cmdline_matches(web, WEB_STUDIO_NEEDLES));
-        assert!(!crate::prockill::cmdline_matches(ios, WEB_STUDIO_NEEDLES));
-    }
-
-    #[test]
-    fn preflight_classifies_port_owners() {
-        let web = "java -cp maestro/lib maestro.cli.AppKt -p web studio --no-window";
-        let ios = "java -cp maestro/lib maestro.cli.AppKt --device ABC studio --no-window";
-        let foreign = "/usr/bin/python3 -m http.server 9999";
-        assert!(matches!(
-            classify_port_owner(web),
-            PortOwnerKind::OrphanWebStudio
+        let (abort_tx, abort_rx) = oneshot::channel();
+        let (frame_tx, frame_rx) = std::sync::mpsc::channel();
+        let k = keeper.clone();
+        let cast = tokio::spawn(cdp::screencast(
+            move || {
+                let k = k.clone();
+                async move { k.page_ws_url().await }
+            },
+            abort_rx,
+            move |f| {
+                let _ = frame_tx.send((f.width, f.height, f.data.len()));
+            },
         ));
-        assert!(matches!(
-            classify_port_owner(ios),
-            PortOwnerKind::MobileStudio
-        ));
-        assert!(matches!(
-            classify_port_owner(foreign),
-            PortOwnerKind::Foreign
-        ));
+        let frame =
+            tokio::task::spawn_blocking(move || frame_rx.recv_timeout(Duration::from_secs(10)))
+                .await
+                .unwrap()
+                .expect("no screencast frame");
+        eprintln!("frame {frame:?}");
+        let _ = abort_tx.send(());
+        let _ = cast.await;
+
+        let t = std::time::Instant::now();
+        keeper
+            .run_command("openLink: https://example.com")
+            .await
+            .expect("openLink");
+        eprintln!("openLink in {:?}", t.elapsed());
+        let t = std::time::Instant::now();
+        keeper
+            .run_command("tapOn: {point: \"50%,50%\"}")
+            .await
+            .expect("point tap");
+        eprintln!("tap in {:?}", t.elapsed());
+        let after = keeper.device_screen().await.expect("screen after");
+        assert!(after
+            .url
+            .as_deref()
+            .is_some_and(|u| u.contains("example.com")));
+        let err = keeper
+            .run_command("assertVisible: \"NoSuchElementXYZ\"")
+            .await
+            .expect_err("missing element must fail");
+        eprintln!("expected failure: {err}");
+
+        keeper.stop().await;
+        assert!(!keeper.is_alive().await);
+        let leftovers = crate::prockill::pids_matching(WEBDRIVER_CHROME_NEEDLES).await;
+        assert!(leftovers.is_empty(), "Chrome left behind: {leftovers:?}");
     }
 
     #[test]
@@ -939,33 +738,5 @@ mod tests {
         state.web_run_active.store(true, SeqCst);
         assert!(state.web_run_active.load(SeqCst));
         assert_eq!(state.web_respawn_fails.load(SeqCst), 0);
-    }
-
-    #[test]
-    fn sse_buffer_yields_last_complete_event_and_drains() {
-        let mut b = SseBuffer::default();
-        b.push(b"data: {\"a\":1}\n\ndata: {\"a\":2}\n\n");
-        // Two complete events buffered -> coalesce to the newest.
-        assert_eq!(b.latest_event().as_deref(), Some("{\"a\":2}"));
-        // Drained: nothing left until more data arrives.
-        assert_eq!(b.latest_event(), None);
-    }
-
-    #[test]
-    fn sse_buffer_handles_chunked_events() {
-        let mut b = SseBuffer::default();
-        b.push(b"data: {\"a\"");
-        assert_eq!(b.latest_event(), None); // incomplete — wait for more
-        b.push(b":1}\n\nda");
-        assert_eq!(b.latest_event().as_deref(), Some("{\"a\":1}"));
-        b.push(b"ta: {\"a\":2}\n\n");
-        assert_eq!(b.latest_event().as_deref(), Some("{\"a\":2}"));
-    }
-
-    #[test]
-    fn sse_buffer_ignores_comment_lines() {
-        let mut b = SseBuffer::default();
-        b.push(b":keepalive\n\ndata: {\"x\":1}\n\n");
-        assert_eq!(b.latest_event().as_deref(), Some("{\"x\":1}"));
     }
 }

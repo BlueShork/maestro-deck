@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Cross-platform "kill processes matching a command line" + "who owns this
-//! port" helpers. Used only by the web session. Unlike the Unix-only
-//! `pgrep`-based sweeps elsewhere, matching happens in Rust over a full
+//! Cross-platform "kill processes matching a command line" + "find a
+//! process's descendants" helpers, used by the maestro keepers' orphan
+//! sweeps and the web session. Matching happens in Rust over a full
 //! process listing, so the exact same semantics apply on macOS, Linux and
 //! Windows — and the matcher is unit-testable without spawning anything.
 
@@ -30,11 +30,11 @@ pub fn cmdline_matches(cmdline: &str, needles: &[&str]) -> bool {
     true
 }
 
-/// One `(pid, command line)` row of the process table.
-async fn list_processes() -> Vec<(u32, String)> {
+/// One `(pid, parent pid, command line)` row per process.
+async fn list_processes_with_parents() -> Vec<(u32, u32, String)> {
     #[cfg(unix)]
     let output = tokio::process::Command::new("ps")
-        .args(["-axo", "pid=,command="])
+        .args(["-axo", "pid=,ppid=,command="])
         .output()
         .await;
     #[cfg(windows)]
@@ -44,7 +44,7 @@ async fn list_processes() -> Vec<(u32, String)> {
             "-NoProfile",
             "-Command",
             // CSV keeps parsing dependency-free (no JSON shape surprises).
-            "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId)\u{1f}$($_.CommandLine)\" }",
+            "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId)\u{1f}$($_.ParentProcessId)\u{1f}$($_.CommandLine)\" }",
         ])
         .output()
         .await;
@@ -54,19 +54,69 @@ async fn list_processes() -> Vec<(u32, String)> {
     };
     String::from_utf8_lossy(&output.stdout)
         .lines()
-        .filter_map(|line| {
-            #[cfg(unix)]
-            {
-                let t = line.trim_start();
-                let (pid, cmd) = t.split_once(' ')?;
-                Some((pid.trim().parse().ok()?, cmd.trim().to_string()))
-            }
-            #[cfg(windows)]
-            {
-                let (pid, cmd) = line.split_once('\u{1f}')?;
-                Some((pid.trim().parse().ok()?, cmd.trim().to_string()))
-            }
+        .filter_map(parse_process_row)
+        .collect()
+}
+
+fn parse_process_row(line: &str) -> Option<(u32, u32, String)> {
+    #[cfg(unix)]
+    {
+        let t = line.trim_start();
+        let (pid, rest) = t.split_once(' ')?;
+        let rest = rest.trim_start();
+        let (ppid, cmd) = rest.split_once(' ').unwrap_or((rest, ""));
+        Some((
+            pid.trim().parse().ok()?,
+            ppid.trim().parse().ok()?,
+            cmd.trim().to_string(),
+        ))
+    }
+    #[cfg(windows)]
+    {
+        let mut parts = line.splitn(3, '\u{1f}');
+        let pid = parts.next()?.trim().parse().ok()?;
+        let ppid = parts.next()?.trim().parse().ok()?;
+        Some((pid, ppid, parts.next().unwrap_or("").trim().to_string()))
+    }
+}
+
+/// One `(pid, command line)` row of the process table.
+async fn list_processes() -> Vec<(u32, String)> {
+    list_processes_with_parents()
+        .await
+        .into_iter()
+        .map(|(pid, _, cmd)| (pid, cmd))
+        .collect()
+}
+
+/// True if `pid` descends from `ancestor` (at any depth) in `table`.
+fn descends_from(table: &[(u32, u32, String)], mut pid: u32, ancestor: u32) -> bool {
+    // Bounded walk: a pid-reuse cycle in a stale table must not spin forever.
+    for _ in 0..32 {
+        let Some((_, ppid, _)) = table.iter().find(|(p, _, _)| *p == pid) else {
+            return false;
+        };
+        if *ppid == ancestor {
+            return true;
+        }
+        if *ppid == 0 || *ppid == pid {
+            return false;
+        }
+        pid = *ppid;
+    }
+    false
+}
+
+/// `(pid, command line)` of every descendant of `ancestor` whose command line
+/// matches `needles` (in order).
+pub async fn descendants_matching(ancestor: u32, needles: &[&str]) -> Vec<(u32, String)> {
+    let table = list_processes_with_parents().await;
+    table
+        .iter()
+        .filter(|(pid, _, cmd)| {
+            cmdline_matches(cmd, needles) && descends_from(&table, *pid, ancestor)
         })
+        .map(|(pid, _, cmd)| (*pid, cmd.clone()))
         .collect()
 }
 
@@ -108,84 +158,57 @@ pub async fn kill_matching(needles: &[&str], reason: &str) {
     }
 }
 
-/// The process LISTENing on a local TCP port, if any.
-pub struct PortOwner {
-    pub pid: u32,
-    pub cmdline: String,
-}
-
-pub async fn port_owner(port: u16) -> Option<PortOwner> {
-    #[cfg(unix)]
-    let pid: u32 = {
-        let out = tokio::process::Command::new("lsof")
-            .args([
-                "-nP",
-                &format!("-iTCP:{port}"),
-                "-sTCP:LISTEN",
-                "-t", // terse: PIDs only
-            ])
-            .output()
-            .await
-            .ok()?;
-        String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .next()?
-            .trim()
-            .parse()
-            .ok()?
-    };
-    #[cfg(windows)]
-    let pid: u32 = {
-        let out = tokio::process::Command::new("powershell")
-            .no_window()
-            .args([
-                "-NoProfile",
-                "-Command",
-                &format!(
-                    "(Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess"
-                ),
-            ])
-            .output()
-            .await
-            .ok()?;
-        String::from_utf8_lossy(&out.stdout).trim().parse().ok()?
-    };
-
-    let cmdline = list_processes()
-        .await
-        .into_iter()
-        .find(|(p, _)| *p == pid)
-        .map(|(_, c)| c)
-        .unwrap_or_default();
-    Some(PortOwner { pid, cmdline })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // Real command lines observed on this machine (2026-07-10).
-    const IOS_STUDIO: &str = "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home/bin/java -classpath /opt/homebrew/Cellar/maestro/2.5.1/libexec/lib/* maestro.cli.AppKt --device 1D5972C2-89CA-4F33-AE3D-7A9A8CD6094C studio --no-window";
-    const WEB_STUDIO: &str = "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home/bin/java -classpath /opt/homebrew/Cellar/maestro/2.5.1/libexec/lib/* maestro.cli.AppKt -p web studio --no-window";
+    // Real command lines observed on this machine (2026-09-24, maestro 2.10.0).
+    const IOS_KEEPER: &str = "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home/bin/java --enable-native-access=ALL-UNNAMED -classpath /opt/homebrew/Cellar/maestro/2.10.0/libexec/lib/* maestro.cli.AppKt --device 1D5972C2-89CA-4F33-AE3D-7A9A8CD6094C mcp --no-viewer";
+    const WEB_KEEPER: &str = "/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home/bin/java --enable-native-access=ALL-UNNAMED -classpath /opt/homebrew/Cellar/maestro/2.10.0/libexec/lib/* maestro.cli.AppKt -p web mcp --no-viewer";
 
     #[test]
     fn ordered_needles_all_present_matches() {
-        assert!(cmdline_matches(
-            WEB_STUDIO,
-            &["maestro", "-p web", "studio"]
-        ));
+        assert!(cmdline_matches(WEB_KEEPER, &["maestro", "-p web", "mcp"]));
     }
 
     #[test]
-    fn web_needles_never_match_an_ios_studio() {
+    fn web_needles_never_match_an_ios_keeper() {
         // THE regression this module exists to prevent: a web sweep must not
-        // catch a mobile studio session.
-        assert!(!cmdline_matches(
-            IOS_STUDIO,
-            &["maestro", "-p web", "studio"]
-        ));
-        // …but a generic studio needle set matches both.
-        assert!(cmdline_matches(IOS_STUDIO, &["maestro", "studio"]));
+        // catch a mobile keeper session.
+        assert!(!cmdline_matches(IOS_KEEPER, &["maestro", "-p web", "mcp"]));
+        // …but a generic mcp needle set matches both.
+        assert!(cmdline_matches(IOS_KEEPER, &["maestro", "mcp"]));
+    }
+
+    #[test]
+    fn walks_the_parent_chain() {
+        // java(10) → chromedriver(20) → chrome(30); unrelated(40) under init.
+        let table = vec![
+            (10, 1, "java".to_string()),
+            (20, 10, "chromedriver".to_string()),
+            (30, 20, "chrome".to_string()),
+            (40, 1, "chrome".to_string()),
+        ];
+        assert!(descends_from(&table, 30, 10));
+        assert!(descends_from(&table, 20, 10));
+        assert!(!descends_from(&table, 40, 10));
+        assert!(!descends_from(&table, 10, 10));
+        assert!(!descends_from(&table, 99, 10));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parses_ps_rows_with_parent() {
+        assert_eq!(
+            parse_process_row("  123   45 /usr/bin/java -cp x maestro.cli.AppKt mcp"),
+            Some((
+                123,
+                45,
+                "/usr/bin/java -cp x maestro.cli.AppKt mcp".to_string()
+            ))
+        );
+        assert_eq!(parse_process_row("  7 1"), Some((7, 1, String::new())));
+        assert_eq!(parse_process_row("garbage"), None);
     }
 
     #[test]

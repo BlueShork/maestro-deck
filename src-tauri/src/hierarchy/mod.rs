@@ -8,7 +8,7 @@
 //! React Native widgets, and accessibility metadata that raw `uiautomator dump`
 //! does not surface, and stays in sync with whatever Maestro CLI is installed.
 //!
-//! Fast path (opt-in): spawn `maestro studio` once to install+start the
+//! Fast path (opt-in): spawn a `maestro mcp` keeper once to install+start the
 //! on-device driver, then talk gRPC directly to it (port 7001 via adb
 //! forward). Bindings for that gRPC service are generated from
 //! `proto/maestro_android.proto` and re-exported via the `proto` submodule.
@@ -16,10 +16,10 @@
 //! `parse_xml` is kept for the unit-test fixture (UIAutomator XML format)
 //! and is also what consumes the driver's direct `ViewHierarchyResponse`.
 
+pub mod driver_keeper;
 pub mod grpc_client;
 pub mod ios;
 pub mod proto;
-pub mod studio;
 pub mod web;
 
 use std::collections::HashMap;
@@ -111,9 +111,10 @@ pub fn dump_hierarchy(serial: &str) -> AppResult<HierarchyTree> {
             // Each ADB install triggers MIUI/HyperOS's "Install via USB"
             // Accept/Refuse popup on Xiaomi devices, so per-dump sessions
             // turn inspect mode into a popup storm. With the flag, the
-            // driver installs once if missing and then persists; `maestro
-            // studio` (which has no such flag) still reinstalls on its own
-            // start, keeping the driver fresh after maestro upgrades.
+            // driver installs once if missing and then persists; the
+            // `maestro mcp` keeper (which has no such flag) still reinstalls
+            // on its own start, keeping the driver fresh after maestro
+            // upgrades.
             .args(["--udid", serial, "hierarchy", "--no-reinstall-driver"])
             .output()
             .map_err(|e| {

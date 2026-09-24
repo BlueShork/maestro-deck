@@ -20,6 +20,7 @@ pub mod ios_capture;
 pub mod ios_session;
 pub mod ipc;
 pub mod maestro_health;
+pub mod maestro_mcp;
 pub mod metrics;
 pub mod onboarding;
 pub mod process_ext;

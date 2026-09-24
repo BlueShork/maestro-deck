@@ -757,7 +757,7 @@ mod tests {
     }
 
     /// Full end-to-end repro of the production crash: spawn the real
-    /// `maestro studio` driver, capture the framebuffer, then inject touches
+    /// `maestro mcp` driver keeper, capture the framebuffer, then inject touches
     /// through the XCTest runner mid-capture — exactly what happens when the
     /// user clicks the device view in the app. Run with a booted sim:
     ///   cargo test --manifest-path src-tauri/Cargo.toml capture_with_touch -- --ignored --nocapture

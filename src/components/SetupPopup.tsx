@@ -10,7 +10,7 @@ import { selectPopupVisible, useEnvStore } from "@/stores/envStore";
 import { useRunStore } from "@/stores/runStore";
 
 const LABELS: Record<string, string> = {
-  maestro: "maestro CLI 2.5.1",
+  maestro: "maestro CLI 2.10.0",
   java: "Java 17+",
   adb: "adb (Android)",
   xcode: "Xcode (iOS)",
@@ -18,7 +18,7 @@ const LABELS: Record<string, string> = {
 
 /** Fallback copy-paste commands for rows without one-click install. */
 const MANUAL_COMMANDS: Record<string, string> = {
-  maestro: "MAESTRO_VERSION=2.5.1 curl -Ls 'https://get.maestro.mobile.dev' | bash",
+  maestro: "MAESTRO_VERSION=2.10.0 curl -Ls 'https://get.maestro.mobile.dev' | bash",
   java: "brew install --cask temurin@21",
   adb: "brew install --cask android-platform-tools",
   xcode: "xcode-select --install # or install Xcode from the App Store",
@@ -97,7 +97,7 @@ function CheckRow({
 /**
  * Onboarding environment checker. Fixed bottom-right, above toasts (z-70 vs
  * their z-60), below the tour (z-100). Collapsible to a badge but NOT
- * dismissible until the minimal setup (maestro 2.5.1 + Java 17+) passes;
+ * dismissible until the minimal setup (maestro 2.10.0 + Java 17+) passes;
  * once it does, it auto-dismisses forever (Settings → Environment remains).
  *
  * We read store state via getState() / useState initialiser (not the hook) so

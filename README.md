@@ -56,7 +56,7 @@ Maestro is the YAML mobile-testing framework. Maestro Deck is the desktop app th
 
 |                         | Maestro Deck                                         | Maestro Studio               | Appium Inspector           |
 | ----------------------- | ---------------------------------------------------- | ---------------------------- | -------------------------- |
-| Install                 | Single signed app (DMG/MSI)                          | `maestro studio` (browser)   | Java + Appium server setup |
+| Install                 | Single signed app (DMG/MSI)                          | Separate desktop app         | Java + Appium server setup |
 | Footprint               | Native Tauri shell (~80 MB RAM idle, system webview) | Electron-based, ~400+ MB RAM | JVM + Chromium inspector   |
 | Cost                    | Free, source-available (BUSL-1.1)                    | Free, closed source          | Free, open source          |
 | Live mirroring          | ✅ scrcpy-grade, 60 fps                              | ⚠️ Periodic screenshots      | ⚠️ Screenshot-based        |

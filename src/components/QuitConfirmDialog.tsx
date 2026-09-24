@@ -19,7 +19,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
  * and emits `quit-requested`; we either ask the user (default) or, if they
  * opted out, quit straight away. Either path ends in `ipc.confirmQuit()`, which
  * tears every session down before the process exits — so a fast quit never
- * leaves orphaned studio / chromedriver / Chrome / iproxy processes behind.
+ * leaves orphaned maestro / chromedriver / Chrome / iproxy processes behind.
  */
 export function QuitConfirmDialog() {
   const [open, setOpen] = useState(false);

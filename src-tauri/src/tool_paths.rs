@@ -49,8 +49,8 @@ pub struct ToolPaths {
     pub maestro: Option<String>,
     #[serde(default)]
     pub iproxy: Option<String>,
-    /// Apple Team ID used to code-sign the iOS XCTest runner via `maestro studio`
-    /// (simulators) or `maestro-ios-device` (physical devices).
+    /// Apple Team ID used to code-sign the iOS XCTest runner via
+    /// `maestro-ios-device` (physical devices).
     #[serde(default)]
     pub apple_team_id: Option<String>,
     /// `maestro-ios-device` bridge binary (devicelab) used to build/run the
@@ -251,9 +251,8 @@ pub fn set_maestro_ios_device_path(path: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// User-configured Apple Team ID (or None). The keeper passes it to
-/// `maestro studio --apple-team-id` (simulators) or `maestro-ios-device
-/// --team-id` (physical); if None, maestro uses its own config.
+/// User-configured Apple Team ID (or None). The physical-device keeper passes
+/// it to `maestro-ios-device --team-id`.
 pub fn apple_team_id() -> Option<String> {
     load_overrides()
         .apple_team_id

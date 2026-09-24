@@ -90,7 +90,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 
 # gRPC client for talking directly to the on-device Maestro driver
 # (bypasses the slow `maestro hierarchy` CLI invocation path when the
-# driver is kept alive by a background `maestro studio` process).
+# driver is kept alive by a background `maestro mcp` process).
 tonic = { version = "0.12", default-features = false, features = ["codegen", "prost", "transport"] }
 prost = "0.13"
 zip = "2"
