@@ -18,7 +18,8 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ipc } from "@/lib/ipc";
 import { flowDisplayName, parseFlow } from "@/lib/flowAst";
 import { buildPartialFlow } from "@/lib/partialFlow";
-import { useShortcuts } from "@/lib/keyboard";
+import { useAppMenu } from "@/lib/appMenu";
+import { IS_MAC, useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
@@ -33,7 +34,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 /**
  * The primary workspace screen — toolbar plus the resizable panel layout
- * (workspace, inspector, device, editor, console, metrics, chat). Owns the
+ * (workspace, inspector, device, editor, console, chat). Owns the
  * run callbacks and keyboard shortcuts, which only make sense here. Rendered
  * at the `/` route; navigating to `/settings` swaps it out for the full
  * settings page. App-wide effects (runner listeners, theme, metrics) live in
@@ -71,11 +72,11 @@ export function MainView() {
     (panels.inspector ? INSPECTOR_SIZE : 0) -
     (chatOpen ? CHAT_SIZE : 0);
 
-  // The bottom row (console / metrics) opens at its minimum height so the
+  // The bottom row (console) opens at its minimum height so the
   // editor + device get the most room; the user can drag it taller and the
   // size persists. `BOTTOM_MIN` must match the `main-bottom` Panel's `minSize`.
   const BOTTOM_MIN = 10;
-  const bottomVisible = panels.console || panels.metrics;
+  const bottomVisible = panels.console;
   const mainTopSize = bottomVisible ? 100 - BOTTOM_MIN : 100;
   const mainBottomSize = 100 - mainTopSize;
 
@@ -198,18 +199,30 @@ export function MainView() {
 
   const shortcuts = useMemo(
     () => [
-      { key: "r", mod: true, handler: () => void onRun() },
-      {
-        key: "s",
-        mod: true,
-        handler: () => window.dispatchEvent(new CustomEvent("flow:command", { detail: "save" })),
-        allowInInput: true,
-      },
+      // On macOS the menu bar owns ⌘R / ⌘S (useAppMenu); binding them here
+      // too would fire twice.
+      ...(IS_MAC
+        ? []
+        : [
+            { key: "r", mod: true, handler: () => void onRun() },
+            {
+              key: "s",
+              mod: true,
+              handler: () =>
+                window.dispatchEvent(new CustomEvent("flow:command", { detail: "save" })),
+              allowInInput: true,
+            },
+          ]),
       { key: inspectKey, handler: () => void toggleInspect() },
     ],
     [onRun, toggleInspect, inspectKey],
   );
   useShortcuts(shortcuts);
+  useAppMenu({
+    onRun: () => void onRun(),
+    onRunAll: () => void onRunAll(),
+    onStop: () => void onStop(),
+  });
 
   return (
     <>
@@ -308,7 +321,7 @@ export function MainView() {
                   </PanelGroup>
                 </Panel>
 
-                {panels.console || panels.metrics ? (
+                {panels.console ? (
                   <>
                     <PanelResizeHandle className={RESIZE_HANDLE_V} />
                     <Panel

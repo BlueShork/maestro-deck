@@ -74,6 +74,8 @@ export const ipc = {
   // dialog (or has opted out of it). The app process exits, so this never
   // resolves on success.
   confirmQuit: () => call<void>("confirm_quit"),
+  // Ticks a macOS menu check item; a no-op elsewhere.
+  setMenuChecked: (id: string, checked: boolean) => call<void>("set_menu_checked", { id, checked }),
   enterInspectMode: (fastMode: boolean) => call<HierarchyTree>("enter_inspect_mode", { fastMode }),
   queryElement: (x: number, y: number) => call<UINode | null>("query_element", { x, y }),
   suggestSelectors: (node: UINode) => call<Selector[]>("suggest_selectors", { node }),
@@ -311,6 +313,9 @@ export const events = {
   // the backend holds the exit until the frontend calls `confirmQuit`.
   onQuitRequested: (handler: () => void): Promise<UnlistenFn> =>
     listen<null>("quit-requested", () => handler()),
+  // macOS menu bar: a click on an app item arrives as its id (see app_menu.rs).
+  onMenuAction: (handler: (id: string) => void): Promise<UnlistenFn> =>
+    listen<string>("menu:action", (e) => handler(e.payload)),
   onMetricsSample: (handler: (p: MetricsSamplePayload) => void): Promise<UnlistenFn> =>
     listen<MetricsSamplePayload>("metrics:sample", (e) => handler(e.payload)),
   onMetricsTargetChanged: (handler: (p: TargetChangedPayload) => void): Promise<UnlistenFn> =>
