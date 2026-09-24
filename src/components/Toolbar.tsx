@@ -21,6 +21,7 @@ import {
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate } from "react-router-dom";
+import { useShallow } from "zustand/react/shallow";
 
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
@@ -169,7 +170,11 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const updatePhase = useUpdateStore((s) => s.phase);
   const checkUpdate = useUpdateStore((s) => s.check);
   const cloudUser = useCloudAuthStore((s) => s.user);
-  const setupChip = useEnvStore(selectSetupChip);
+  // `useShallow`: the selector builds a fresh object on every call, which a
+  // plain subscription reads as a new snapshot each render — React then loops
+  // ("Maximum update depth exceeded") and unmounts the whole app the moment
+  // setup starts.
+  const setupChip = useEnvStore(useShallow(selectSetupChip));
   // A cloud run uploads the flow and needs nothing installed here, so the
   // local toolchain must never gate it.
   const localToolsMissing = useEnvStore((s) => s.minimalOk === false);
