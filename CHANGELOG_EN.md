@@ -1,3 +1,10 @@
+# What's New in v0.9.6
+
+## Fixes
+- **Fixed a black screen right after launch.** The app crashed as soon as its automatic setup started, which v0.9.5 triggers to install Maestro 2.10.0. Setup now runs normally, with its progress shown next to Run.
+
+---
+
 # What's New in v0.9.5
 
 ## Maestro 2.10.0
