@@ -4,6 +4,8 @@
 import { motion, type MotionValue, useScroll, useTransform } from "motion/react";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
+import { toKeyframeOffsets } from "./keyframeOffsets";
+
 const GAP_PX = 16;
 
 function FlowScrollCell({
@@ -33,14 +35,14 @@ function FlowScrollCell({
   const exitAnimation = nextRow / totalRows + scrollRangePerRow * 2;
 
   const offsetToAdd = (scrollRangePerRow / totalItems) * (currentRow + 2);
-  const range = [
+  const range = toKeyframeOffsets([
     0,
     entryAnimation - offsetToAdd,
     currPosition - offsetToAdd,
     currPosition - offsetToAdd,
     exitAnimation - offsetToAdd,
     1,
-  ];
+  ]);
 
   const scale = useTransform(scrollYProgress, range, [0.5, 0.5, 1, 1, 0.5, 0.5]);
   const isLeft = index % ITEMS_PER_ROW === 0;
