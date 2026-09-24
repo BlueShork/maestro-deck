@@ -33,6 +33,7 @@ appId: com.example.app
 - `waitForAnimationToEnd`, `extendedWaitUntil`
 - `runFlow: <path.yaml>`, `runScript: <path.js>`
 - `takeScreenshot`, `stopApp`, `clearState`, `pressKey: BACK | HOME | ENTER`
+- `setDarkMode: enabled | disabled`, `toggleDarkMode`, `assertDarkMode`, `assertLightMode` — device theme (iOS/Android)
 
 ### Selector strategies (in order of preference)
 
