@@ -170,12 +170,21 @@ pub enum ArchiveKind {
 /// extracted tree, and doing that on every resolution would be wasteful. The
 /// path is re-validated on read, so a manifest pointing at a deleted file is
 /// treated as "not installed" rather than handed out.
+///
+/// Maestro also records the version it was installed at: the app pins an
+/// exact release, and a managed install from an older app version (e.g. 2.5.1,
+/// which still relied on `maestro studio`) must read as "not installed" so the
+/// setup downloads the pinned one instead of reusing it forever.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ToolManifest {
     #[serde(default)]
     pub java: Option<String>,
     #[serde(default)]
     pub maestro: Option<String>,
+    /// Version `maestro` was installed at. Absent in manifests written before
+    /// it was recorded — those installs were 2.5.1.
+    #[serde(default)]
+    pub maestro_version: Option<String>,
     #[serde(default)]
     pub adb: Option<String>,
 }
@@ -184,7 +193,12 @@ impl ToolManifest {
     pub fn get(&self, tool: ManagedTool) -> Option<&str> {
         let raw = match tool {
             ManagedTool::Java => self.java.as_deref(),
-            ManagedTool::Maestro => self.maestro.as_deref(),
+            ManagedTool::Maestro => {
+                if self.maestro_version.as_deref() != Some(crate::env_check::REQUIRED_MAESTRO) {
+                    return None;
+                }
+                self.maestro.as_deref()
+            }
             ManagedTool::Adb => self.adb.as_deref(),
         }?;
         // A recorded path whose file has since gone is worse than no path: the
@@ -196,7 +210,10 @@ impl ToolManifest {
         let value = Some(path.to_string_lossy().into_owned());
         match tool {
             ManagedTool::Java => self.java = value,
-            ManagedTool::Maestro => self.maestro = value,
+            ManagedTool::Maestro => {
+                self.maestro = value;
+                self.maestro_version = Some(crate::env_check::REQUIRED_MAESTRO.to_string());
+            }
             ManagedTool::Adb => self.adb = value,
         }
     }
@@ -303,6 +320,41 @@ mod tests {
         let mut m = ToolManifest::default();
         m.set(ManagedTool::Maestro, &bin);
         assert_eq!(m.get(ManagedTool::Maestro), Some(bin.to_str().unwrap()));
+    }
+
+    #[test]
+    fn a_managed_maestro_from_another_version_reads_as_not_installed() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("maestro");
+        std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
+
+        // A manifest written by an app version that installed 2.5.1 had no
+        // version field at all.
+        let legacy = format!(r#"{{"maestro":{:?}}}"#, bin.to_str().unwrap());
+        let m: ToolManifest = serde_json::from_str(&legacy).unwrap();
+        assert_eq!(m.get(ManagedTool::Maestro), None);
+
+        let mut m = m;
+        m.maestro_version = Some("2.5.1".into());
+        assert_eq!(m.get(ManagedTool::Maestro), None);
+
+        // Re-installing records the pinned version, so it is handed out again.
+        m.set(ManagedTool::Maestro, &bin);
+        assert_eq!(
+            m.maestro_version.as_deref(),
+            Some(crate::env_check::REQUIRED_MAESTRO)
+        );
+        assert_eq!(m.get(ManagedTool::Maestro), Some(bin.to_str().unwrap()));
+    }
+
+    #[test]
+    fn other_managed_tools_do_not_depend_on_the_maestro_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("adb");
+        std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
+        let mut m = ToolManifest::default();
+        m.set(ManagedTool::Adb, &bin);
+        assert_eq!(m.get(ManagedTool::Adb), Some(bin.to_str().unwrap()));
     }
 
     #[test]
