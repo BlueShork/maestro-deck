@@ -31,6 +31,12 @@ interface ToastState {
 // its place (SwipeToast's full exit is ~340ms; the overlap is intentional).
 const SWAP_DELAY_MS = 180;
 
+// Toasts pushed but not yet inserted (waiting out SWAP_DELAY_MS), mapped to
+// whether they were dismissed meanwhile. A quick operation can finish — and
+// dismiss its toast — inside the delay; without this the dismiss hit nothing
+// and the toast appeared afterwards, stuck forever if persistent.
+const pending = new Map<string, { dismissed: boolean }>();
+
 export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
   push: (t) => {
@@ -41,7 +47,11 @@ export const useToastStore = create<ToastState>((set, get) => ({
       set((s) => ({
         toasts: s.toasts.map((x) => (x.open ? { ...x, open: false } : x)),
       }));
+      pending.set(id, { dismissed: false });
       setTimeout(() => {
+        const dismissed = pending.get(id)?.dismissed ?? false;
+        pending.delete(id);
+        if (dismissed) return;
         set((s) => ({
           toasts: [...s.toasts.filter((x) => x.open), { ...t, id, open: true }],
         }));
@@ -51,10 +61,16 @@ export const useToastStore = create<ToastState>((set, get) => ({
     }
     return id;
   },
-  dismiss: (id) =>
+  dismiss: (id) => {
+    const waiting = pending.get(id);
+    if (waiting) {
+      waiting.dismissed = true;
+      return;
+    }
     set((s) => ({
       toasts: s.toasts.map((x) => (x.id === id ? { ...x, open: false } : x)),
-    })),
+    }));
+  },
   setClosed: (id) => set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) })),
 }));
 
