@@ -4,7 +4,7 @@
 import { motion, type MotionValue, useScroll, useTransform } from "motion/react";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 
-import { toKeyframeOffsets } from "./keyframeOffsets";
+import { toUnitKeyframes } from "./keyframeOffsets";
 
 const GAP_PX = 16;
 
@@ -35,35 +35,30 @@ function FlowScrollCell({
   const exitAnimation = nextRow / totalRows + scrollRangePerRow * 2;
 
   const offsetToAdd = (scrollRangePerRow / totalItems) * (currentRow + 2);
-  const range = toKeyframeOffsets([
-    0,
+  // Entry / resting / exit points; they can fall outside [0, 1] (the first
+  // row's entry happens "before" the scroll starts), so each property is
+  // re-sampled onto valid WAAPI keyframe offsets by `toUnitKeyframes`.
+  const points = [
     entryAnimation - offsetToAdd,
     currPosition - offsetToAdd,
     currPosition - offsetToAdd,
     exitAnimation - offsetToAdd,
-    1,
-  ]);
-
-  const scale = useTransform(scrollYProgress, range, [0.5, 0.5, 1, 1, 0.5, 0.5]);
+  ];
   const isLeft = index % ITEMS_PER_ROW === 0;
   const isRight = index % ITEMS_PER_ROW === ITEMS_PER_ROW - 1;
-  const xTransform = useTransform(scrollYProgress, range, [
-    isLeft ? "60%" : isRight ? "-60%" : "0%",
-    isLeft ? "60%" : isRight ? "-60%" : "0%",
-    "0%",
-    "0%",
-    "0%",
-    "0%",
-  ]);
-  const rotate = useTransform(scrollYProgress, range, [
-    isLeft ? -12 : isRight ? 12 : 0,
-    isLeft ? -12 : isRight ? 12 : 0,
-    0,
-    0,
-    0,
-    0,
-  ]);
-  const opacity = useTransform(scrollYProgress, range, [0.4, 0.4, 1, 1, 0.4, 0.4]);
+  const edgeX = isLeft ? 60 : isRight ? -60 : 0;
+  const edgeRotate = isLeft ? -12 : isRight ? 12 : 0;
+
+  const s = toUnitKeyframes(points, [0.5, 1, 1, 0.5]);
+  const xk = toUnitKeyframes(points, [edgeX, 0, 0, 0]);
+  const rk = toUnitKeyframes(points, [edgeRotate, 0, 0, 0]);
+  const ok = toUnitKeyframes(points, [0.4, 1, 1, 0.4]);
+
+  const scale = useTransform(scrollYProgress, s.offsets, s.values);
+  const xPercent = useTransform(scrollYProgress, xk.offsets, xk.values);
+  const xTransform = useTransform(xPercent, (v) => `${v}%`);
+  const rotate = useTransform(scrollYProgress, rk.offsets, rk.values);
+  const opacity = useTransform(scrollYProgress, ok.offsets, ok.values);
 
   return (
     <motion.div style={{ scale, x: xTransform, rotate, opacity }} className="h-full w-full">
@@ -94,6 +89,22 @@ export function FlowScrollGrid({
   });
   const gridRef = useRef<HTMLDivElement>(null);
   const [itemsPerRow, setItemsPerRow] = useState(3);
+  // The effect is driven by the container's scroll progress. When the grid
+  // fits without scrolling, that progress stays 0 forever and every cell
+  // would be frozen in its shrunken, faded entry state — render it static.
+  const [scrollable, setScrollable] = useState(false);
+
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    const grid = gridRef.current;
+    if (!container || !grid) return;
+    const measure = () => setScrollable(container.scrollHeight > container.clientHeight + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    ro.observe(grid);
+    return () => ro.disconnect();
+  }, [scrollContainerRef]);
 
   useLayoutEffect(() => {
     const el = gridRef.current;
@@ -114,7 +125,7 @@ export function FlowScrollGrid({
     style: { gridTemplateColumns: `repeat(${itemsPerRow}, minmax(0, 1fr))`, gap: GAP_PX },
   };
 
-  if (children.length < itemsPerRow * 2) {
+  if (!scrollable || children.length < itemsPerRow * 2) {
     return <div {...gridProps}>{children}</div>;
   }
 

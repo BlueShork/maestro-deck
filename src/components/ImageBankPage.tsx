@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
+  Globe,
   ImageIcon,
   Layers,
   RefreshCw,
@@ -29,18 +30,30 @@ import type { BankGroup, BankImage } from "@/types/visualRegression";
 
 // device_key is `<sanitized_model>_<w>x<h>` (e.g. "iPhone_16_Pro_1179x2556").
 // Split it back into something humans read.
-function parseDeviceKey(key: string): { name: string; resolution: string; ios: boolean } {
+type DeviceKind = "ios" | "android" | "web";
+
+function parseDeviceKey(key: string): { name: string; resolution: string; kind: DeviceKind } {
   const m = key.match(/^(.*)_(\d+)x(\d+)$/);
-  const name = (m ? m[1] : key).replace(/_/g, " ").trim();
+  const name = (m ? m[1] : key).replace(/_+/g, " ").trim();
   // Older iOS banks were keyed `_0x0` (device reported no resolution) — don't
   // surface a meaningless "0×0".
   const resolution = m && !(m[2] === "0" && m[3] === "0") ? `${m[2]}×${m[3]}` : "";
-  const ios = /iphone|ipad|ipod|ios/i.test(name);
-  return { name, resolution, ios };
+  // The web target's model is "Web Browser (Chromium)".
+  const kind: DeviceKind = /web browser|chromium/i.test(name)
+    ? "web"
+    : /iphone|ipad|ipod|ios/i.test(name)
+      ? "ios"
+      : "android";
+  return { name, resolution, kind };
 }
 
-function DeviceGlyph({ ios, className }: { ios: boolean; className?: string }) {
-  return ios ? <AppleLogo className={className} /> : <AndroidLogo className={className} />;
+function DeviceGlyph({ kind, className }: { kind: DeviceKind; className?: string }) {
+  if (kind === "web") return <Globe className={className} />;
+  return kind === "ios" ? (
+    <AppleLogo className={className} />
+  ) : (
+    <AndroidLogo className={className} />
+  );
 }
 
 function formatBytes(n: number): string {
@@ -535,7 +548,7 @@ export function ImageBankPage() {
                       active ? "text-foreground" : "text-muted-foreground",
                     )}
                   >
-                    <DeviceGlyph ios={meta.ios} className="h-4 w-4" />
+                    <DeviceGlyph kind={meta.kind} className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-medium">{meta.name}</span>
@@ -565,7 +578,7 @@ export function ImageBankPage() {
                 <div className="mb-4 flex items-end justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-muted/50 text-foreground">
-                      <DeviceGlyph ios={activeMeta.ios} className="h-5 w-5" />
+                      <DeviceGlyph kind={activeMeta.kind} className="h-5 w-5" />
                     </span>
                     <div>
                       <h1 className="text-lg font-semibold leading-tight">{activeMeta.name}</h1>
