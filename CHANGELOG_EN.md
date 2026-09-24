@@ -1,3 +1,18 @@
+# What's New in v0.9.5
+
+## Maestro 2.10.0
+- **Maestro Deck now runs on Maestro CLI 2.10.0** (previously 2.5.1). The app's automatic setup downloads it for you, and replaces a Maestro it installed at an older version.
+- **Same features, new engine** — Maestro 2.6 removed `maestro studio`, which the app relied on. The inspector, taps and live preview now go through `maestro mcp` on Android, iOS simulators and the web.
+- **Dark mode commands** from Maestro 2.9 (`setDarkMode`, `toggleDarkMode`, `assertDarkMode`, `assertLightMode`) are suggested in the editor, tracked in the run console and known to Billy.
+- **Known limitation:** physical iPhones still need the patched Maestro 2.5.1 and don't work with 2.10.0 yet.
+
+## Fixes
+- Screenshots taken with `takeScreenshot` land next to the flow again, so the screenshot bank finds them instead of reporting them as missing.
+- The screenshot bank gallery no longer leaves cards small, faded and far apart when it fits without scrolling, no longer crashes into a black screen on WebKit, and web baselines show a globe icon.
+- The "Recovering driver…" notice no longer stays on screen after the driver has recovered.
+
+---
+
 # What's New in v0.9.0
 
 ## Maestro Deck Cloud
