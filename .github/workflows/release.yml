@@ -82,7 +82,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build, sign, and publish
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Tauri updater signing — required for the in-app auto-update to
@@ -105,16 +105,20 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
-          # We disable the action's updater JSON because it silently
-          # skips when the universal-mac sig rename trips its lookup
-          # (see post-step below + manifest job).
-          includeUpdaterJson: false
+          # We disable the action's updater JSON: latest.json is written
+          # by hand (macOS is built locally) and must list every platform.
+          # v1 renamed this input from `includeUpdaterJson` and defaults
+          # it to true, so the old name would silently re-enable it.
+          uploadUpdaterJson: false
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
       # tauri-action renames the macOS bundle to add `_universal` but
       # does NOT rename the matching `.sig` — so the file never makes
       # it to the release. Upload it ourselves under the matching name.
+      # TODO(tauri-action v1): v1 uploads the .sig itself and now names
+      # the bundle `Maestro Deck_<version>_universal.app.tar.gz`. Drop
+      # this step and fix the manifest URLs when macOS CI comes back.
       - name: Upload macOS updater signature
         if: runner.os == 'macOS'
         shell: bash

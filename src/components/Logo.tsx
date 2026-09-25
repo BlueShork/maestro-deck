@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import type { SVGProps } from "react";
+import { useId, type SVGProps } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -13,14 +13,14 @@ export function Logo({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 1600 400"
-      fontFamily="Inter, -apple-system, Helvetica, Arial, sans-serif"
+      viewBox="0 0 1640 320"
+      fontFamily="Manrope, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
       className={cn("text-foreground", className)}
       aria-label="Maestro Deck"
       role="img"
       {...props}
     >
-      <g transform="translate(40, 40) scale(0.3125)">
+      <g transform="translate(40 45) scale(0.2567) translate(-64 -64)">
         <path
           fillRule="evenodd"
           clipRule="evenodd"
@@ -30,13 +30,13 @@ export function Logo({ className, ...props }: SVGProps<SVGSVGElement>) {
         <rect x="336" y="336" width="352" height="352" rx="24" ry="24" fill="currentColor" />
       </g>
       <text
-        x="420"
-        y="200"
+        x="350"
+        y="160"
         dominantBaseline="central"
-        fontSize="180"
+        fontSize="200"
         fontWeight="700"
         fill="currentColor"
-        letterSpacing="-4"
+        letterSpacing="-6"
       >
         Maestro Deck
       </text>
@@ -45,24 +45,43 @@ export function Logo({ className, ...props }: SVGProps<SVGSVGElement>) {
 }
 
 /**
- * The same lockup with the CLOUD pill, ported from the brand asset the docs
- * site serves (maestro-nightly/landing_new/public/brand/logo-horizontal-white-cloud.svg).
- * Only difference: `currentColor` instead of the asset's hard-coded white, so
- * it works on the app's light theme too. Geometry is untouched — keep it that
- * way so the mark stays identical to the one on the site.
+ * The same lockup followed by a solid "Cloud" pill (brand asset
+ * maestro-deck-cloud-horizontal-*.svg). The pill's label is knocked out with a
+ * mask instead of filled with a second color, so the lockup stays a single
+ * `currentColor` and reads on both themes.
  */
 export function LogoCloud({ className, ...props }: SVGProps<SVGSVGElement>) {
+  const maskId = useId();
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 1600 420"
-      fontFamily="Inter, -apple-system, Helvetica, Arial, sans-serif"
+      viewBox="0 0 2344 320"
+      fontFamily="Manrope, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+      fontWeight="700"
+      fontSize="200"
+      letterSpacing="-6"
       className={cn("text-foreground", className)}
       aria-label="Maestro Deck Cloud"
       role="img"
       {...props}
     >
-      <g transform="translate(40, 40) scale(0.3125)">
+      <defs>
+        <mask id={maskId}>
+          <rect x="1680" y="52" width="624" height="216" rx="40" ry="40" fill="white" />
+          <text
+            x="1992"
+            y="160"
+            dominantBaseline="central"
+            textAnchor="middle"
+            textLength="540"
+            lengthAdjust="spacingAndGlyphs"
+            fill="black"
+          >
+            Cloud
+          </text>
+        </mask>
+      </defs>
+      <g transform="translate(40 45) scale(0.2567) translate(-64 -64)">
         <path
           fillRule="evenodd"
           clipRule="evenodd"
@@ -72,39 +91,25 @@ export function LogoCloud({ className, ...props }: SVGProps<SVGSVGElement>) {
         <rect x="336" y="336" width="352" height="352" rx="24" ry="24" fill="currentColor" />
       </g>
       <text
-        x="420"
-        y="200"
+        x="350"
+        y="160"
         dominantBaseline="central"
-        fontSize="180"
-        fontWeight="700"
+        textLength="1280"
+        lengthAdjust="spacingAndGlyphs"
         fill="currentColor"
-        letterSpacing="-4"
       >
         Maestro Deck
       </text>
       <rect
-        x="1264"
-        y="312"
-        width="280"
-        height="76"
-        rx="38"
-        ry="38"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="5"
-      />
-      <text
-        x="1404"
-        y="351"
-        dominantBaseline="central"
-        textAnchor="middle"
-        fontSize="40"
-        fontWeight="700"
+        x="1680"
+        y="52"
+        width="624"
+        height="216"
+        rx="40"
+        ry="40"
         fill="currentColor"
-        letterSpacing="6"
-      >
-        CLOUD
-      </text>
+        mask={`url(#${maskId})`}
+      />
     </svg>
   );
 }

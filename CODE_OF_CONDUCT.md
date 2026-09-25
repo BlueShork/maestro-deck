@@ -21,7 +21,7 @@ We want Maestro Deck to be a welcoming place for anyone who wants to build, use,
 ## Reporting
 
 If you witness or experience behavior that violates this code, email
-**blueshork.dev@gmail.com**. Reports are handled in confidence.
+**contact@maestrodeck.cloud**. Reports are handled in confidence.
 
 ## Enforcement
 

@@ -58,7 +58,6 @@ const VIEW_ENTRIES: Array<{ id: PanelId; label: string }> = [
   { id: "device", label: "Device" },
   { id: "editor", label: "Editor" },
   { id: "console", label: "Run console" },
-  { id: "metrics", label: "Performance" },
 ];
 
 interface ToolbarProps {

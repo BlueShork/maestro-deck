@@ -322,11 +322,17 @@ export function DeviceSelector() {
           {/* Unlike Simulators, this section is unconditional: it's the only
               place in the app that asks for a sign-up, and a machine with no
               simulators installed is exactly where the cloud is worth most. */}
-          <div className="flex flex-col gap-1.5 pt-1">
+          <div className="flex flex-col gap-1.5 pt-4">
+            {/* Short rule fading out at both ends: marks the break from the
+                local devices above without boxing the sidebar in. */}
+            <div
+              aria-hidden
+              className="mb-4 h-px w-2/3 self-center bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent"
+            />
             {/* The brand lockup stands in for the section title here. Muted to
                 sit at the same weight as the other headings rather than turning
                 the sidebar into a billboard. */}
-            <LogoCloud className="mb-2 h-9 w-auto self-start text-muted-foreground" />
+            <LogoCloud className="mb-2 h-auto w-full max-w-40 self-center text-muted-foreground" />
             {/* Signed in you get the fleet; signed out the card does the asking,
                 since there is nothing to run on until there is an account. */}
             {cloudUser ? <CloudDevicesSection /> : null}
