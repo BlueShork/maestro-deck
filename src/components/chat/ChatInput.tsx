@@ -21,6 +21,23 @@ export function ChatInput() {
 
   const bumpScroll = useChatStore((s) => s.bumpScroll);
 
+  // A draft handed over from elsewhere (the editor's "Ask Billy"): put it in
+  // the input with the caret at the end, ready for the user's question.
+  const draft = useChatStore((s) => s.draft);
+  useEffect(() => {
+    if (draft === null) return;
+    const text = useChatStore.getState().takeDraft();
+    if (text === null) return;
+    setValue(text);
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(text.length, text.length);
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [draft]);
+
   // Voice goes through Maestro Deck Cloud (Voxtral), so the mic is only
   // offered with that provider.
   const voiceAvailable = useChatStore((s) => s.currentProvider === "maestrodeck");

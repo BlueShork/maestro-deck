@@ -44,16 +44,12 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { FileDown, FileUp, Save } from "lucide-react";
 import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/DropdownMenu";
+import { useCanAskBilly } from "@/lib/chat/canAskBilly";
 import { clearIndentOnBlankLine } from "@/lib/editorCommands";
 import { maestroCompletions } from "@/lib/editorCompletions";
-import { parseFlow } from "@/lib/flowAst";
+import { parseFlow, type Step } from "@/lib/flowAst";
 
+import { StepContextMenu } from "@/components/StepContextMenu";
 import { Button } from "@/components/ui/Button";
 import { themeExtensions } from "@/lib/editor-theme";
 import { openFlowFile } from "@/lib/flow-io";
@@ -153,7 +149,13 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
   const themeCompartment = useRef(new Compartment());
   const syncingFromStore = useRef(false);
 
-  const [menu, setMenu] = useState<{ x: number; y: number; line: number } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    step: Step;
+    snippet: string;
+  } | null>(null);
+  const canAskBilly = useCanAskBilly();
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -298,19 +300,24 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
 
   const onEditorContextMenu = useCallback(
     (e: MouseEvent<HTMLDivElement>) => {
-      if (!onRunFrom) return;
+      if (!onRunFrom && !canAskBilly) return;
       const view = viewRef.current;
       if (!view) return;
       const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
       if (pos === null) return;
-      const clickedLine = view.state.doc.lineAt(pos).number;
-      const ast = parseFlow(view.state.doc.toString());
-      const target = ast.steps.find((s) => s.line >= clickedLine);
+      const doc = view.state.doc;
+      const clickedLine = doc.lineAt(pos).number;
+      const ast = parseFlow(doc.toString());
+      // The step the clicked line belongs to; between steps, the next one.
+      const target =
+        ast.steps.find((s) => clickedLine >= s.line && clickedLine <= s.endLine) ??
+        ast.steps.find((s) => s.line >= clickedLine);
       if (!target) return;
       e.preventDefault();
-      setMenu({ x: e.clientX, y: e.clientY, line: target.line });
+      const snippet = doc.sliceString(doc.line(target.line).from, doc.line(target.endLine).to);
+      setMenu({ x: e.clientX, y: e.clientY, step: target, snippet });
     },
-    [onRunFrom],
+    [onRunFrom, canAskBilly],
   );
 
   const onOpen = useCallback(async () => {
@@ -399,33 +406,15 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
         className="min-h-0 flex-1 overflow-hidden"
         onContextMenu={onEditorContextMenu}
       />
-      {menu && onRunFrom ? (
-        <DropdownMenu open onOpenChange={(open) => !open && setMenu(null)}>
-          <DropdownMenuTrigger asChild>
-            <span
-              aria-hidden
-              style={{
-                position: "fixed",
-                left: menu.x,
-                top: menu.y,
-                width: 0,
-                height: 0,
-                pointerEvents: "none",
-              }}
-            />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" sideOffset={0}>
-            <DropdownMenuItem
-              onSelect={() => {
-                const line = menu.line;
-                setMenu(null);
-                onRunFrom(line);
-              }}
-            >
-              Run from line {menu.line}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {menu ? (
+        <StepContextMenu
+          x={menu.x}
+          y={menu.y}
+          step={menu.step}
+          snippet={menu.snippet}
+          onRunFrom={onRunFrom}
+          onClose={() => setMenu(null)}
+        />
       ) : null}
     </div>
   );

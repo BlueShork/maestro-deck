@@ -48,6 +48,10 @@ interface ChatState {
    *  (e.g. the input grew and consumed visible space). */
   scrollBump: number;
 
+  /** Text waiting to be placed in the chat input (e.g. from the editor's
+   *  "Ask Billy" menu). ChatInput takes it and clears it. */
+  draft: string | null;
+
   toggle: () => void;
   setOpen: (open: boolean) => void;
   setProvider: (provider: ProviderId, model: string) => void;
@@ -57,6 +61,9 @@ interface ChatState {
   cancel: () => void;
   clear: () => void;
   bumpScroll: () => void;
+  /** Opens the panel with `text` in the input, for the user to finish. */
+  compose: (text: string) => void;
+  takeDraft: () => string | null;
 }
 
 // Billy on Maestro Deck Cloud needs no key, only an account, so it's what a
@@ -77,6 +84,7 @@ export const useChatStore = create<ChatState>()(
       error: null,
       abort: null,
       scrollBump: 0,
+      draft: null,
 
       toggle: () => set((s) => ({ isOpen: !s.isOpen })),
       setOpen: (open) => set({ isOpen: open }),
@@ -266,6 +274,13 @@ export const useChatStore = create<ChatState>()(
       clear: () => set({ messages: [], error: null }),
 
       bumpScroll: () => set((s) => ({ scrollBump: s.scrollBump + 1 })),
+
+      compose: (text) => set({ isOpen: true, draft: text }),
+      takeDraft: () => {
+        const { draft } = get();
+        if (draft !== null) set({ draft: null });
+        return draft;
+      },
     }),
     {
       name: "maestro-deck.chat",
