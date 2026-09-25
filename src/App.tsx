@@ -319,7 +319,11 @@ export default function App() {
     };
   }, []);
 
-  const metricsOpen = usePanelsStore((s) => s.visible.metrics);
+  // Capture only while the console's Performance tab is on screen — it is the
+  // only reader of the samples.
+  const consoleVisible = usePanelsStore((s) => s.visible.console);
+  const performanceTab = useSettingsStore((s) => s.consoleMode === "performance");
+  const metricsOpen = consoleVisible && performanceTab;
   // Use device identity (serial + platform + physical) rather than mere presence
   // so that a direct A→B switch (where deviceConnected stays true) still causes
   // the effect to re-run, stopping the old collector and starting a new one for

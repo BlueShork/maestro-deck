@@ -295,3 +295,13 @@ describe("sendMessage", () => {
     ]);
   });
 });
+
+describe("compose / takeDraft", () => {
+  it("opens the panel with the draft, which is handed over exactly once", () => {
+    useChatStore.setState({ isOpen: false, draft: null });
+    useChatStore.getState().compose("About this step:\n\n");
+    expect(useChatStore.getState().isOpen).toBe(true);
+    expect(useChatStore.getState().takeDraft()).toBe("About this step:\n\n");
+    expect(useChatStore.getState().takeDraft()).toBeNull();
+  });
+});

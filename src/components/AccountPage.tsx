@@ -2,22 +2,15 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import {
-  ArrowLeft,
-  Cloud,
-  Gauge,
-  LogOut,
-  Mail,
-  RefreshCw,
-  ShoppingCart,
-  Smartphone,
-} from "lucide-react";
+import { ArrowLeft, Cloud, Gauge, LogOut, RefreshCw, ShoppingCart, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { BillyAppPromo } from "@/components/BillyAppPromo";
 import { Button } from "@/components/ui/Button";
 import { CLOUD_BILLING_URL, logout, tierLabel, type CloudBillingInfo } from "@/lib/cloudAuth";
 import { LoginCard } from "@/components/LoginCard";
+import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 
 /** Full-screen account page — the in-app storefront for Maestro Deck Cloud.
@@ -51,6 +44,18 @@ export function AccountPage() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Decorative community banner, edge to edge. Its height is capped so
+            a wide window crops the empty top/bottom instead of turning it
+            into a wall; the artwork's content sits in the middle. */}
+        {user ? (
+          <img
+            src="/promo/community-banner.webp"
+            alt=""
+            aria-hidden
+            className="block h-[clamp(120px,14vw,220px)] w-full border-b border-border object-cover"
+            draggable={false}
+          />
+        ) : null}
         <div className="mx-auto max-w-3xl px-6 py-10">
           {user ? <ProfileView email={user.email} /> : <PitchView />}
         </div>
@@ -72,13 +77,20 @@ function ProfileView({ email }: { email: string | null }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
-            <Mail className="h-5 w-5" />
+      {/* Avatar straddles the banner's bottom edge: pulled up by the
+          container's top padding (py-10 = 40px) plus 40px of its 96px. */}
+      <div className="relative -mt-20 flex flex-wrap items-end justify-between gap-4">
+        <div className="flex min-w-0 items-end gap-4">
+          <div
+            aria-hidden
+            className="flex h-24 w-24 shrink-0 select-none items-center justify-center rounded-full bg-foreground text-4xl font-bold text-background shadow-lg ring-4 ring-background"
+          >
+            {(email?.trim()[0] ?? "?").toUpperCase()}
           </div>
-          <div className="flex flex-col">
-            <span className="text-base font-semibold leading-tight">{email ?? "unknown"}</span>
+          <div className="flex min-w-0 flex-col pb-1.5">
+            <span className="truncate text-lg font-semibold leading-tight">
+              {email ?? "unknown"}
+            </span>
             <span className="text-xs text-muted-foreground">Signed in to Maestro Deck Cloud</span>
           </div>
         </div>
@@ -90,7 +102,7 @@ function ProfileView({ email }: { email: string | null }) {
             setSigningOut(true);
             void logout().finally(() => setSigningOut(false));
           }}
-          className="gap-1.5 text-muted-foreground"
+          className="mb-1 gap-1.5 text-muted-foreground"
         >
           <LogOut className="h-3.5 w-3.5" />
           {signingOut ? "Signing out…" : "Sign out"}
@@ -103,6 +115,8 @@ function ProfileView({ email }: { email: string | null }) {
         error={billingError}
         onRetry={() => void refreshBilling()}
       />
+
+      <BillyAppPromo />
     </div>
   );
 }
@@ -118,11 +132,6 @@ function BillingCard({
   error: string | null;
   onRetry: () => void;
 }) {
-  const dailyUsedPct =
-    billing && billing.dailyCap > 0
-      ? Math.min(100, Math.round((billing.runsToday / billing.dailyCap) * 100))
-      : 0;
-
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-5 py-3">
@@ -158,28 +167,67 @@ function BillingCard({
         </div>
       ) : (
         <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-          <div className="p-5">
+          <div className="flex flex-col justify-center p-6">
             <div className="text-xs text-muted-foreground">Runs remaining</div>
-            <div className="mt-1 text-3xl font-semibold tabular-nums leading-none">
+            <div className="mt-2 text-5xl font-semibold tabular-nums leading-none tracking-tight">
               {loading ? "…" : (billing?.runsRemaining ?? "—")}
             </div>
-          </div>
-          <div className="p-5">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Used today</span>
-              <span className="tabular-nums">
-                {loading ? "…" : billing ? `${billing.runsToday} / ${billing.dailyCap}` : "—"}
-              </span>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Cloud runs left on your account
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-[width]"
-                style={{ width: `${loading ? 0 : dailyUsedPct}%` }}
-              />
+          </div>
+          <div className="flex items-center gap-5 p-6">
+            <UsageRing
+              used={loading ? 0 : (billing?.runsToday ?? 0)}
+              cap={billing?.dailyCap ?? 0}
+              label={loading ? "…" : billing ? `${billing.runsToday}/${billing.dailyCap}` : "—"}
+            />
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">Used today</span>
+              <span className="mt-1 text-sm font-medium">
+                {loading || !billing
+                  ? "—"
+                  : billing.runsToday >= billing.dailyCap
+                    ? "Daily limit reached"
+                    : `${billing.dailyCap - billing.runsToday} left today`}
+              </span>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Today's usage as a ring that fills toward the daily cap; amber once full. */
+function UsageRing({ used, cap, label }: { used: number; cap: number; label: string }) {
+  const r = 34;
+  const circumference = 2 * Math.PI * r;
+  const ratio = cap > 0 ? Math.min(1, used / cap) : 0;
+  return (
+    <div className="relative h-20 w-20 shrink-0">
+      <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90" aria-hidden>
+        <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7" className="stroke-muted" />
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          fill="none"
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - ratio)}
+          className={cn(
+            "transition-[stroke-dashoffset] duration-700 ease-out",
+            ratio >= 1 ? "stroke-amber-500" : "stroke-primary",
+          )}
+          // A zero-length round cap still draws a dot; hide the arc at 0.
+          opacity={ratio > 0 ? 1 : 0}
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold tabular-nums">
+        {label}
+      </span>
     </div>
   );
 }
