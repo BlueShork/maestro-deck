@@ -3,28 +3,48 @@
 
 //! Maestro Deck — source-available visual IDE for Maestro mobile tests.
 
+pub mod app_control;
+mod app_menu;
+#[cfg(target_os = "macos")]
+pub mod avf_capture;
+pub mod bank;
+pub mod cloud;
 pub mod credentials;
 pub mod device;
+mod env_check;
 mod env_shim;
 pub mod error;
 pub mod hierarchy;
 pub mod input;
+#[cfg(target_os = "macos")]
+pub mod ios_capture;
+pub mod ios_session;
 pub mod ipc;
 pub mod maestro_health;
+pub mod maestro_mcp;
 pub mod metrics;
+pub mod onboarding;
 pub mod process_ext;
+pub mod prockill;
 pub mod runner;
 pub mod scrcpy;
 pub mod selector;
+#[cfg(target_os = "macos")]
+pub mod sim_capture;
 pub mod state;
 pub mod tool_paths;
+pub mod tool_setup;
 pub mod vertex;
 pub mod video;
+mod web_session;
 pub mod workspace;
+pub mod workspace_fs;
 pub mod yaml;
 
+use tauri::{Emitter, Manager};
 use tracing_subscriber::{fmt, EnvFilter};
 
+use app_control::{launch_app, stop_app};
 use credentials::{delete_credential, get_credential, save_credential};
 use ipc::commands::*;
 use tool_paths::{get_tool_paths, set_tool_paths};
@@ -42,6 +62,9 @@ pub fn run() {
     // include adb / maestro / java. Inherit the user's shell env before we
     // expose any subprocess command.
     env_shim::enrich_from_login_shell();
+    // After the login shell, so a JDK we installed wins over an older system
+    // one — we only ever install when the machine's own Java was rejected.
+    tool_setup::install::apply_managed_java_env();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -56,12 +79,15 @@ pub fn run() {
 
     builder
         .manage(state::AppState::default())
+        .manage(app_menu::MenuChecks::default())
         .invoke_handler(tauri::generate_handler![
             ping,
+            app_menu::set_menu_checked,
             app_version,
             list_devices,
             connect_device,
             disconnect_device,
+            confirm_quit,
             check_device_health,
             kill_maestro_processes,
             enter_inspect_mode,
@@ -69,26 +95,84 @@ pub fn run() {
             suggest_selectors,
             generate_command,
             send_input,
+            ios_press_home,
+            ios_device_bridge_installed,
+            install_ios_device_bridge,
+            ios_physical_setup_status,
             set_dark_mode,
             get_dark_mode,
             run_flow,
             stop_flow,
+            launch_app,
+            stop_app,
+            bank::ipc::compare_screenshots,
+            bank::ipc::compare_screenshots_all,
+            bank::ipc::resolve_comparison,
+            bank::ipc::list_bank,
+            bank::ipc::load_bank_image,
+            bank::ipc::delete_bank_image,
+            bank::ipc::delete_bank_device,
+            onboarding::install_sample_app,
+            onboarding::sample_app_apk,
+            tool_setup::install::setup_tools,
+            tool_setup::install::managed_tools,
+            cloud::cloud_upload_file,
+            cloud::cloud_api_request,
+            cloud::cloud_download_text,
+            workspace_fs::read_workspace_file,
+            workspace_fs::write_workspace_file,
             list_workspace,
             start_metrics,
             stop_metrics,
             start_stream,
             stop_stream,
+            upgrade_ios_preview,
             vertex_get_access_token,
             save_credential,
             get_credential,
             delete_credential,
             get_tool_paths,
             set_tool_paths,
+            env_check::environment_status,
+            env_check::install_tool,
         ])
         .setup(|app| {
             ipc::register_events(app)?;
+            // The static `maximized` window flag is unreliable (notably on macOS),
+            // so maximize explicitly once the window exists.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.maximize();
+            }
+            // macOS only: native menu bar (see app_menu.rs, including why Quit
+            // is a custom item). Windows/Linux have no app menu and quit via
+            // the window close path (handled below).
+            #[cfg(target_os = "macos")]
+            app_menu::install(app)?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        // Intercept the window close button (and Windows close): hold the close
+        // and ask the frontend to confirm. `confirm_quit` flips `quit_confirmed`
+        // and triggers the real exit once the user agrees.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.state::<state::AppState>();
+                if !state.quit_confirmed.load(std::sync::atomic::Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.emit("quit-requested", ());
+                }
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        // Intercept app-level quit (macOS Cmd+Q): same confirm-then-cleanup path
+        // as the window close button.
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let state = app_handle.state::<state::AppState>();
+                if !state.quit_confirmed.load(std::sync::atomic::Ordering::SeqCst) {
+                    api.prevent_exit();
+                    let _ = app_handle.emit("quit-requested", ());
+                }
+            }
+        });
 }

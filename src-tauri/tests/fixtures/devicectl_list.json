@@ -1,0 +1,54 @@
+{
+  "info": { "outcome": "success", "jsonVersion": 2 },
+  "result": {
+    "devices": [
+      {
+        "deviceProperties": { "name": "Ethan's iPhone", "osVersionNumber": "26.5" },
+        "hardwareProperties": {
+          "udid": "00008150-001909C011A1401C",
+          "productType": "iPhone18,1",
+          "marketingName": "iPhone 17 Pro",
+          "platform": "iOS",
+          "deviceType": "iPhone",
+          "reality": "physical"
+        },
+        "connectionProperties": {
+          "pairingState": "paired",
+          "transportType": "wired",
+          "tunnelState": "disconnected"
+        }
+      },
+      {
+        "deviceProperties": { "name": "iPad de Ethan", "osVersionNumber": "18.0" },
+        "hardwareProperties": {
+          "udid": "00008112-001E28A9226BA01E",
+          "productType": "iPad14,8",
+          "marketingName": "iPad Air 11-inch (M2)",
+          "platform": "iOS",
+          "deviceType": "iPad",
+          "reality": "physical"
+        },
+        "connectionProperties": {
+          "pairingState": "paired",
+          "tunnelState": "unavailable"
+        }
+      },
+      {
+        "deviceProperties": { "name": "iPhone 16 Simulator", "osVersionNumber": "18.2" },
+        "hardwareProperties": {
+          "udid": "5C8B8294-5B4F-4D2E-9F1A-000000000000",
+          "productType": "iPhone17,3",
+          "marketingName": "iPhone 16",
+          "platform": "iOS",
+          "deviceType": "iPhone",
+          "reality": "simulator"
+        },
+        "connectionProperties": {
+          "pairingState": "paired",
+          "transportType": "local",
+          "tunnelState": "connected"
+        }
+      }
+    ]
+  }
+}

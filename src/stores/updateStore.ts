@@ -57,8 +57,16 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     } catch (err) {
       pendingUpdate = null;
       const message = err instanceof Error ? err.message : String(err);
+      // A silent (startup) check must stay invisible: a flaky network or a
+      // missing/404 update endpoint should never pop the UpdateDialog or a
+      // toast. Only user-initiated checks surface the failure.
+      if (silent) {
+        console.warn("Silent update check failed:", message);
+        set({ phase: "not-available", error: null, available: null });
+        return;
+      }
       set({ phase: "error", error: message, available: null });
-      if (!silent) toast.error("Update check failed", message);
+      toast.error("Update check failed", message);
     }
   },
 

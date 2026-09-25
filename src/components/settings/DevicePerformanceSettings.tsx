@@ -1,0 +1,72 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
+import {
+  SettingsSection,
+  SettingsSubgroup,
+  ToggleRow,
+} from "@/components/settings/SettingsPrimitives";
+import { useSettingsStore } from "@/stores/settingsStore";
+
+export function DevicePerformanceSettings() {
+  const streamEnabled = useSettingsStore((s) => s.streamEnabled);
+  const setStreamEnabled = useSettingsStore((s) => s.setStreamEnabled);
+  const fastHierarchyEnabled = useSettingsStore((s) => s.fastHierarchyEnabled);
+  const setFastHierarchyEnabled = useSettingsStore((s) => s.setFastHierarchyEnabled);
+  const webBrowserEnabled = useSettingsStore((s) => s.webBrowserEnabled);
+  const setWebBrowserEnabled = useSettingsStore((s) => s.setWebBrowserEnabled);
+
+  return (
+    <SettingsSection
+      title="Device & Performance"
+      description="Control how the app mirrors devices and inspects their UI hierarchy."
+    >
+      <SettingsSubgroup title="Mirroring">
+        <ToggleRow
+          label="Live device stream"
+          description="Off = run flows on a connected device without scrcpy mirroring. Saves ~250 MB RAM and ~10% CPU."
+          checked={streamEnabled}
+          onCheckedChange={setStreamEnabled}
+        />
+      </SettingsSubgroup>
+
+      <SettingsSubgroup title="Inspector">
+        <ToggleRow
+          label={
+            <>
+              Fast hierarchy{" "}
+              <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                experimental
+              </span>
+            </>
+          }
+          description={
+            <>
+              Keeps a <code className="font-mono">maestro mcp</code> process warm in background and
+              talks gRPC directly to the on-device driver. First inspect takes ~15 s, subsequent
+              dumps drop from ~11 s to &lt;1 s. Falls back to the CLI path if the keeper fails.
+            </>
+          }
+          checked={fastHierarchyEnabled}
+          onCheckedChange={setFastHierarchyEnabled}
+        />
+      </SettingsSubgroup>
+
+      <SettingsSubgroup title="Beta targets">
+        <ToggleRow
+          label={
+            <>
+              Web Browser target{" "}
+              <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                beta
+              </span>
+            </>
+          }
+          description="Shows the Web Browser (Chromium) device in the device list. Runs are headless with a live view; the interactive browser window is hidden automatically."
+          checked={webBrowserEnabled}
+          onCheckedChange={setWebBrowserEnabled}
+        />
+      </SettingsSubgroup>
+    </SettingsSection>
+  );
+}

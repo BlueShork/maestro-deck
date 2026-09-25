@@ -13,7 +13,7 @@ Maestro Deck is pre-release. Only the latest tagged version receives security fi
 
 Please **do not** open a public GitHub issue for security problems.
 
-Email **blueshork.dev@gmail.com** with:
+Email **contact@maestrodeck.cloud** with:
 
 - A description of the issue
 - Steps to reproduce

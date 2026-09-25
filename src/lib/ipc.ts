@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
@@ -11,11 +11,13 @@ import type {
   InputEvent,
   KillReport,
   MaestroAction,
+  Platform,
   RunnerExitPayload,
   Selector,
   UINode,
   WorkspaceNode,
 } from "@/types";
+import type { BankGroup, RunReport } from "@/types/visualRegression";
 
 export class IpcError extends Error {
   constructor(
@@ -33,6 +35,11 @@ export interface MetricsSamplePayload {
   mem_mb: number;
   fps: number | null;
   jank_pct: number | null;
+  frame_p50_ms: number | null;
+  frame_p90_ms: number | null;
+  frame_p95_ms: number | null;
+  frame_p99_ms: number | null;
+  thermal_status: number | null;
   net_rx_kbps: number;
   net_tx_kbps: number;
   ts: number;
@@ -44,7 +51,7 @@ export interface TargetChangedPayload {
 }
 
 export interface MetricsStoppedPayload {
-  reason: "user" | "device_disconnected" | "error";
+  reason: "user" | "device_disconnected" | "error" | "unsupported";
   message: string | null;
 }
 
@@ -60,9 +67,15 @@ export const ipc = {
   ping: () => call<string>("ping"),
   appVersion: () => call<string>("app_version"),
   listDevices: () => call<Device[]>("list_devices"),
-  connectDevice: (serial: string, streamEnabled: boolean) =>
-    call<void>("connect_device", { serial, streamEnabled }),
+  connectDevice: (serial: string, streamEnabled: boolean, platform: Platform, url?: string) =>
+    call<Device>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
   disconnectDevice: () => call<void>("disconnect_device"),
+  // Tear down all sessions and exit. Called once the user confirms the quit
+  // dialog (or has opted out of it). The app process exits, so this never
+  // resolves on success.
+  confirmQuit: () => call<void>("confirm_quit"),
+  // Ticks a macOS menu check item; a no-op elsewhere.
+  setMenuChecked: (id: string, checked: boolean) => call<void>("set_menu_checked", { id, checked }),
   enterInspectMode: (fastMode: boolean) => call<HierarchyTree>("enter_inspect_mode", { fastMode }),
   queryElement: (x: number, y: number) => call<UINode | null>("query_element", { x, y }),
   suggestSelectors: (node: UINode) => call<Selector[]>("suggest_selectors", { node }),
@@ -71,8 +84,54 @@ export const ipc = {
     call<void>("send_input", { event, screenW, screenH }),
   setDarkMode: (enabled: boolean) => call<void>("set_dark_mode", { enabled }),
   getDarkMode: () => call<boolean>("get_dark_mode"),
-  runFlow: (filePath: string) => call<number>("run_flow", { filePath }),
+  // iOS-only: press the Home button to return to the home screen.
+  iosPressHome: () => call<void>("ios_press_home"),
+  runFlow: (filePath: string, appId?: string) =>
+    call<number>("run_flow", { filePath, appId: appId?.trim() || null }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
+  launchAppOnDevice: (appId: string) => call<void>("launch_app", { appId }),
+  stopAppOnDevice: (appId: string) => call<void>("stop_app", { appId }),
+  compareScreenshots: (args: {
+    workspace: string;
+    flowPath: string;
+    model: string;
+    width: number;
+    height: number;
+    tolerance: number;
+    threshold: number;
+    runId: string;
+    platform: Platform;
+    ignoreStatusBar: boolean;
+  }) => call<RunReport>("compare_screenshots", args),
+  compareScreenshotsAll: (args: {
+    workspace: string;
+    model: string;
+    width: number;
+    height: number;
+    tolerance: number;
+    threshold: number;
+    runId: string;
+    platform: Platform;
+    ignoreStatusBar: boolean;
+  }) => call<RunReport>("compare_screenshots_all", args),
+  resolveComparison: (args: {
+    workspace: string;
+    runId: string;
+    deviceKey: string;
+    name: string;
+    decision: "keep" | "replace";
+  }) => call<void>("resolve_comparison", args),
+  listBank: (workspace: string) => call<BankGroup[]>("list_bank", { workspace }),
+  loadBankImage: (workspace: string, deviceKey: string, name: string) =>
+    call<string>("load_bank_image", { workspace, deviceKey, name }),
+  deleteBankImage: (workspace: string, deviceKey: string, name: string) =>
+    call<void>("delete_bank_image", { workspace, deviceKey, name }),
+  deleteBankDevice: (workspace: string, deviceKey: string) =>
+    call<void>("delete_bank_device", { workspace, deviceKey }),
+  readWorkspaceFile: (workspace: string, relPath: string) =>
+    call<string>("read_workspace_file", { workspace, relPath }),
+  writeWorkspaceFile: (workspace: string, relPath: string, content: string) =>
+    call<void>("write_workspace_file", { workspace, relPath, content }),
   listWorkspace: (path: string) => call<WorkspaceNode>("list_workspace", { path }),
   startStream: () => call<void>("start_stream"),
   stopStream: () => call<void>("stop_stream"),
@@ -81,15 +140,116 @@ export const ipc = {
   checkDeviceHealth: (serial: string) => call<HealthReport>("check_device_health", { serial }),
   killMaestroProcesses: (serial: string, report: HealthReport) =>
     call<KillReport>("kill_maestro_processes", { serial, report }),
+  upgradeIosPreview: (channel: Channel<ArrayBuffer>) =>
+    call<boolean>("upgrade_ios_preview", { channel }),
+  // Physical iOS bridge (devicelab maestro-ios-device): check if installed, and
+  // one-click auto-install (downloads the binary + runs its `setup`).
+  iosDeviceBridgeInstalled: () => call<boolean>("ios_device_bridge_installed"),
+  installIosDeviceBridge: () => call<string>("install_ios_device_bridge"),
+  // Auto-detected physical-iOS prerequisites for the in-app setup checklist.
+  iosPhysicalSetupStatus: () => call<IosPhysicalSetupStatus>("ios_physical_setup_status"),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
-  setToolPaths: (adb: string | null, maestro: string | null) =>
-    call<ToolPathsView>("set_tool_paths", { adb, maestro }),
+  setToolPaths: (
+    adb: string | null,
+    maestro: string | null,
+    iproxy: string | null,
+    appleTeamId: string | null,
+    maestroIosDevice: string | null,
+  ) =>
+    call<ToolPathsView>("set_tool_paths", {
+      adb,
+      maestro,
+      iproxy,
+      appleTeamId,
+      maestroIosDevice,
+    }),
+  // Environment prerequisites for the onboarding setup popup.
+  environmentStatus: () => call<EnvStatusResult>("environment_status"),
+  installTool: (id: "maestro" | "java") => call<void>("install_tool", { id }),
+  /** Installs every missing managed tool into the app's own directory. One
+   *  failure does not stop the others; each reports through setup:done. */
+  setupTools: () => call<void>("setup_tools"),
+  /** Installs the bundled onboarding sample app on a device. Returns its appId. */
+  installSampleApp: (serial: string) => call<string>("install_sample_app", { serial }),
+  /** Path to the bundled sample APK, for the cloud path to upload. */
+  sampleAppApk: () => call<string>("sample_app_apk"),
+  managedTools: () => call<ManagedToolPaths>("managed_tools"),
+  /** PUT a local file to a pre-signed GCS URL. Lives in Rust because the
+   *  webview has no binary read permission and an APK has no business being
+   *  loaded into WebKit memory to be sent straight back out. */
+  cloudUploadFile: (uploadUrl: string, path: string) =>
+    call<void>("cloud_upload_file", { uploadUrl, path }),
+  /** Call the cloud dashboard API. In Rust because the API answers a CORS
+   *  preflight on /api/billing/me only, so a webview fetch to any other route
+   *  is blocked before it leaves. Returns the raw status and body — the
+   *  mapping to user-facing errors stays in TypeScript. */
+  cloudApiRequest: (method: "GET" | "POST", path: string, token: string, body?: string) =>
+    call<{ status: number; body: string }>("cloud_api_request", {
+      method,
+      path,
+      token,
+      body: body ?? null,
+    }),
+  /** Fetch a text artifact from its signed GCS URL — same CORS story. */
+  cloudDownloadText: (url: string) => call<string>("cloud_download_text", { url }),
 };
 
+export interface IosPhysicalSetupStatus {
+  xcodeInstalled: boolean;
+  maestroVersion: string | null;
+  // serde `rename_all = "camelCase"` turns `maestro_is_2_5_1` into `maestroIs251`.
+  maestroIs251: boolean;
+  maestroPatched: boolean;
+}
+
+/** Absolute paths to the tools the app installed for itself; null when a tool
+ *  has not been installed, or its file has since been removed. */
+export interface ManagedToolPaths {
+  java: string | null;
+  maestro: string | null;
+  adb: string | null;
+}
+
+export interface SetupProgress {
+  tool: string;
+  label: string;
+  phase: "download" | "extract";
+  /** Absent while extracting, whose duration cannot honestly be reported. */
+  percent: number | null;
+}
+
+export interface SetupDone {
+  tool: string;
+  label: string;
+  ok: boolean;
+  error: string | null;
+}
+
+export type EnvCheckId = "maestro" | "java" | "adb" | "xcode";
+export type EnvCheckStatus = "ok" | "missing" | "wrong-version" | "error";
+export interface EnvCheckResult {
+  id: EnvCheckId;
+  status: EnvCheckStatus;
+  version: string | null;
+  detail: string | null;
+}
+export interface EnvStatusResult {
+  checks: EnvCheckResult[];
+  minimalOk: boolean;
+}
+
 export interface ToolPathsView {
-  overrides: { adb: string | null; maestro: string | null };
+  overrides: {
+    adb: string | null;
+    maestro: string | null;
+    iproxy: string | null;
+    apple_team_id: string | null;
+    maestro_ios_device: string | null;
+  };
   resolved_adb: string;
   resolved_maestro: string;
+  resolved_iproxy: string;
+  resolved_maestro_ios_device: string;
 }
 
 export interface FrameEvent {
@@ -107,7 +267,16 @@ interface RawFrameEvent {
   data: number[] | Uint8Array | ArrayBuffer;
 }
 
-function toUint8Array(d: number[] | Uint8Array | ArrayBuffer): Uint8Array {
+function toUint8Array(d: number[] | Uint8Array | ArrayBuffer | string): Uint8Array {
+  // Base64 string: the backend encodes PNG frames this way because a raw
+  // Vec<u8> serializes as a JSON number array (multi-MB of tokens per frame,
+  // freezing the main thread while parsing).
+  if (typeof d === "string") {
+    const bin = atob(d);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
   if (d instanceof Uint8Array) return d;
   if (d instanceof ArrayBuffer) return new Uint8Array(d);
   return Uint8Array.from(d);
@@ -126,16 +295,63 @@ export const events = {
     }),
   onRunnerStdout: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stdout", (e) => handler(e.payload)),
+  onEnvInstallOutput: (handler: (p: { id: string; line: string }) => void) =>
+    listen<{ id: string; line: string }>("env:install:output", (e) => handler(e.payload)),
+  onEnvInstallDone: (handler: (p: { id: string; code: number | null }) => void) =>
+    listen<{ id: string; code: number | null }>("env:install:done", (e) => handler(e.payload)),
+  onSetupProgress: (handler: (p: SetupProgress) => void): Promise<UnlistenFn> =>
+    listen<SetupProgress>("setup:progress", (e) => handler(e.payload)),
+  onSetupDone: (handler: (p: SetupDone) => void): Promise<UnlistenFn> =>
+    listen<SetupDone>("setup:done", (e) => handler(e.payload)),
   onRunnerStderr: (handler: (line: string) => void): Promise<UnlistenFn> =>
     listen<string>("runner:stderr", (e) => handler(e.payload)),
   onRunnerExit: (handler: (payload: RunnerExitPayload) => void): Promise<UnlistenFn> =>
     listen<RunnerExitPayload>("runner:exit", (e) => handler(e.payload)),
   onDeviceDisconnected: (handler: () => void): Promise<UnlistenFn> =>
     listen<null>("device:disconnected", () => handler()),
+  // Emitted by the backend when the user tries to quit (window close or Cmd+Q);
+  // the backend holds the exit until the frontend calls `confirmQuit`.
+  onQuitRequested: (handler: () => void): Promise<UnlistenFn> =>
+    listen<null>("quit-requested", () => handler()),
+  // macOS menu bar: a click on an app item arrives as its id (see app_menu.rs).
+  onMenuAction: (handler: (id: string) => void): Promise<UnlistenFn> =>
+    listen<string>("menu:action", (e) => handler(e.payload)),
   onMetricsSample: (handler: (p: MetricsSamplePayload) => void): Promise<UnlistenFn> =>
     listen<MetricsSamplePayload>("metrics:sample", (e) => handler(e.payload)),
   onMetricsTargetChanged: (handler: (p: TargetChangedPayload) => void): Promise<UnlistenFn> =>
     listen<TargetChangedPayload>("metrics:target_changed", (e) => handler(e.payload)),
   onMetricsStopped: (handler: (p: MetricsStoppedPayload) => void): Promise<UnlistenFn> =>
     listen<MetricsStoppedPayload>("metrics:stopped", (e) => handler(e.payload)),
+  onIosFrame: (
+    handler: (p: { data: Uint8Array; width: number; height: number }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ data: number[] | Uint8Array | ArrayBuffer | string; width: number; height: number }>(
+      "ios_frame",
+      (e) =>
+        handler({
+          data: toUint8Array(e.payload.data),
+          width: e.payload.width,
+          height: e.payload.height,
+        }),
+    ),
+  onWebFrame: (
+    handler: (p: { data: Uint8Array; width: number; height: number }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ data: number[] | Uint8Array | ArrayBuffer | string; width: number; height: number }>(
+      "web_frame",
+      (e) =>
+        handler({
+          data: toUint8Array(e.payload.data),
+          width: e.payload.width,
+          height: e.payload.height,
+        }),
+    ),
+  onWebStatus: (
+    handler: (p: { stage: "info" | "warn" | "error"; message: string }) => void,
+  ): Promise<UnlistenFn> =>
+    listen<{ stage: "info" | "warn" | "error"; message: string }>("web:status", (e) =>
+      handler(e.payload),
+    ),
+  onWebTapFallback: (handler: () => void): Promise<UnlistenFn> =>
+    listen<null>("web:tap_fallback", () => handler()),
 };

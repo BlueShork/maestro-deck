@@ -3,7 +3,14 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { HashRouter } from "react-router-dom";
 import App from "./App";
+// Manrope, the MaestroDeck brand typeface — bundled locally (offline app).
+import "@fontsource/manrope/400.css";
+import "@fontsource/manrope/500.css";
+import "@fontsource/manrope/600.css";
+import "@fontsource/manrope/700.css";
+import "@fontsource/manrope/800.css";
 import "./styles/globals.css";
 
 // Native context menu = "Inspect Element" entrypoint in WKWebView. Block it
@@ -26,9 +33,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// Keep the splash visible at least this long so the pulse animation has time
-// to breathe even on fast machines where React mounts in a few ms.
-const SPLASH_MIN_MS = 450;
+const SPLASH_MIN_MS = 970;
 const mountedAt = performance.now();
 
 function hideSplash() {
@@ -38,15 +43,15 @@ function hideSplash() {
   const remaining = Math.max(0, SPLASH_MIN_MS - waited);
   setTimeout(() => {
     el.classList.add("fade-out");
-    // Remove from DOM after the CSS transition ends (320ms) so it doesn't
-    // intercept pointer events or inflate memory.
     el.addEventListener("transitionend", () => el.remove(), { once: true });
   }, remaining);
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <HashRouter>
+      <App />
+    </HashRouter>
   </React.StrictMode>,
 );
 

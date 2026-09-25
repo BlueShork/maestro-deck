@@ -10,29 +10,33 @@ const mkSample = (ts: number): Sample => ({
   memMb: 0,
   fps: null,
   jankPct: null,
+  frameP50: null,
+  frameP90: null,
+  frameP95: null,
+  frameP99: null,
+  thermalStatus: null,
   netRxKbps: 0,
   netTxKbps: 0,
 });
 
-beforeEach(() => {
-  useMetricsStore.getState().reset();
+const sample = (over: Partial<Sample> = {}): Sample => ({
+  ts: 1,
+  cpuPct: 10,
+  memMb: 100,
+  fps: null,
+  jankPct: null,
+  frameP50: null,
+  frameP90: null,
+  frameP95: null,
+  frameP99: null,
+  thermalStatus: null,
+  netRxKbps: 0,
+  netTxKbps: 0,
+  ...over,
 });
 
-describe("metricsStore.togglePanel / setPanelOpen", () => {
-  it("toggle flips panelOpen", () => {
-    const { togglePanel } = useMetricsStore.getState();
-    togglePanel();
-    expect(useMetricsStore.getState().panelOpen).toBe(true);
-    togglePanel();
-    expect(useMetricsStore.getState().panelOpen).toBe(false);
-  });
-
-  it("setPanelOpen sets the value explicitly", () => {
-    useMetricsStore.getState().setPanelOpen(true);
-    expect(useMetricsStore.getState().panelOpen).toBe(true);
-    useMetricsStore.getState().setPanelOpen(false);
-    expect(useMetricsStore.getState().panelOpen).toBe(false);
-  });
+beforeEach(() => {
+  useMetricsStore.getState().reset();
 });
 
 describe("metricsStore.appendSample", () => {
@@ -69,15 +73,28 @@ describe("metricsStore.onTargetChanged", () => {
 describe("metricsStore.reset", () => {
   it("returns store to initial values", () => {
     const s0 = useMetricsStore.getState();
-    s0.setPanelOpen(true);
     s0.appendSample(mkSample(1));
     s0.onTargetChanged("com.x");
     s0.setStoppedReason("oom");
     s0.reset();
     const s = useMetricsStore.getState();
-    expect(s.panelOpen).toBe(false);
     expect(s.currentPackage).toBeNull();
     expect(s.samples).toEqual([]);
     expect(s.stoppedReason).toBeNull();
+  });
+});
+
+describe("metricsStore", () => {
+  it("keeps appended samples", () => {
+    useMetricsStore.getState().appendSample(sample({ cpuPct: 42 }));
+    const s = useMetricsStore.getState().samples;
+    expect(s).toHaveLength(1);
+    expect(s[0].cpuPct).toBe(42);
+  });
+
+  it("caps history at 60 samples", () => {
+    for (let i = 0; i < 70; i++) useMetricsStore.getState().appendSample(sample({ ts: i }));
+    expect(useMetricsStore.getState().samples).toHaveLength(60);
+    expect(useMetricsStore.getState().samples[0].ts).toBe(10);
   });
 });

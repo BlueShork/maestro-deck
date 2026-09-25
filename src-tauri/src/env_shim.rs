@@ -13,11 +13,17 @@ pub fn enrich_from_login_shell() {
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
 
-    // Delimited output so we can extract PATH and JAVA_HOME even if the shell
-    // rc files print banners or random noise to stdout.
+    // Delimited output so we can extract the values even if the shell rc
+    // files print banners or random noise to stdout. Proxy vars matter on
+    // corporate machines: a Finder-launched .app doesn't inherit the shell's
+    // HTTPS_PROXY, so every reqwest download fails while the terminal works.
     let script = r#"
 printf '__PATH_START__%s__PATH_END__' "$PATH"
 printf '__JAVA_START__%s__JAVA_END__' "${JAVA_HOME:-}"
+printf '__HTTPP_START__%s__HTTPP_END__' "${HTTP_PROXY:-${http_proxy:-}}"
+printf '__HTTPSP_START__%s__HTTPSP_END__' "${HTTPS_PROXY:-${https_proxy:-}}"
+printf '__ALLP_START__%s__ALLP_END__' "${ALL_PROXY:-${all_proxy:-}}"
+printf '__NOP_START__%s__NOP_END__' "${NO_PROXY:-${no_proxy:-}}"
 "#;
 
     // -i: interactive (reads ~/.zshrc / ~/.bashrc)
@@ -76,6 +82,19 @@ printf '__JAVA_START__%s__JAVA_END__' "${JAVA_HOME:-}"
         if !java_home.is_empty() {
             std::env::set_var("JAVA_HOME", java_home);
             tracing::info!(java_home, "JAVA_HOME enriched from login shell");
+        }
+    }
+    for (var, start, end) in [
+        ("HTTP_PROXY", "__HTTPP_START__", "__HTTPP_END__"),
+        ("HTTPS_PROXY", "__HTTPSP_START__", "__HTTPSP_END__"),
+        ("ALL_PROXY", "__ALLP_START__", "__ALLP_END__"),
+        ("NO_PROXY", "__NOP_START__", "__NOP_END__"),
+    ] {
+        if let Some(value) = between(&stdout, start, end) {
+            if !value.is_empty() && std::env::var_os(var).is_none() {
+                std::env::set_var(var, value);
+                tracing::info!(var, "proxy var enriched from login shell");
+            }
         }
     }
 }

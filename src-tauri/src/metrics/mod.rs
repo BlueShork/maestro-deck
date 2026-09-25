@@ -10,6 +10,7 @@
 
 pub mod collector;
 pub mod foreground;
+pub mod ios_sim;
 pub mod parsers;
 
 use std::time::{Duration, Instant};
@@ -21,7 +22,7 @@ use tokio::sync::{oneshot, Mutex as AsyncMutex};
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
-use crate::metrics::collector::{fetch_cpu_mem, fetch_gfx, GfxSample};
+use crate::metrics::collector::{fetch_cpu_mem, fetch_gfx, fetch_thermal, GfxSample};
 use crate::metrics::foreground::{resolve_target, Target};
 use crate::metrics::parsers::ProcStat;
 
@@ -45,6 +46,11 @@ pub struct MetricsSample {
     pub mem_mb: f32,
     pub fps: Option<f32>,
     pub jank_pct: Option<f32>,
+    pub frame_p50_ms: Option<f32>,
+    pub frame_p90_ms: Option<f32>,
+    pub frame_p95_ms: Option<f32>,
+    pub frame_p99_ms: Option<f32>,
+    pub thermal_status: Option<u8>,
     pub net_rx_kbps: f32,
     pub net_tx_kbps: f32,
     pub ts: u64,
@@ -62,16 +68,46 @@ pub struct StoppedReason {
     pub message: Option<String>,
 }
 
-pub async fn start(app: AppHandle, serial: String) -> AppResult<()> {
+pub async fn start(app: AppHandle, device: crate::device::Device) -> AppResult<()> {
+    use crate::device::Platform;
     let mut guard = RUNNING.lock().await;
-    if guard.is_some() {
-        return Err(AppError::MetricsAlreadyRunning);
+    // Replace any running collector. On a device switch the frontend can call
+    // start() before the previous stop()'s join has completed, so reject-if-
+    // running would spuriously fail. Cancel + join the predecessor while
+    // holding the lock so there is no overlap. Safe from deadlock: a cancelled
+    // loop exits via the cancel arm and does NOT self-clear RUNNING (see
+    // exit_by_cancel), so it never tries to lock RUNNING during this join.
+    if let Some((tx, join)) = guard.take() {
+        let _ = tx.send(());
+        let _ = join.await;
     }
-    let (tx, rx) = oneshot::channel::<()>();
-    let join = tokio::spawn(run_loop(app, serial, rx));
-    *guard = Some((tx, join));
-    info!("metrics task started");
-    Ok(())
+    match (device.platform, device.physical) {
+        (Platform::Android, _) => {
+            let (tx, rx) = oneshot::channel::<()>();
+            let join = tokio::spawn(run_loop(app, device.serial, rx));
+            *guard = Some((tx, join));
+            info!("android metrics task started");
+            Ok(())
+        }
+        (Platform::Ios, false) => {
+            let (tx, rx) = oneshot::channel::<()>();
+            let join = tokio::spawn(run_loop_ios_sim(app, device.serial, rx));
+            *guard = Some((tx, join));
+            info!("ios-sim metrics task started");
+            Ok(())
+        }
+        (Platform::Ios, true) => {
+            emit_unsupported(
+                &app,
+                "Per-app metrics aren't available on physical iPhones (requires Instruments).",
+            );
+            Ok(())
+        }
+        (Platform::Web, _) => {
+            emit_unsupported(&app, "The Web target has no per-app performance metrics.");
+            Ok(())
+        }
+    }
 }
 
 pub async fn stop() -> AppResult<()> {
@@ -91,15 +127,22 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
     let mut target: Option<Target> = None;
     let mut prev_stat: Option<(ProcStat, Instant)> = None;
     let mut last_gfx: Option<GfxSample> = None;
+    let mut last_thermal: Option<u8> = None;
     let mut last_fg_check = Instant::now() - FOREGROUND_CHECK_INTERVAL;
     let mut last_gfx_poll = Instant::now() - GFX_INTERVAL;
     let mut consecutive_errors: u32 = 0;
+    // Track whether exit was triggered by stop() so we can skip the self-clear.
+    // stop() already .take()s the RUNNING slot before signalling, so there is
+    // nothing left to clear for cancel exits; only self-exits (error bailout)
+    // need to null the slot.
+    let mut exit_by_cancel = false;
     let mut ticker = tokio::time::interval(TICK_INTERVAL);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         tokio::select! {
             _ = &mut cancel => {
+                exit_by_cancel = true;
                 emit_stopped(&app, "user", None);
                 break;
             }
@@ -133,6 +176,7 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
                         );
                         prev_stat = None;
                         last_gfx = None;
+                        last_thermal = None;
                     }
                     target = Some(new_target);
                 }
@@ -200,6 +244,15 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
                     warn!(error = ?e, "gfx fetch failed");
                 }
             }
+            let serial_for_thermal = serial.clone();
+            match tokio::task::spawn_blocking(move || fetch_thermal(&serial_for_thermal))
+                .await
+                .unwrap_or_else(|e| {
+                    Err(AppError::MetricsFailed(format!("thermal join failed: {e}")))
+                }) {
+                Ok(t) => last_thermal = t,
+                Err(e) => warn!(error = ?e, "thermal fetch failed"),
+            }
         }
 
         if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
@@ -215,6 +268,11 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
             mem_mb: cpu_mem.mem_mb,
             fps: last_gfx.map(|g| g.fps),
             jank_pct: last_gfx.map(|g| g.jank_pct),
+            frame_p50_ms: last_gfx.and_then(|g| g.p50_ms),
+            frame_p90_ms: last_gfx.and_then(|g| g.p90_ms),
+            frame_p95_ms: last_gfx.and_then(|g| g.p95_ms),
+            frame_p99_ms: last_gfx.and_then(|g| g.p99_ms),
+            thermal_status: last_thermal,
             net_rx_kbps: 0.0,
             net_tx_kbps: 0.0,
             ts: ts_ms(),
@@ -223,20 +281,115 @@ async fn run_loop(app: AppHandle, serial: String, mut cancel: oneshot::Receiver<
     }
 
     info!("metrics task exited");
-    // Self-clear the RUNNING slot when the task exits without an explicit
-    // stop() — e.g. on error bailout. We spawn this because we cannot await
-    // the mutex from inside the task's own body without risking reentrancy
-    // if stop() is concurrently holding the lock.
-    tokio::spawn(async {
-        let mut guard = RUNNING.lock().await;
-        // If stop() already took the slot (normal shutdown), nothing to do.
-        // Otherwise clear so a new start() can proceed.
-        *guard = None;
-    });
+    // Only self-clear on error/self-exit. When stop() was called it already
+    // .take()d the slot before signalling; self-clearing after a cancel exit
+    // would race with a subsequent start() that put a new task in the slot.
+    if !exit_by_cancel {
+        tokio::spawn(async {
+            *RUNNING.lock().await = None;
+        });
+    }
+}
+
+/// iOS-simulator polling loop. A simulated app runs as a host macOS process, so
+/// we resolve the frontmost `UIKitApplication`'s host PID + bundle id and sample
+/// CPU%/RAM via `ps`. All other metric fields (fps, jank, frame times, thermal,
+/// net) are unavailable on this path and ship as `None`/`0.0`.
+async fn run_loop_ios_sim(app: AppHandle, udid: String, mut cancel: oneshot::Receiver<()>) {
+    let mut consecutive_errors: u32 = 0;
+    // See run_loop for rationale: skip self-clear when exiting via stop() cancel.
+    let mut exit_by_cancel = false;
+    let mut ticker = tokio::time::interval(TICK_INTERVAL);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        tokio::select! {
+            _ = &mut cancel => {
+                exit_by_cancel = true;
+                emit_stopped(&app, "user", None);
+                break;
+            }
+            _ = ticker.tick() => {}
+        }
+
+        let udid_for_pid = udid.clone();
+        let resolved =
+            tokio::task::spawn_blocking(move || ios_sim::frontmost_pid_and_bundle(&udid_for_pid))
+                .await
+                .unwrap_or_else(|e| {
+                    Err(AppError::MetricsFailed(format!("ios pid join failed: {e}")))
+                });
+        let (pid, bundle) = match resolved {
+            Ok(Some(v)) => v,
+            Ok(None) => continue,
+            Err(e) => {
+                warn!(error = ?e, "ios pid resolution failed");
+                consecutive_errors += 1;
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                    emit_stopped(&app, "error", Some(e.to_string()));
+                    break;
+                }
+                continue;
+            }
+        };
+
+        let cpu_mem = tokio::task::spawn_blocking(move || ios_sim::sample_cpu_mem(pid))
+            .await
+            .unwrap_or_else(|e| Err(AppError::MetricsFailed(format!("ios ps join failed: {e}"))));
+        let (cpu_pct, mem_mb) = match cpu_mem {
+            Ok(Some(v)) => v,
+            // Process exited between pid resolution and ps — benign, try again.
+            Ok(None) => continue,
+            Err(e) => {
+                warn!(error = ?e, "ios cpu_mem fetch failed");
+                consecutive_errors += 1;
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                    emit_stopped(&app, "error", Some(e.to_string()));
+                    break;
+                }
+                continue;
+            }
+        };
+        consecutive_errors = 0;
+
+        let sample = MetricsSample {
+            package: bundle,
+            cpu_pct,
+            mem_mb,
+            fps: None,
+            jank_pct: None,
+            frame_p50_ms: None,
+            frame_p90_ms: None,
+            frame_p95_ms: None,
+            frame_p99_ms: None,
+            thermal_status: None,
+            net_rx_kbps: 0.0,
+            net_tx_kbps: 0.0,
+            ts: ts_ms(),
+        };
+        let _ = app.emit(EVT_SAMPLE, sample);
+    }
+
+    info!("ios-sim metrics task exited");
+    if !exit_by_cancel {
+        tokio::spawn(async {
+            *RUNNING.lock().await = None;
+        });
+    }
 }
 
 fn emit_stopped(app: &AppHandle, reason: &'static str, message: Option<String>) {
     let _ = app.emit(EVT_STOPPED, StoppedReason { reason, message });
+}
+
+fn emit_unsupported(app: &AppHandle, message: &str) {
+    let _ = app.emit(
+        EVT_STOPPED,
+        StoppedReason {
+            reason: "unsupported",
+            message: Some(message.to_string()),
+        },
+    );
 }
 
 fn ts_ms() -> u64 {

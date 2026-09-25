@@ -10,11 +10,7 @@ import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
 import { ModelPicker } from "./ModelPicker";
 
-interface ChatPanelProps {
-  onOpenSettings: () => void;
-}
-
-export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
+export function ChatPanel() {
   const setOpen = useChatStore((s) => s.setOpen);
   const clear = useChatStore((s) => s.clear);
   const error = useChatStore((s) => s.error);
@@ -46,7 +42,7 @@ export function ChatPanel({ onOpenSettings }: ChatPanelProps) {
         </Button>
       </header>
 
-      <MessageList onOpenSettings={onOpenSettings} />
+      <MessageList />
 
       {error && (
         <div className="mx-3 mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">

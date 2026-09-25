@@ -4,12 +4,15 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+import { runAgentLoop, TURN_LIMIT_NOTICE } from "@/lib/chat/agentLoop";
+import { MAESTRODECK_MODEL } from "@/lib/chat/models";
 import { getProvider } from "@/lib/chat/registry";
-import { BILLY_SYSTEM_PROMPT } from "@/lib/chat/systemPrompt";
+import { getEffectiveBillyPrompt } from "@/lib/chat/systemPrompt";
+import { ALL_TOOLS, executeTool } from "@/lib/chat/tools";
 import { useFlowStore } from "@/stores/flowStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { WorkspaceNode } from "@/types";
-import type { ChatMessage, ProviderId } from "@/types/chat";
+import type { ChatMessage, ContentBlock, ProviderId } from "@/types/chat";
 
 function listYamlPaths(node: WorkspaceNode | null, root: string | null): string[] {
   if (!node) return [];
@@ -45,18 +48,29 @@ interface ChatState {
    *  (e.g. the input grew and consumed visible space). */
   scrollBump: number;
 
+  /** Text waiting to be placed in the chat input (e.g. from the editor's
+   *  "Ask Billy" menu). ChatInput takes it and clears it. */
+  draft: string | null;
+
   toggle: () => void;
   setOpen: (open: boolean) => void;
   setProvider: (provider: ProviderId, model: string) => void;
-  sendMessage: (text: string) => Promise<void>;
+  /** Resolves with the answer's message id once Billy has finished, or null
+   *  when nothing was sent, it failed, or the user stopped it. */
+  sendMessage: (text: string, opts?: { viaVoice?: boolean }) => Promise<string | null>;
   cancel: () => void;
   clear: () => void;
   bumpScroll: () => void;
+  /** Opens the panel with `text` in the input, for the user to finish. */
+  compose: (text: string) => void;
+  takeDraft: () => string | null;
 }
 
+// Billy on Maestro Deck Cloud needs no key, only an account, so it's what a
+// fresh install starts on. A choice already made is persisted and kept.
 const DEFAULTS = {
-  provider: "anthropic" as ProviderId,
-  model: "claude-sonnet-4-6",
+  provider: "maestrodeck" as ProviderId,
+  model: MAESTRODECK_MODEL.id,
 };
 
 export const useChatStore = create<ChatState>()(
@@ -70,6 +84,7 @@ export const useChatStore = create<ChatState>()(
       error: null,
       abort: null,
       scrollBump: 0,
+      draft: null,
 
       toggle: () => set((s) => ({ isOpen: !s.isOpen })),
       setOpen: (open) => set({ isOpen: open }),
@@ -77,14 +92,19 @@ export const useChatStore = create<ChatState>()(
       setProvider: (provider, model) =>
         set({ currentProvider: provider, currentModel: model, error: null }),
 
-      sendMessage: async (text) => {
+      sendMessage: async (text, opts) => {
         const trimmed = text.trim();
-        if (!trimmed || get().isStreaming) return;
+        if (!trimmed || get().isStreaming) return null;
 
         const provider = await getProvider(get().currentProvider);
         if (!provider) {
-          set({ error: "No credentials configured for this provider. Open Settings to add them." });
-          return;
+          set({
+            error:
+              get().currentProvider === "maestrodeck"
+                ? "Sign in to your Maestro Deck account to use Billy, or pick your own key in Settings → AI."
+                : "No credentials configured for this provider. Open Settings to add them.",
+          });
+          return null;
         }
 
         const userMsg: ChatMessage = {
@@ -92,6 +112,7 @@ export const useChatStore = create<ChatState>()(
           role: "user",
           content: trimmed,
           createdAt: Date.now(),
+          ...(opts?.viaVoice ? { viaVoice: true } : {}),
         };
         const assistantId = crypto.randomUUID();
         const assistantPlaceholder: ChatMessage = {
@@ -113,7 +134,7 @@ export const useChatStore = create<ChatState>()(
           const systemMsg: ChatMessage = {
             id: "system",
             role: "system",
-            content: BILLY_SYSTEM_PROMPT,
+            content: getEffectiveBillyPrompt(),
             createdAt: 0,
           };
 
@@ -138,11 +159,18 @@ export const useChatStore = create<ChatState>()(
               `# Currently open file\n\nThe editor is showing \`${flow.filePath ?? "(unsaved)"}\` with this content:\n\n\`\`\`yaml\n${flow.content}\n\`\`\``,
             );
           }
+          if (opts?.viaVoice) {
+            contextParts.push(
+              `# Voice\n\n` +
+                `The user asked this out loud, and your final answer (the text after your last tool call) will be read aloud by a voice synthesizer. ` +
+                `Keep that final answer to 2 to 4 short, natural sentences: no lists, tables, headings or emojis. ` +
+                `Put any YAML or command in a code block after the explanation: it is shown on screen, not read.`,
+            );
+          }
           contextParts.push(
-            `# How to propose modifications\n\n` +
-              `- You can only directly modify the file currently open in the editor (shown above).\n` +
-              `- If the user asks you to change a different file from the workspace list, ask them to open it first (the **Apply** button only operates on the current editor).\n` +
-              `- When proposing a change to the open file, respond with the **complete new YAML** inside a single \`\`\`yaml fenced block. The UI will surface an Apply button on that block.`,
+            `# Modifying files\n\n` +
+              `- Use the write_flow tool to create or modify flow files directly — the editor refreshes automatically.\n` +
+              `- Only fall back to a fenced \`\`\`yaml block (Apply button) when the user explicitly asks to review the change before it lands.`,
           );
 
           const contextMsg: ChatMessage | null = contextParts.length
@@ -155,25 +183,76 @@ export const useChatStore = create<ChatState>()(
             : null;
 
           const history = get().messages.filter((m) => m.id !== assistantId);
-          const stream = provider.stream({
-            model: get().currentModel,
-            messages: contextMsg ? [systemMsg, contextMsg, ...history] : [systemMsg, ...history],
-            signal: abort.signal,
-          });
+          const base = contextMsg ? [systemMsg, contextMsg, ...history] : [systemMsg, ...history];
 
-          for await (const delta of stream) {
+          const appendBlock = (block: ContentBlock) =>
             set((s) => ({
               messages: s.messages.map((m) =>
-                m.id === assistantId ? { ...m, content: m.content + delta } : m,
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      content:
+                        typeof m.content === "string"
+                          ? m.content
+                            ? ([{ type: "text", text: m.content }, block] as ContentBlock[])
+                            : [block]
+                          : [...m.content, block],
+                    }
+                  : m,
               ),
             }));
+
+          for await (const evt of runAgentLoop({
+            provider,
+            model: get().currentModel,
+            tools: ALL_TOOLS,
+            messages: base,
+            signal: abort.signal,
+            execute: executeTool,
+          })) {
+            if (evt.type === "text_delta") {
+              set((s) => ({
+                messages: s.messages.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  if (typeof m.content === "string") return { ...m, content: m.content + evt.text };
+                  const blocks = m.content.slice();
+                  const last = blocks[blocks.length - 1];
+                  if (last?.type === "text")
+                    blocks[blocks.length - 1] = { ...last, text: last.text + evt.text };
+                  else blocks.push({ type: "text", text: evt.text });
+                  return { ...m, content: blocks };
+                }),
+              }));
+            } else if (evt.type === "tool_use" || evt.type === "tool_result") {
+              appendBlock(evt.block);
+            } else {
+              appendBlock({ type: "text", text: `\n\n_${TURN_LIMIT_NOTICE}_` });
+            }
           }
+          // The loop can also return early on a stop, without throwing.
+          return abort.signal.aborted ? null : assistantId;
         } catch (err) {
           if (abort.signal.aborted) {
             set((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === assistantId ? { ...m, content: m.content + "\n\n_[stopped]_" } : m,
-              ),
+              messages: s.messages.map((m) => {
+                if (m.id !== assistantId) return m;
+                const stopped = "\n\n_[stopped]_";
+                if (typeof m.content === "string") {
+                  return { ...m, content: m.content + stopped };
+                }
+                // Content is an array; append to the trailing text block or push a new one
+                const blocks = [...m.content];
+                const lastBlock = blocks[blocks.length - 1];
+                if (lastBlock?.type === "text") {
+                  blocks[blocks.length - 1] = {
+                    ...lastBlock,
+                    text: lastBlock.text + stopped,
+                  };
+                } else {
+                  blocks.push({ type: "text", text: stopped });
+                }
+                return { ...m, content: blocks };
+              }),
             }));
           } else {
             const message = err instanceof Error ? err.message : String(err);
@@ -182,6 +261,7 @@ export const useChatStore = create<ChatState>()(
               error: message,
             }));
           }
+          return null;
         } finally {
           set({ isStreaming: false, abort: null });
         }
@@ -194,6 +274,13 @@ export const useChatStore = create<ChatState>()(
       clear: () => set({ messages: [], error: null }),
 
       bumpScroll: () => set((s) => ({ scrollBump: s.scrollBump + 1 })),
+
+      compose: (text) => set({ isOpen: true, draft: text }),
+      takeDraft: () => {
+        const { draft } = get();
+        if (draft !== null) set({ draft: null });
+        return draft;
+      },
     }),
     {
       name: "maestro-deck.chat",

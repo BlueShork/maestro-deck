@@ -2,17 +2,30 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { credentials } from "@/lib/chat/credentials";
+import { MAESTRODECK_MODEL } from "@/lib/chat/models";
 import { invalidateProvider } from "@/lib/chat/registry";
 import { cn } from "@/lib/utils";
-import type { ProviderId } from "@/types/chat";
+import { useChatStore } from "@/stores/chatStore";
+import { useCloudAuthStore } from "@/stores/cloudAuthStore";
+import type { ByokProviderId, ProviderId } from "@/types/chat";
+
+const PROVIDER_TABS: { id: ProviderId; label: string }[] = [
+  { id: "maestrodeck", label: "Maestro Deck" },
+  { id: "anthropic", label: "Anthropic" },
+  { id: "vertex", label: "Vertex AI" },
+];
 
 const REGIONS = ["us-east5", "us-central1", "europe-west1", "europe-west4", "asia-southeast1"];
 
 export function AiSettings() {
-  const [provider, setProvider] = useState<ProviderId>("anthropic");
+  // Open on the provider the chat is using, so its settings are what shows.
+  const [provider, setProvider] = useState<ProviderId>(
+    () => useChatStore.getState().currentProvider,
+  );
 
   // Anthropic
   const [apiKey, setApiKey] = useState("");
@@ -76,7 +89,7 @@ export function AiSettings() {
     }
   };
 
-  const clearProvider = async (id: ProviderId) => {
+  const clearProvider = async (id: ByokProviderId) => {
     setBusy(true);
     try {
       await credentials.clear(id);
@@ -102,30 +115,33 @@ export function AiSettings() {
       <div className="flex flex-col gap-1">
         <span className="text-xs font-medium text-muted-foreground">AI assistant</span>
         <p className="text-[11px] text-muted-foreground">
-          Bring your own key. Credentials are stored encrypted in a local Stronghold vault and never
-          leave this machine except when calling the provider you configure.
+          Use Billy as provided by Maestro Deck with your account, or bring your own key. Keys are
+          stored encrypted in a local Stronghold vault and never leave this machine except when
+          calling the provider you configure.
         </p>
       </div>
 
       <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5 self-start">
-        {(["anthropic", "vertex"] as ProviderId[]).map((p) => (
+        {PROVIDER_TABS.map((p) => (
           <button
-            key={p}
+            key={p.id}
             type="button"
-            onClick={() => setProvider(p)}
+            onClick={() => setProvider(p.id)}
             className={cn(
               "rounded px-3 py-1 text-xs font-medium transition-colors",
-              provider === p
+              provider === p.id
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {p === "anthropic" ? "Anthropic" : "Vertex AI"}
+            {p.label}
           </button>
         ))}
       </div>
 
-      {provider === "anthropic" ? (
+      {provider === "maestrodeck" ? (
+        <MaestroDeckSettings />
+      ) : provider === "anthropic" ? (
         <div className="flex flex-col gap-2">
           <label className="flex flex-col gap-1">
             <span className="text-[11px] text-muted-foreground">
@@ -244,6 +260,52 @@ export function AiSettings() {
         >
           {status.msg}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Billy hosted by Maestro Deck: nothing to configure, only an account. */
+function MaestroDeckSettings() {
+  const navigate = useNavigate();
+  const user = useCloudAuthStore((s) => s.user);
+  const ready = useCloudAuthStore((s) => s.ready);
+  const inUse = useChatStore((s) => s.currentProvider === "maestrodeck");
+  const setChatProvider = useChatStore((s) => s.setProvider);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[11px] text-muted-foreground">
+        The same Billy as in the Maestro Deck iPhone app, with every desktop tool: he sees the
+        device, taps, and writes and runs your flows. No key needed, free with a Maestro Deck
+        account. Your conversation is sent to Maestro Deck Cloud to be answered.
+      </p>
+      {!ready ? null : user ? (
+        <>
+          <span className="text-[11px] text-muted-foreground">
+            Signed in as <span className="text-foreground">{user.email}</span>
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => setChatProvider("maestrodeck", MAESTRODECK_MODEL.id)}
+              disabled={inUse}
+            >
+              {inUse ? "Used by the chat" : "Use in the chat"}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <span className="text-[11px] text-muted-foreground">
+            Sign in to your Maestro Deck account to use it.
+          </span>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => navigate("/account")}>
+              Sign in
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );

@@ -1,27 +1,67 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Activity, Eraser, Play, Square } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Activity, Ban, CheckCircle2, Eraser, List, Terminal, XCircle } from "lucide-react";
+import { memo, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
+import RubberSegment from "@/components/ui/RubberSegment";
+import StatusMark, { type StatusMarkStatus } from "@/components/ui/StatusMark";
+import { RunStatus } from "@/components/RunStatus";
+import { MetricsBody } from "@/components/MetricsPanel";
 import { renderAnsi } from "@/lib/ansi";
 import { humanLabel, formatDuration } from "@/lib/stepRenderer";
 import { cn } from "@/lib/utils";
 import { useRunStore } from "@/stores/runStore";
 import type { StepRunState } from "@/stores/runStore";
-import { useMetricsStore } from "@/stores/metricsStore";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { useSettingsStore, type ConsoleMode } from "@/stores/settingsStore";
 
-export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () => void }) {
+/** Plain-language outcome of the last run instead of a raw `exit N` code. */
+function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: boolean }) {
+  const kind = stopped ? "stopped" : exitCode === 0 ? "passed" : "failed";
+  const { Icon, label, className } = {
+    passed: {
+      Icon: CheckCircle2,
+      label: "Passed",
+      className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+    },
+    failed: {
+      Icon: XCircle,
+      label: "Failed",
+      className: "bg-red-500/15 text-red-700 dark:text-red-300",
+    },
+    stopped: {
+      Icon: Ban,
+      label: "Stopped",
+      className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    },
+  }[kind];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
+        className,
+      )}
+      title={`Flow ${label.toLowerCase()} — exit code ${exitCode}`}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </span>
+  );
+}
+
+const CONSOLE_TABS: Array<{ id: ConsoleMode; label: string; icon: typeof List }> = [
+  { id: "simple", label: "Simple", icon: List },
+  { id: "technical", label: "Technical", icon: Terminal },
+  { id: "performance", label: "Performance", icon: Activity },
+];
+
+export function RunConsole() {
   const running = useRunStore((s) => s.running);
   const exitCode = useRunStore((s) => s.exitCode);
   const logs = useRunStore((s) => s.logs);
-  const clearLogs = useRunStore((s) => s.clearLogs);
-
-  const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
-  const panelOpen = useMetricsStore((s) => s.panelOpen);
-  const togglePanel = useMetricsStore((s) => s.togglePanel);
+  const truncatedCount = useRunStore((s) => s.truncatedCount);
+  const clearConsole = useRunStore((s) => s.clearConsole);
 
   const consoleMode = useSettingsStore((s) => s.consoleMode);
   const setConsoleMode = useSettingsStore((s) => s.setConsoleMode);
@@ -40,7 +80,7 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
   }, [logs]);
 
   return (
-    <section className="flex h-48 shrink-0 flex-col border-t border-border bg-muted/40">
+    <section className="flex h-full min-h-0 flex-col border-t border-border bg-muted/40">
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -52,73 +92,43 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
               running
             </span>
           ) : exitCode !== null ? (
-            <span
-              className={cn(
-                "rounded px-1.5 py-0.5 font-mono text-[10px]",
-                exitCode === 0
-                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                  : "bg-red-500/15 text-red-700 dark:text-red-300",
-              )}
-            >
-              exit {exitCode}
-            </span>
+            <RunStatusBadge exitCode={exitCode} stopped={stopRequested} />
           ) : null}
         </div>
         <div className="flex items-center gap-1">
-          <div className="mr-1 flex overflow-hidden rounded border border-border">
-            <button
-              type="button"
-              onClick={() => setConsoleMode("simple")}
-              className={cn(
-                "px-2 py-0.5 text-[10px]",
-                consoleMode === "simple"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-transparent text-muted-foreground hover:bg-muted",
-              )}
-            >
-              Simple
-            </button>
-            <button
-              type="button"
-              onClick={() => setConsoleMode("technical")}
-              className={cn(
-                "px-2 py-0.5 text-[10px]",
-                consoleMode === "technical"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-transparent text-muted-foreground hover:bg-muted",
-              )}
-            >
-              Technical
-            </button>
-          </div>
-          {perfEnabled && (
-            <Button
-              size="xs"
-              variant={panelOpen ? "default" : "ghost"}
-              onClick={togglePanel}
-              title="Toggle performance HUD"
-            >
-              <Activity className="h-3 w-3" />
-              Perf
-            </Button>
-          )}
-          <Button size="xs" variant="ghost" onClick={clearLogs} disabled={logs.length === 0}>
+          <RubberSegment
+            aria-label="Console view"
+            size="sm"
+            radius={6}
+            inset={2}
+            items={CONSOLE_TABS.map(({ id, label, icon: Icon }) => ({
+              value: id,
+              label,
+              icon: <Icon className="h-3 w-3" />,
+            }))}
+            value={consoleMode}
+            onChange={(id) => setConsoleMode(id as ConsoleMode)}
+            trackColor="hsl(var(--border))"
+            thumbColor="hsl(var(--primary))"
+            textColor="hsl(var(--muted-foreground))"
+            activeTextColor="hsl(var(--primary-foreground))"
+            className="mr-1 text-[11px]"
+          />
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={clearConsole}
+            // Disabled while running: clearing `steps` mid-run would wipe the
+            // live step list and incoming events can't repopulate it.
+            disabled={running || (logs.length === 0 && steps.length === 0)}
+          >
             <Eraser className="h-3 w-3" />
             Clear
           </Button>
-          {running ? (
-            <Button size="xs" variant="destructive" onClick={onStop}>
-              <Square className="h-3 w-3" fill="currentColor" />
-              Stop
-            </Button>
-          ) : (
-            <Button size="xs" variant="default" onClick={onRun}>
-              <Play className="h-3 w-3" fill="currentColor" />
-              Run
-            </Button>
-          )}
         </div>
       </div>
+
+      <RunStatus />
 
       <div
         ref={scrollRef}
@@ -126,26 +136,35 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
           const el = e.currentTarget;
           stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         }}
-        className="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
+        className="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 text-[11px] leading-relaxed"
       >
-        {consoleMode === "technical" ? (
+        {consoleMode === "performance" ? (
+          <MetricsBody />
+        ) : consoleMode === "technical" ? (
           logs.length === 0 ? (
             <div className="text-muted-foreground">
               No output yet. Press Run to execute the current flow.
             </div>
           ) : (
-            logs.map((l) => (
-              <div
-                key={l.id}
-                className={cn(
-                  "whitespace-pre-wrap",
-                  l.stream === "stderr" && "text-red-700 dark:text-red-300",
-                  l.stream === "system" && "text-muted-foreground italic",
-                )}
-              >
-                {renderAnsi(l.text)}
-              </div>
-            ))
+            <>
+              {truncatedCount > 0 ? (
+                <div className="italic text-muted-foreground">
+                  [{truncatedCount} older lines dropped — console keeps the last 2000]
+                </div>
+              ) : null}
+              {logs.map((l) => (
+                <div
+                  key={l.id}
+                  className={cn(
+                    "whitespace-pre-wrap font-mono",
+                    l.stream === "stderr" && "text-red-600 dark:text-red-400",
+                    l.stream === "system" && "text-muted-foreground italic",
+                  )}
+                >
+                  {renderAnsi(l.text)}
+                </div>
+              ))}
+            </>
           )
         ) : (
           <SimpleConsoleBody
@@ -160,7 +179,9 @@ export function RunConsole({ onRun, onStop }: { onRun: () => void; onStop: () =>
   );
 }
 
-function SimpleConsoleBody({
+// Memoized so log lines streaming into the store (which re-render RunConsole)
+// don't re-render the whole step list — only an actual step change does.
+const SimpleConsoleBody = memo(function SimpleConsoleBody({
   steps,
   running,
   exitCode,
@@ -196,17 +217,19 @@ function SimpleConsoleBody({
       )}
     </div>
   );
-}
+});
 
-function SimpleStepLine({ step }: { step: StepRunState }) {
-  const icon =
-    step.status === "running"
-      ? "▶"
-      : step.status === "done"
-        ? "✓"
-        : step.status === "failed"
-          ? "✗"
-          : " ";
+const stepMark: Record<StepRunState["status"], StatusMarkStatus> = {
+  pending: "pending",
+  running: "running",
+  done: "done",
+  failed: "failed",
+  skipped: "cancelled",
+};
+
+// Memoized: steps are updated immutably (unchanged steps keep their reference),
+// so only the step whose status/duration changed re-renders.
+const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunState }) {
   const colorClass =
     step.status === "done"
       ? "text-emerald-600 dark:text-emerald-400"
@@ -216,20 +239,30 @@ function SimpleStepLine({ step }: { step: StepRunState }) {
           ? "text-blue-600 dark:text-blue-400"
           : "text-muted-foreground";
   const label = humanLabel(step);
-  const duration = step.status === "running" ? "…" : formatDuration(step.durationMs);
+  const duration =
+    step.status === "running"
+      ? "…"
+      : step.status === "skipped"
+        ? "skipped"
+        : formatDuration(step.durationMs);
   return (
-    <div className={cn("flex items-baseline gap-2 whitespace-pre", colorClass)}>
-      <span className="w-3 text-center">{icon}</span>
+    <div className={cn("flex items-center gap-2 whitespace-pre", colorClass)}>
+      <StatusMark
+        status={stepMark[step.status]}
+        size={14}
+        doneColor="currentColor"
+        errorColor="currentColor"
+      />
       <span className="flex-1 truncate">{label}</span>
       <span className="tabular-nums text-muted-foreground">{duration}</span>
       {step.status === "failed" && step.error ? (
-        <span className="ml-2 truncate text-red-500/80" title={step.error}>
+        <span className="ml-2 truncate text-red-600/70 dark:text-red-400/70" title={step.error}>
           — {step.error}
         </span>
       ) : null}
     </div>
   );
-}
+});
 
 function SimpleSummary({
   exitCode,
@@ -245,19 +278,26 @@ function SimpleSummary({
   failedAt: number;
 }) {
   if (stopRequested) {
-    return <div className="mt-2 text-muted-foreground">⏹ Test stopped</div>;
+    return (
+      <div className="mt-2 flex items-center gap-2 text-muted-foreground">
+        <StatusMark status="cancelled" size={14} />
+        Test stopped
+      </div>
+    );
   }
   if (exitCode === 0 && failedAt === -1) {
     return (
-      <div className="mt-2 text-emerald-600 dark:text-emerald-400">
-        ✅ Test passed — {totalSteps} step{totalSteps === 1 ? "" : "s"} in{" "}
+      <div className="mt-2 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+        <StatusMark status="done" size={14} doneColor="currentColor" />
+        Test passed — {totalSteps} step{totalSteps === 1 ? "" : "s"} in{" "}
         {formatDuration(totalMs) || "<0.1s"}
       </div>
     );
   }
   return (
-    <div className="mt-2 text-red-600 dark:text-red-400">
-      ❌ Test failed{failedAt >= 0 ? ` at step ${failedAt + 1}` : ""}
+    <div className="mt-2 flex items-center gap-2 text-red-600 dark:text-red-400">
+      <StatusMark status="failed" size={14} errorColor="currentColor" />
+      Test failed{failedAt >= 0 ? ` at step ${failedAt + 1}` : ""}
     </div>
   );
 }

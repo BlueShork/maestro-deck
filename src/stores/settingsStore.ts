@@ -5,60 +5,81 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 export type ThemeMode = "light" | "dark" | "system";
-export type ConsoleMode = "simple" | "technical";
+export type ConsoleMode = "simple" | "technical" | "performance";
 
 interface SettingsState {
   inspectKey: string;
   showFps: boolean;
   theme: ThemeMode;
   streamEnabled: boolean;
-  perfMonitoringEnabled: boolean;
   /**
-   * When enabled, inspect mode spawns `maestro studio` once at startup
+   * When enabled, inspect mode spawns a `maestro mcp` keeper once at startup
    * (slow: 10-15s) and then fetches the hierarchy over direct gRPC on
    * each subsequent dump (<500ms). When disabled, each dump shells out
    * to the `maestro hierarchy` CLI (simple but ~11s per dump).
    *
    * Experimental flag — depends on an undocumented port contract of
-   * the Maestro driver + a studio background process. Off by default
+   * the Maestro driver + a `maestro mcp` background process. Off by default
    * until we've validated output parity against the CLI path.
    */
   fastHierarchyEnabled: boolean;
   autoSaveEnabled: boolean;
   autoCheckUpdatesEnabled: boolean;
+  /**
+   * Surfaces the synthetic "Web Browser (Chromium)" target in the device
+   * list. Web support is beta and still unstable, so it's off by default —
+   * users opt in explicitly from Settings.
+   */
+  webBrowserEnabled: boolean;
+  /** Show a confirmation dialog before quitting the app. Users can opt out
+   * from the dialog itself ("don't ask again") or re-enable it in Settings. */
+  confirmBeforeQuit: boolean;
   consoleMode: ConsoleMode;
+  /**
+   * Value fed to maestro as `-e APP_ID=<appId>` on every run, so flow files
+   * can reference `${APP_ID}` (the same placeholder used in CI) and still run
+   * locally without editing each file. Empty string = pass nothing, behaving
+   * exactly as before.
+   */
+  appId: string;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
   setStreamEnabled: (v: boolean) => void;
-  setPerfMonitoringEnabled: (v: boolean) => void;
   setFastHierarchyEnabled: (v: boolean) => void;
   setAutoSaveEnabled: (v: boolean) => void;
   setAutoCheckUpdatesEnabled: (v: boolean) => void;
+  setWebBrowserEnabled: (v: boolean) => void;
+  setConfirmBeforeQuit: (v: boolean) => void;
   setConsoleMode: (m: ConsoleMode) => void;
+  setAppId: (id: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       inspectKey: "i",
-      showFps: import.meta.env.DEV,
+      showFps: false,
       theme: "system",
       streamEnabled: true,
-      perfMonitoringEnabled: false,
-      fastHierarchyEnabled: false,
+      fastHierarchyEnabled: true,
       autoSaveEnabled: true,
       autoCheckUpdatesEnabled: true,
+      webBrowserEnabled: true,
+      confirmBeforeQuit: true,
       consoleMode: "simple",
+      appId: "",
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
-      setPerfMonitoringEnabled: (perfMonitoringEnabled) => set({ perfMonitoringEnabled }),
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
       setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
       setAutoCheckUpdatesEnabled: (autoCheckUpdatesEnabled) => set({ autoCheckUpdatesEnabled }),
+      setWebBrowserEnabled: (webBrowserEnabled) => set({ webBrowserEnabled }),
+      setConfirmBeforeQuit: (confirmBeforeQuit) => set({ confirmBeforeQuit }),
       setConsoleMode: (consoleMode) => set({ consoleMode }),
+      setAppId: (appId) => set({ appId: appId.trim() }),
     }),
     {
       name: "maestro-deck.settings",
@@ -67,11 +88,13 @@ export const useSettingsStore = create<SettingsState>()(
         inspectKey: s.inspectKey,
         theme: s.theme,
         streamEnabled: s.streamEnabled,
-        perfMonitoringEnabled: s.perfMonitoringEnabled,
         fastHierarchyEnabled: s.fastHierarchyEnabled,
         autoSaveEnabled: s.autoSaveEnabled,
         autoCheckUpdatesEnabled: s.autoCheckUpdatesEnabled,
+        webBrowserEnabled: s.webBrowserEnabled,
+        confirmBeforeQuit: s.confirmBeforeQuit,
         consoleMode: s.consoleMode,
+        appId: s.appId,
       }),
     },
   ),

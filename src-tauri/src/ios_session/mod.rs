@@ -1,0 +1,849 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
+//! iOS Simulator driver session: boots a simulator and lets a `maestro mcp`
+//! keeper install/launch/hold the on-device XCTest HTTP server, which on a simulator
+//! is reachable directly on `127.0.0.1:22087` (the sim shares the host network —
+//! no forwarding/tunnel). Exposes a typed HTTP client for `/viewHierarchy`,
+//! `/touch`, `/inputText`, `/swipeV2`, `/screenshot`, `/deviceInfo`, `/status`.
+
+#[cfg(target_os = "macos")]
+mod preview;
+#[cfg(target_os = "macos")]
+pub use preview::{spawn_ios_preview, PreviewHandle};
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
+use tokio::process::{Child, Command};
+use tokio::sync::oneshot;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::time::sleep;
+use tracing::{info, warn};
+
+use crate::error::{AppError, AppResult};
+
+/// Screen geometry from `GET /deviceInfo`. iOS hierarchy/taps are in POINTS;
+/// the screenshot is in PIXELS (points * scale).
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct DeviceInfo {
+    #[serde(rename = "widthPoints")]
+    pub width_points: u32,
+    #[serde(rename = "heightPoints")]
+    pub height_points: u32,
+    #[serde(rename = "widthPixels")]
+    pub width_pixels: u32,
+    #[serde(rename = "heightPixels")]
+    pub height_pixels: u32,
+}
+
+impl DeviceInfo {
+    /// pixels-per-point along X (== UIScreen.scale, typically 2.0 or 3.0).
+    pub fn scale_x(&self) -> f32 {
+        if self.width_points == 0 {
+            1.0
+        } else {
+            self.width_pixels as f32 / self.width_points as f32
+        }
+    }
+    pub fn scale_y(&self) -> f32 {
+        if self.height_points == 0 {
+            1.0
+        } else {
+            self.height_pixels as f32 / self.height_points as f32
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct TouchBody {
+    pub x: f32,
+    pub y: f32,
+    pub duration: f32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SwipeBody {
+    #[serde(rename = "startX")]
+    pub start_x: f32,
+    #[serde(rename = "startY")]
+    pub start_y: f32,
+    #[serde(rename = "endX")]
+    pub end_x: f32,
+    #[serde(rename = "endY")]
+    pub end_y: f32,
+    pub duration: f32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PressButtonBody {
+    /// XCTest server `PressButtonRequest.Button` raw value: `"home"` or `"lock"`.
+    pub button: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InputTextBody {
+    pub text: String,
+    // Required by the v2.5.1 XCTest server (`InputTextRequest`). The server
+    // auto-detects the foreground app, so an empty list is accepted.
+    #[serde(rename = "appIds")]
+    pub app_ids: Vec<String>,
+}
+
+/// Typed HTTP client for the on-device XCTest server. On a simulator the server
+/// is reachable directly on `127.0.0.1:22087` (the sim shares the host network).
+pub struct IosHttpClient {
+    base: String,
+    client: reqwest::Client,
+}
+
+impl IosHttpClient {
+    pub fn new(host_port: u16) -> AppResult<Self> {
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(1))
+            .timeout(Duration::from_secs(10))
+            .build()
+            .map_err(|e| AppError::IosDriverUnreachable(e.to_string()))?;
+        Ok(Self {
+            base: format!("http://127.0.0.1:{host_port}"),
+            client,
+        })
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}/{}", self.base, path.trim_start_matches('/'))
+    }
+
+    pub async fn status(&self) -> bool {
+        self.client
+            .get(self.url("status"))
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+    }
+
+    pub async fn device_info(&self) -> AppResult<DeviceInfo> {
+        let resp = self
+            .client
+            .get(self.url("deviceInfo"))
+            .send()
+            .await
+            .map_err(|e| AppError::IosDriverUnreachable(format!("deviceInfo: {e}")))?;
+        let resp = resp
+            .error_for_status()
+            .map_err(|e| AppError::IosDriverUnreachable(format!("deviceInfo: {e}")))?;
+        let txt = resp
+            .text()
+            .await
+            .map_err(|e| AppError::IosDriverUnreachable(e.to_string()))?;
+        serde_json::from_str(&txt)
+            .map_err(|e| AppError::IosCommandFailed(format!("deviceInfo parse: {e}")))
+    }
+
+    pub async fn view_hierarchy(&self) -> AppResult<String> {
+        // v2.5.1's `ViewHierarchyRequest` requires `appIds` (server auto-detects
+        // the foreground app, so an empty list is accepted). Omitting it yields
+        // 400 "incorrect request body provided".
+        let body = serde_json::json!({ "appIds": [], "excludeKeyboardElements": false });
+        let resp = self
+            .client
+            .post(self.url("viewHierarchy"))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::IosDriverUnreachable(format!("viewHierarchy: {e}")))?;
+        let resp = resp
+            .error_for_status()
+            .map_err(|e| AppError::IosDriverUnreachable(format!("viewHierarchy: {e}")))?;
+        resp.text()
+            .await
+            .map_err(|e| AppError::IosDriverUnreachable(e.to_string()))
+    }
+
+    pub async fn screenshot(&self) -> AppResult<Vec<u8>> {
+        self.screenshot_inner(false).await
+    }
+
+    /// JPEG (quality 0.5) instead of PNG. The runner's `jpegData` encode is
+    /// ~5-10x faster than `pngRepresentation` on-device — the capture encode
+    /// is the physical preview's fps ceiling — and the transfer is ~10x
+    /// smaller. Use for the live preview; keep PNG for anything needing
+    /// lossless pixels.
+    pub async fn screenshot_compressed(&self) -> AppResult<Vec<u8>> {
+        self.screenshot_inner(true).await
+    }
+
+    async fn screenshot_inner(&self, compressed: bool) -> AppResult<Vec<u8>> {
+        let url = if compressed {
+            format!("{}?compressed=true", self.url("screenshot"))
+        } else {
+            self.url("screenshot")
+        };
+        let resp = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| AppError::IosDriverUnreachable(format!("screenshot: {e}")))?;
+        let resp = resp
+            .error_for_status()
+            .map_err(|e| AppError::IosDriverUnreachable(format!("screenshot: {e}")))?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| AppError::IosDriverUnreachable(e.to_string()))?;
+        Ok(bytes.to_vec())
+    }
+
+    pub async fn touch(&self, x: f32, y: f32, duration: f32) -> AppResult<()> {
+        self.post_ok("touch", &TouchBody { x, y, duration }).await
+    }
+    pub async fn input_text(&self, text: &str) -> AppResult<()> {
+        self.post_ok(
+            "inputText",
+            &InputTextBody {
+                text: text.to_string(),
+                app_ids: Vec::new(),
+            },
+        )
+        .await
+    }
+    pub async fn swipe(&self, b: &SwipeBody) -> AppResult<()> {
+        if self.post_ok("swipeV2", b).await.is_ok() {
+            return Ok(());
+        }
+        self.post_ok("swipe", b).await
+    }
+    /// Press a hardware button via the XCTest `/pressButton` route
+    /// (`XCUIDevice.shared.press(.home)`). `button` is the server's raw value
+    /// (`"home"` or `"lock"`).
+    pub async fn press_button(&self, button: &str) -> AppResult<()> {
+        self.post_ok(
+            "pressButton",
+            &PressButtonBody {
+                button: button.to_string(),
+            },
+        )
+        .await
+    }
+
+    async fn post_ok<B: Serialize>(&self, path: &str, body: &B) -> AppResult<()> {
+        // A transport failure means the driver isn't reachable (consistent with
+        // the GET helpers); a non-2xx status means it was reached but rejected
+        // the command.
+        let resp = self
+            .client
+            .post(self.url(path))
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| AppError::IosDriverUnreachable(format!("{path}: {e}")))?;
+        resp.error_for_status()
+            .map_err(|e| AppError::IosCommandFailed(format!("{path}: {e}")))?;
+        Ok(())
+    }
+}
+
+/// Port the Maestro XCTest runner serves on the device. On a SIMULATOR this is
+/// reachable directly on the host loopback (the sim shares the host network).
+/// On a PHYSICAL device, `maestro-ios-device` forwards a local port to it.
+pub const DRIVER_PORT: u16 = 22087;
+/// Local port `maestro-ios-device` forwards to the physical device's :22087
+/// (the bridge's default forward port).
+pub const PHYSICAL_BRIDGE_PORT: u16 = 6001;
+/// Generous readiness budget: a cold simulator + first runner install can take
+/// well over a minute. ~180 s total.
+const READY_ATTEMPTS: u32 = 360;
+const READY_BACKOFF_MS: u64 = 500;
+/// Passed to maestro as MAESTRO_DRIVER_STARTUP_TIMEOUT so it doesn't give up on
+/// a cold simulator before the driver is ready (ms). Matched to our own ~180 s
+/// readiness budget above — at the old 120 s, maestro threw
+/// IOSDriverTimeoutException while we were still happily waiting.
+const DRIVER_STARTUP_TIMEOUT_MS: &str = "180000";
+/// Budget for the keeper's warm-up tool call (runner install + first hierarchy).
+const WARMUP_TIMEOUT: Duration = Duration::from_secs(200);
+
+/// Global flags that put the UDID in the keeper's command line
+/// (`maestro --device <udid> mcp --no-viewer`) — the MCP server ignores
+/// them, but they scope the orphan sweep to this simulator.
+fn keeper_global_args(udid: &str) -> [&str; 2] {
+    ["--device", udid]
+}
+
+/// Command-line needles of the simulator keeper for `udid`.
+fn keeper_needles(udid: &str) -> [String; 4] {
+    [
+        "maestro".to_string(),
+        format!("--device {udid}"),
+        "mcp".to_string(),
+        "--no-viewer".to_string(),
+    ]
+}
+
+/// SIGKILL orphan simulator keepers (`maestro --device <udid> mcp`) left
+/// behind by a crashed/SIGKILLed session (their `kill_on_drop` never ran).
+/// Scoped to this UDID so a legitimate Android keeper — or a user's own
+/// `maestro mcp` — is never touched.
+async fn kill_orphan_keepers_for(udid: &str) {
+    let needles = keeper_needles(udid);
+    let needles: Vec<&str> = needles.iter().map(String::as_str).collect();
+    crate::prockill::kill_matching(&needles, "orphan iOS simulator keeper").await;
+}
+
+/// SIGKILL orphan `maestro-ios-device … --device <udid>` bridges left behind by
+/// a crashed/SIGKILLed session. Leftover bridges keep their 600x ports bound,
+/// pushing every fresh bridge onto a different port than the one our HTTP
+/// client polls (`PHYSICAL_BRIDGE_PORT`). Scoped to this UDID.
+async fn kill_orphan_bridges_for(udid: &str) {
+    #[cfg(unix)]
+    {
+        let pattern = format!("maestro-ios-device.*--device {udid}");
+        let Ok(output) = Command::new("pgrep").args(["-f", &pattern]).output().await else {
+            return;
+        };
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let Ok(pid) = line.trim().parse::<u32>() else {
+                continue;
+            };
+            warn!(
+                pid,
+                udid, "SIGKILL orphan maestro-ios-device bridge (stale port holder)"
+            );
+            let _ = Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output()
+                .await;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = udid;
+    }
+}
+
+/// Which kind of iOS target a keeper drives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IosTarget {
+    /// Booted simulator: `simctl boot` + `maestro mcp`, driver on :22087,
+    /// screenshots via `simctl`.
+    Simulator,
+    /// Physical iPhone: the `maestro-ios-device` bridge builds/runs the runner
+    /// and forwards `PHYSICAL_BRIDGE_PORT` → device :22087; screenshots come
+    /// from the driver's HTTP `/screenshot`.
+    Physical,
+}
+
+/// Holds the on-device XCTest runner alive (`maestro mcp` for simulators,
+/// `maestro-ios-device` for physical devices) and owns the HTTP client + cached
+/// DeviceInfo for the session.
+pub struct IosDriverKeeper {
+    udid: String,
+    http: IosHttpClient,
+    device_info: parking_lot::RwLock<Option<DeviceInfo>>,
+    /// Simulators: the `maestro mcp` keeper holding the runner session.
+    mcp: Option<Arc<crate::maestro_mcp::McpClient>>,
+    /// Physical devices: the supervised `maestro-ios-device` bridge child.
+    driver_child: AsyncMutex<Option<Child>>,
+    /// Error from the simulator keeper's warm-up call (e.g. device not
+    /// found) — lets `wait_until_ready` fail fast.
+    warmup_error: Arc<parking_lot::Mutex<Option<String>>>,
+    target: IosTarget,
+    /// Last time a `/status` probe succeeded (see [`Self::is_healthy`]).
+    health_checked: parking_lot::Mutex<Option<std::time::Instant>>,
+}
+
+/// How long a successful `/status` probe vouches for the on-device runner
+/// before `is_healthy` re-verifies. Keeps the per-command overhead at one
+/// cheap local HTTP GET every few seconds instead of one per tap.
+const HEALTH_TTL: Duration = Duration::from_secs(5);
+
+impl IosDriverKeeper {
+    pub fn udid(&self) -> &str {
+        &self.udid
+    }
+    pub fn http(&self) -> &IosHttpClient {
+        &self.http
+    }
+    pub fn device_info(&self) -> Option<DeviceInfo> {
+        *self.device_info.read()
+    }
+    /// True for physical devices (drives screenshot source + reuse checks).
+    pub fn is_physical(&self) -> bool {
+        self.target == IosTarget::Physical
+    }
+
+    /// True once the driver has served real data at least once (cached). Cheap, no I/O.
+    pub fn is_ready(&self) -> bool {
+        self.device_info.read().is_some()
+    }
+
+    /// True while the ON-DEVICE runner still answers `/status`. The keeper
+    /// process (`maestro mcp`) can outlive the XCTest runner it launched —
+    /// the JVM stays up while nothing listens on :22087 anymore, so a keeper
+    /// that only checks `is_process_alive` becomes a permanent zombie (every
+    /// tap / Home press fails with "driver unreachable" forever). A warming
+    /// keeper (not ready yet) is considered healthy — `wait_until_ready`
+    /// owns that phase. Successful probes are cached for [`HEALTH_TTL`].
+    pub async fn is_healthy(&self) -> bool {
+        if !self.is_ready() {
+            return true;
+        }
+        if let Some(t) = *self.health_checked.lock() {
+            if t.elapsed() < HEALTH_TTL {
+                return true;
+            }
+        }
+        if self.http.status().await {
+            *self.health_checked.lock() = Some(std::time::Instant::now());
+            true
+        } else {
+            warn!(
+                udid = %self.udid,
+                "iOS driver stopped answering /status (runner died?) — recycling keeper"
+            );
+            false
+        }
+    }
+
+    /// Start the right keeper for the target. Returns IMMEDIATELY — does NOT
+    /// wait for readiness (cold start can take minutes). Call `wait_until_ready`
+    /// before issuing driver requests (hierarchy/input).
+    pub async fn spawn(udid: &str, physical: bool) -> AppResult<Arc<Self>> {
+        if physical {
+            Self::spawn_physical(udid).await
+        } else {
+            Self::spawn_simulator(udid).await
+        }
+    }
+
+    /// Boot the simulator and spawn a `maestro mcp` keeper, then open its
+    /// device session in the background (installs/launches the XCTest runner
+    /// on :22087).
+    async fn spawn_simulator(udid: &str) -> AppResult<Arc<Self>> {
+        // After a crash / SIGKILL, `kill_on_drop` never fires and the keeper
+        // JVM (which holds the XCTest driver on :22087) outlives the app.
+        // Stale instances then fight the fresh one for the driver, and the
+        // inspector hangs on a zombie runner for the whole readiness budget.
+        // Any keeper targeting this UDID at spawn time is an orphan (the
+        // keeper for the current session is stopped before respawning), so
+        // cull them first — mirrors `hierarchy::driver_keeper` on the
+        // Android path.
+        kill_orphan_keepers_for(udid).await;
+
+        // Boot the sim (idempotent — `simctl boot` errors if already booted, ignored).
+        let _ = Command::new("xcrun")
+            .args(["simctl", "boot", udid])
+            .output()
+            .await;
+
+        let mcp = Arc::new(
+            crate::maestro_mcp::McpClient::spawn(
+                &keeper_global_args(udid),
+                &[("MAESTRO_DRIVER_STARTUP_TIMEOUT", DRIVER_STARTUP_TIMEOUT_MS)],
+            )
+            .await
+            .map_err(|e| match e {
+                AppError::RunnerNotFound => e,
+                other => AppError::IosCommandFailed(format!("maestro mcp: {other}")),
+            })?,
+        );
+
+        // Opening the session is what installs + launches the runner. It can
+        // take minutes on a cold simulator, so it runs in the background —
+        // `wait_until_ready` observes the runner itself on :22087.
+        let warmup_error: Arc<parking_lot::Mutex<Option<String>>> = Arc::default();
+        {
+            let mcp = mcp.clone();
+            let slot = warmup_error.clone();
+            let args = serde_json::json!({ "device_id": udid });
+            tokio::spawn(async move {
+                if let Err(e) = mcp.call_tool("inspect_screen", args, WARMUP_TIMEOUT).await {
+                    warn!(error = %e, "iOS simulator keeper warm-up failed");
+                    *slot.lock() = Some(e.to_string());
+                }
+            });
+        }
+
+        Ok(Arc::new(Self {
+            udid: udid.to_string(),
+            http: IosHttpClient::new(DRIVER_PORT)?,
+            device_info: parking_lot::RwLock::new(None),
+            mcp: Some(mcp),
+            driver_child: AsyncMutex::new(None),
+            warmup_error,
+            target: IosTarget::Simulator,
+            health_checked: parking_lot::Mutex::new(None),
+        }))
+    }
+
+    /// Spawn the `maestro-ios-device` bridge (devicelab): it builds/installs/runs
+    /// the XCTest runner on the physical device and forwards
+    /// `PHYSICAL_BRIDGE_PORT` → device :22087. Requires an Apple Team ID to sign
+    /// the runner.
+    async fn spawn_physical(udid: &str) -> AppResult<Arc<Self>> {
+        let team = crate::tool_paths::apple_team_id().ok_or_else(|| {
+            AppError::IosCommandFailed(
+                "Set your Apple Team ID in Settings to drive a physical iOS device".into(),
+            )
+        })?;
+        // Same zombie problem as simulator keepers: after a crash/SIGKILL the
+        // bridge outlives the app AND keeps its port. Each leftover instance
+        // holds 600x, so a fresh bridge binds the NEXT free port (observed: 9
+        // orphans on 6001-6009) while our HTTP client polls PHYSICAL_BRIDGE_PORT
+        // forever — taps/inspect dead even though a bridge says "Ready". Any
+        // bridge for this UDID at spawn time is an orphan (the keeper is
+        // stopped before respawning) — cull them so we always get 6001.
+        kill_orphan_bridges_for(udid).await;
+        let bin = crate::tool_paths::maestro_ios_device_bin();
+        let bridge = Command::new(&bin)
+            .args(["--team-id", &team, "--device", udid])
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    AppError::IosToolMissing(
+                        "maestro-ios-device not found — install it from Settings → Tool paths \
+                         (\"Install automatically\") to enable physical iOS devices"
+                            .into(),
+                    )
+                } else {
+                    AppError::IosCommandFailed(format!("maestro-ios-device: {e}"))
+                }
+            })?;
+
+        Ok(Arc::new(Self {
+            udid: udid.to_string(),
+            http: IosHttpClient::new(PHYSICAL_BRIDGE_PORT)?,
+            device_info: parking_lot::RwLock::new(None),
+            mcp: None,
+            driver_child: AsyncMutex::new(Some(bridge)),
+            warmup_error: Arc::default(),
+            target: IosTarget::Physical,
+            health_checked: parking_lot::Mutex::new(None),
+        }))
+    }
+
+    /// Probe `/status` + `/deviceInfo` until the runner serves real data, caching
+    /// the geometry. Returns `true` once ready (instantly if already ready),
+    /// `false` after the ~180 s budget. Safe to call concurrently.
+    pub async fn wait_until_ready(&self) -> bool {
+        if self.is_ready() {
+            return true;
+        }
+        for attempt in 0..READY_ATTEMPTS {
+            // Bail out promptly if the keeper exited (e.g. the session was torn
+            // down on disconnect/run) or failed to open the device, instead of
+            // probing a dead socket for the full budget.
+            if !self.is_process_alive().await {
+                return false;
+            }
+            if let Some(e) = self.warmup_error.lock().clone() {
+                warn!(udid = %self.udid, error = %e, "iOS driver keeper failed to start");
+                return false;
+            }
+            if self.http.status().await {
+                if let Ok(di) = self.http.device_info().await {
+                    *self.device_info.write() = Some(di);
+                    info!(udid = %self.udid, physical = self.is_physical(), "iOS driver ready");
+                    return true;
+                }
+            }
+            if attempt % 10 == 0 {
+                info!(udid = %self.udid, attempt, physical = self.is_physical(), "waiting for iOS driver...");
+            }
+            if attempt + 1 < READY_ATTEMPTS {
+                sleep(std::time::Duration::from_millis(READY_BACKOFF_MS)).await;
+            }
+        }
+        false
+    }
+
+    pub async fn stop(&self) {
+        if let Some(mcp) = &self.mcp {
+            mcp.stop().await;
+        }
+        if let Some(mut c) = self.driver_child.lock().await.take() {
+            let _ = c.kill().await;
+        }
+        // Leave the simulator booted for reuse (no-op for physical devices).
+    }
+
+    /// True while the keeper (`maestro mcp` / `maestro-ios-device`) is still
+    /// running (regardless of driver readiness). Used to decide whether a
+    /// cached keeper is reusable.
+    pub async fn is_process_alive(&self) -> bool {
+        if let Some(mcp) = &self.mcp {
+            return mcp.is_alive().await;
+        }
+        match self.driver_child.lock().await.as_mut() {
+            Some(child) => matches!(child.try_wait(), Ok(None)),
+            None => false,
+        }
+    }
+
+    /// Cheap HTTP liveness check.
+    pub async fn is_alive(&self) -> bool {
+        self.http.status().await
+    }
+}
+
+/// Inter-frame delay for the simulator screenshot fallback (this poller is only
+/// the pre-framebuffer fallback on sims, so a gentle cadence is fine).
+const SCREENSHOT_INTERVAL_MS: u64 = 350;
+/// Physical devices have no framebuffer/SCK path — this poller IS their preview.
+/// Per-lane pause between completed frames. Don't set to 0: polling back-to-back
+/// once saturated the webview main thread and froze the whole UI the moment a
+/// physical device connected. Frames are now JPEG (~10x smaller than PNG) and
+/// pipelined across [`PHYSICAL_PIPELINE_DEPTH`] lanes, so 50 ms per lane yields
+/// roughly 8-12 fps while keeping the main thread responsive.
+const PHYSICAL_SCREENSHOT_INTERVAL_MS: u64 = 50;
+/// Concurrent `/screenshot` lanes for physical devices. The on-device capture +
+/// JPEG encode dominates the round-trip, so two lanes overlap capture with
+/// transfer (~2x fps). More lanes mostly just queue on the device.
+const PHYSICAL_PIPELINE_DEPTH: u32 = 2;
+/// Back-off after a failed poll (e.g. device unplugged) so we don't spin and flood
+/// logs when there's nothing to capture.
+const SCREENSHOT_ERROR_BACKOFF_MS: u64 = 500;
+const IOS_FRAME_EVENT: &str = "ios_frame";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IosFramePayload {
+    /// PNG bytes from `GET /screenshot` (native pixels), **base64-encoded**.
+    /// Tauri events serialize payloads as JSON, where a `Vec<u8>` becomes an
+    /// array of numbers — a multi-MB PNG turns into 4-15 MB of JSON parsed
+    /// token-by-token on the webview main thread, freezing the whole UI
+    /// (observed with physical devices). Base64 is one string token, ~4x
+    /// smaller and parsed orders of magnitude faster.
+    pub data: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Capture a PNG screenshot of the booted simulator via `simctl`. The XCTest
+/// `/screenshot` HTTP route is unreliable on simulators (the connection is
+/// reset). `simctl io … screenshot -` (stdout) is also unsupported on this
+/// macOS (it tries to create a file literally named `-`), so we write to a
+/// per-UDID temp file, read it back, and overwrite it each poll. Output is a
+/// native-resolution (pixel) PNG.
+async fn capture_simulator_screenshot(udid: &str) -> AppResult<Vec<u8>> {
+    let path = std::env::temp_dir().join(format!("maestro-deck-ios-{udid}.png"));
+    let path_str = path.to_string_lossy().to_string();
+    let out = Command::new("xcrun")
+        .args(["simctl", "io", udid, "screenshot", "--type=png", &path_str])
+        .output()
+        .await
+        .map_err(|e| AppError::IosCommandFailed(format!("simctl screenshot: {e}")))?;
+    if !out.status.success() {
+        return Err(AppError::IosDriverUnreachable(format!(
+            "simctl screenshot failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    tokio::fs::read(&path)
+        .await
+        .map_err(|e| AppError::IosCommandFailed(format!("read screenshot file: {e}")))
+}
+
+/// Spawn a task that captures the simulator screen and emits `ios_frame` until
+/// aborted. Returns the abort sender to store in `AppState.ios_screenshot_abort`.
+pub fn spawn_screenshot_poller(
+    app: AppHandle,
+    keeper: Arc<IosDriverKeeper>,
+) -> oneshot::Sender<()> {
+    let (abort_tx, mut abort_rx) = oneshot::channel::<()>();
+    tokio::spawn(async move {
+        let (w, h) = keeper
+            .device_info()
+            .map(|d| (d.width_pixels, d.height_pixels))
+            .unwrap_or((0, 0));
+        // Physical devices: the simulator `simctl` path doesn't apply — pull
+        // frames from the driver's HTTP `/screenshot` (pipelined, JPEG).
+        if keeper.is_physical() {
+            let workers: Vec<_> = (0..PHYSICAL_PIPELINE_DEPTH)
+                .map(|_| {
+                    tokio::spawn(physical_screenshot_worker(
+                        app.clone(),
+                        keeper.clone(),
+                        w,
+                        h,
+                    ))
+                })
+                .collect();
+            let _ = (&mut abort_rx).await;
+            info!("iOS screenshot poller aborted");
+            for wk in workers {
+                wk.abort();
+            }
+            return;
+        }
+        loop {
+            tokio::select! {
+                biased;
+                _ = &mut abort_rx => {
+                    info!("iOS screenshot poller aborted");
+                    return;
+                }
+                shot = capture_simulator_screenshot(keeper.udid()) => {
+                    let delay_ms = match shot {
+                        Ok(data) => {
+                            emit_ios_frame(&app, data, w, h);
+                            SCREENSHOT_INTERVAL_MS
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "screenshot poll failed");
+                            SCREENSHOT_ERROR_BACKOFF_MS
+                        }
+                    };
+                    sleep(std::time::Duration::from_millis(delay_ms)).await;
+                }
+            }
+        }
+    });
+    abort_tx
+}
+
+fn emit_ios_frame(app: &AppHandle, data: Vec<u8>, w: u32, h: u32) {
+    use base64::Engine as _;
+    let payload = IosFramePayload {
+        data: base64::engine::general_purpose::STANDARD.encode(&data),
+        width: w,
+        height: h,
+    };
+    if let Err(e) = app.emit(IOS_FRAME_EVENT, &payload) {
+        warn!(error = %e, "failed to emit ios_frame");
+    }
+}
+
+/// One lane of the physical-device screenshot pipeline. The on-device capture
+/// (`XCUIScreen.screenshot` + JPEG encode) dominates the period, so running
+/// [`PHYSICAL_PIPELINE_DEPTH`] of these concurrently overlaps capture with
+/// transfer and roughly multiplies the frame rate. A shared monotonically
+/// increasing ticket + a "newest emitted" watermark drop frames that finish
+/// out of order so the preview never steps backwards.
+async fn physical_screenshot_worker(app: AppHandle, keeper: Arc<IosDriverKeeper>, w: u32, h: u32) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use tauri::Manager;
+    static TICKET: AtomicU64 = AtomicU64::new(0);
+    static NEWEST: AtomicU64 = AtomicU64::new(0);
+
+    loop {
+        // Yield the single :22087 forward to an in-progress hierarchy dump —
+        // otherwise the /screenshot flood starves /status + /hierarchy and
+        // inspect hangs. Don't poll while inspect holds the bridge.
+        if app
+            .state::<crate::state::AppState>()
+            .ios_inspect_active
+            .load(Ordering::Relaxed)
+        {
+            sleep(std::time::Duration::from_millis(
+                PHYSICAL_SCREENSHOT_INTERVAL_MS,
+            ))
+            .await;
+            continue;
+        }
+        let seq = TICKET.fetch_add(1, Ordering::Relaxed) + 1;
+        match keeper.http().screenshot_compressed().await {
+            Ok(data) => {
+                // Emit only if no newer frame has already been emitted.
+                if NEWEST.fetch_max(seq, Ordering::Relaxed) <= seq {
+                    emit_ios_frame(&app, data, w, h);
+                }
+                sleep(std::time::Duration::from_millis(
+                    PHYSICAL_SCREENSHOT_INTERVAL_MS,
+                ))
+                .await;
+            }
+            Err(e) => {
+                warn!(error = %e, "physical screenshot poll failed");
+                sleep(std::time::Duration::from_millis(
+                    SCREENSHOT_ERROR_BACKOFF_MS,
+                ))
+                .await;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_device_info_points_and_pixels() {
+        let json =
+            r#"{"widthPoints":393,"heightPoints":852,"widthPixels":1179,"heightPixels":2556}"#;
+        let di: DeviceInfo = serde_json::from_str(json).expect("parse");
+        assert_eq!(di.width_points, 393);
+        assert_eq!(di.width_pixels, 1179);
+        assert_eq!(di.scale_x(), 1179.0 / 393.0);
+        assert_eq!(di.scale_y(), 2556.0 / 852.0);
+    }
+
+    #[test]
+    fn touch_body_serializes_expected_keys() {
+        let body = TouchBody {
+            x: 100.0,
+            y: 200.0,
+            duration: 0.0,
+        };
+        let s = serde_json::to_string(&body).unwrap();
+        assert!(s.contains("\"x\":100"), "got {s}");
+        assert!(s.contains("\"y\":200"), "got {s}");
+        assert!(s.contains("\"duration\":0"), "got {s}");
+    }
+
+    #[test]
+    fn press_button_body_serializes_home() {
+        // Must match the XCTest server's `PressButtonRequest{button:"home"}`.
+        let s = serde_json::to_string(&PressButtonBody {
+            button: "home".into(),
+        })
+        .unwrap();
+        assert_eq!(s, r#"{"button":"home"}"#);
+    }
+
+    /// Live end-to-end check on a booted simulator: the `maestro mcp` keeper
+    /// brings the XCTest runner up and its hierarchy parses.
+    ///   MAESTRO_BIN=/path/to/maestro-2.10.0 IOS_UDID=<udid> cargo test \
+    ///     --manifest-path src-tauri/Cargo.toml ios_sim_keeper_end_to_end -- --ignored --nocapture
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn ios_sim_keeper_end_to_end() {
+        let udid = std::env::var("IOS_UDID").expect("set IOS_UDID");
+        let t = std::time::Instant::now();
+        let keeper = IosDriverKeeper::spawn(&udid, false).await.expect("spawn");
+        assert!(keeper.wait_until_ready().await, "driver never became ready");
+        let di = keeper.device_info().expect("device info");
+        eprintln!("ready in {:?}: {di:?}", t.elapsed());
+        let t = std::time::Instant::now();
+        let json = keeper.http().view_hierarchy().await.expect("hierarchy");
+        let screen = (di.width_points as i32, di.height_points as i32);
+        let tree = crate::hierarchy::ios::parse_ios_axelement(&json, Some(screen)).expect("parse");
+        eprintln!("hierarchy {} bytes in {:?}", json.len(), t.elapsed());
+        assert!(tree.root.is_some_and(|r| !r.children.is_empty()));
+        assert!(keeper.is_healthy().await);
+        keeper.stop().await;
+        assert!(!keeper.is_process_alive().await);
+    }
+
+    #[test]
+    fn keeper_command_line_is_scoped_to_its_udid() {
+        let args = crate::maestro_mcp::mcp_args(&keeper_global_args("UDID-1"));
+        assert_eq!(args, vec!["--device", "UDID-1", "mcp", "--no-viewer"]);
+        let jvm = format!(
+            "java -classpath /opt/maestro/lib/* maestro.cli.AppKt {}",
+            args.join(" ")
+        );
+        let needles = keeper_needles("UDID-1");
+        let needles: Vec<&str> = needles.iter().map(String::as_str).collect();
+        assert!(crate::prockill::cmdline_matches(&jvm, &needles));
+        let other = jvm.replace("UDID-1", "UDID-2");
+        assert!(!crate::prockill::cmdline_matches(&other, &needles));
+        let user_mcp = "java -classpath /opt/maestro/lib/* maestro.cli.AppKt mcp";
+        assert!(!crate::prockill::cmdline_matches(user_mcp, &needles));
+    }
+}

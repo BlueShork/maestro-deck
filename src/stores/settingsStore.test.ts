@@ -29,10 +29,10 @@ beforeEach(() => {
     showFps: INITIAL.showFps,
     theme: "system",
     streamEnabled: true,
-    perfMonitoringEnabled: false,
-    fastHierarchyEnabled: false,
+    fastHierarchyEnabled: true,
     autoSaveEnabled: true,
     consoleMode: "simple",
+    appId: "",
   });
 });
 
@@ -42,10 +42,15 @@ describe("settingsStore defaults", () => {
     expect(s.inspectKey).toBe("i");
     expect(s.theme).toBe("system");
     expect(s.streamEnabled).toBe(true);
-    expect(s.perfMonitoringEnabled).toBe(false);
-    expect(s.fastHierarchyEnabled).toBe(false);
+    // Fast hierarchy is on by default — it falls back to the CLI path if
+    // the driver keeper fails, so there's no downside to opting everyone in.
+    expect(s.fastHierarchyEnabled).toBe(true);
     expect(s.autoSaveEnabled).toBe(true);
     expect(s.consoleMode).toBe("simple");
+    // Web target ships enabled since the 2026-07 hardening (hidden Chrome,
+    // live run mirror, viewport-pinned headless runs).
+    expect(s.webBrowserEnabled).toBe(true);
+    expect(s.appId).toBe("");
   });
 });
 
@@ -70,17 +75,22 @@ describe("settingsStore setters", () => {
     }
   });
 
-  it("setStreamEnabled / setPerfMonitoringEnabled / setFastHierarchyEnabled / setAutoSaveEnabled toggle their flags", () => {
+  it("setStreamEnabled / setFastHierarchyEnabled / setAutoSaveEnabled toggle their flags", () => {
     const s = useSettingsStore.getState();
     s.setStreamEnabled(false);
-    s.setPerfMonitoringEnabled(true);
     s.setFastHierarchyEnabled(true);
     s.setAutoSaveEnabled(false);
     const after = useSettingsStore.getState();
     expect(after.streamEnabled).toBe(false);
-    expect(after.perfMonitoringEnabled).toBe(true);
     expect(after.fastHierarchyEnabled).toBe(true);
     expect(after.autoSaveEnabled).toBe(false);
+  });
+
+  it("setWebBrowserEnabled toggles the flag", () => {
+    useSettingsStore.getState().setWebBrowserEnabled(true);
+    expect(useSettingsStore.getState().webBrowserEnabled).toBe(true);
+    useSettingsStore.getState().setWebBrowserEnabled(false);
+    expect(useSettingsStore.getState().webBrowserEnabled).toBe(false);
   });
 
   it("setConsoleMode accepts simple and technical", () => {
@@ -88,5 +98,12 @@ describe("settingsStore setters", () => {
     expect(useSettingsStore.getState().consoleMode).toBe("technical");
     useSettingsStore.getState().setConsoleMode("simple");
     expect(useSettingsStore.getState().consoleMode).toBe("simple");
+  });
+
+  it("setAppId stores a trimmed value", () => {
+    useSettingsStore.getState().setAppId("  com.example.app  ");
+    expect(useSettingsStore.getState().appId).toBe("com.example.app");
+    useSettingsStore.getState().setAppId("");
+    expect(useSettingsStore.getState().appId).toBe("");
   });
 });

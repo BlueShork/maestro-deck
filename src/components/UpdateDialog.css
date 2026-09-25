@@ -1,0 +1,67 @@
+.update-ticket-overlay[data-state="open"] {
+  animation: update-ticket-fade 240ms ease-out;
+}
+
+.update-ticket-dialog[data-state="open"] .update-ticket {
+  animation: update-ticket-rise 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.update-ticket .tear-ticket__art {
+  height: 150px;
+  background: #000;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+.update-ticket .tear-ticket__image {
+  object-fit: contain;
+  padding: 44px 48px;
+}
+
+.update-ticket[data-used] .tear-ticket__content {
+  opacity: 1;
+}
+
+.update-ticket__body {
+  position: absolute;
+  inset: 166px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.update-ticket__rule {
+  border-top: 1px dashed rgb(255 255 255 / 0.15);
+}
+
+.update-ticket__stub {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@keyframes update-ticket-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes update-ticket-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-ticket-overlay[data-state="open"],
+  .update-ticket-dialog[data-state="open"] .update-ticket {
+    animation: none;
+  }
+}
+
+.update-ticket__notes {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}

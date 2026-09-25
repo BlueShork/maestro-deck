@@ -19,14 +19,14 @@ vi.hoisted(() => {
   } as Storage;
 });
 
-import { usePanelsStore } from "./panelsStore";
+import { usePanelsStore, migratePanelsStore } from "./panelsStore";
 
 beforeEach(() => {
   usePanelsStore.getState().showAll();
 });
 
 describe("panelsStore", () => {
-  it("defaults all panels to visible", () => {
+  it("defaults every panel to visible", () => {
     const { visible } = usePanelsStore.getState();
     expect(visible).toEqual({
       workspace: true,
@@ -34,7 +34,6 @@ describe("panelsStore", () => {
       device: true,
       editor: true,
       console: true,
-      metrics: true,
     });
   });
 
@@ -52,8 +51,8 @@ describe("panelsStore", () => {
   });
 
   it("hide forces a panel hidden", () => {
-    usePanelsStore.getState().hide("metrics");
-    expect(usePanelsStore.getState().visible.metrics).toBe(false);
+    usePanelsStore.getState().hide("console");
+    expect(usePanelsStore.getState().visible.console).toBe(false);
   });
 
   it("does not affect other panels when toggling one", () => {
@@ -64,13 +63,47 @@ describe("panelsStore", () => {
     expect(v.console).toBe(true);
   });
 
+  it.each([0, 1])("migratePanelsStore from v%i drops the old metrics flag", (from) => {
+    const persisted = {
+      visible: {
+        workspace: false,
+        inspector: true,
+        device: true,
+        editor: true,
+        console: true,
+        metrics: true,
+      },
+    };
+    const result = migratePanelsStore(persisted, from) as {
+      visible: Record<string, boolean>;
+    };
+    expect(result.visible).toEqual({
+      workspace: false,
+      inspector: true,
+      device: true,
+      editor: true,
+      console: true,
+    });
+  });
+
+  it("migratePanelsStore tolerates a missing visible object", () => {
+    const result = migratePanelsStore(null, 0) as {
+      visible: Record<string, boolean>;
+    };
+    expect(result.visible).toEqual({});
+  });
+
+  it("migratePanelsStore is a no-op for the current version", () => {
+    const persisted = { visible: { workspace: false } };
+    expect(migratePanelsStore(persisted, 2)).toBe(persisted);
+  });
+
   it("showAll restores every panel", () => {
     const s = usePanelsStore.getState();
     s.hide("workspace");
     s.hide("inspector");
     s.hide("device");
     s.showAll();
-    const v = usePanelsStore.getState().visible;
-    expect(Object.values(v).every(Boolean)).toBe(true);
+    expect(Object.values(usePanelsStore.getState().visible).every(Boolean)).toBe(true);
   });
 });

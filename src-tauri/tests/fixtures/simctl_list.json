@@ -1,0 +1,15 @@
+{
+  "devices": {
+    "com.apple.CoreSimulator.SimRuntime.iOS-17-2": [
+      { "udid": "AAAA-17-2-BOOTED", "isAvailable": true, "state": "Booted", "name": "iPhone 15 Pro", "deviceTypeIdentifier": "x" },
+      { "udid": "BBBB-17-2-SHUT", "isAvailable": true, "state": "Shutdown", "name": "iPhone 15", "deviceTypeIdentifier": "x" }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.iOS-18-6": [
+      { "udid": "CCCC-18-6-SHUT", "isAvailable": true, "state": "Shutdown", "name": "iPhone 16 Pro", "deviceTypeIdentifier": "x" },
+      { "udid": "DDDD-18-6-UNAVAIL", "isAvailable": false, "state": "Shutdown", "name": "iPhone 16 (unavailable)", "deviceTypeIdentifier": "x" }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.tvOS-18-2": [
+      { "udid": "EEEE-TV", "isAvailable": true, "state": "Booted", "name": "Apple TV", "deviceTypeIdentifier": "x" }
+    ]
+  }
+}

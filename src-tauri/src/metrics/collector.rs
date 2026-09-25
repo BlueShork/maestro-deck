@@ -9,8 +9,8 @@ use std::time::Instant;
 use crate::device::adb;
 use crate::error::{AppError, AppResult};
 use crate::metrics::parsers::{
-    cpu_percent, parse_gfxinfo, parse_netstats_detail_for_uid, parse_proc_stat, parse_vm_rss_mb,
-    parse_xt_qtaguid_for_uid, NetBytes, ProcStat,
+    cpu_percent, parse_gfxinfo, parse_netstats_detail_for_uid, parse_proc_stat,
+    parse_thermal_status, parse_vm_rss_mb, parse_xt_qtaguid_for_uid, NetBytes, ProcStat,
 };
 
 const ANDROID_USER_HZ: u32 = 100;
@@ -33,6 +33,10 @@ pub struct NetSample {
 pub struct GfxSample {
     pub fps: f32,
     pub jank_pct: f32,
+    pub p50_ms: Option<f32>,
+    pub p90_ms: Option<f32>,
+    pub p95_ms: Option<f32>,
+    pub p99_ms: Option<f32>,
 }
 
 pub fn fetch_cpu_mem(
@@ -158,7 +162,19 @@ pub fn fetch_gfx(serial: &str, package: &str) -> AppResult<Option<GfxSample>> {
     // Window is 5s — FPS is total/5.
     let fps = stats.total_frames as f32 / 5.0;
     let jank_pct = stats.janky_frames as f32 * 100.0 / stats.total_frames as f32;
-    Ok(Some(GfxSample { fps, jank_pct }))
+    Ok(Some(GfxSample {
+        fps,
+        jank_pct,
+        p50_ms: stats.p50_ms,
+        p90_ms: stats.p90_ms,
+        p95_ms: stats.p95_ms,
+        p99_ms: stats.p99_ms,
+    }))
+}
+
+pub fn fetch_thermal(serial: &str) -> AppResult<Option<u8>> {
+    let out = adb::exec_shell(serial, "dumpsys thermalservice")?;
+    Ok(parse_thermal_status(&out))
 }
 
 #[cfg(test)]

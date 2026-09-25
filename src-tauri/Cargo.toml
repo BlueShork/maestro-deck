@@ -1,8 +1,8 @@
 [package]
 name = "maestro-deck"
-version = "0.3.4"
+version = "0.9.6"
 description = "Source-available visual IDE for Maestro mobile tests"
-authors = ["Ethan Morisset <blueshork.dev@gmail.com>"]
+authors = ["Ethan Morisset <contact@maestrodeck.cloud>"]
 license = "BUSL-1.1"
 repository = "https://github.com/BlueShork/maestro-deck"
 edition = "2021"
@@ -30,22 +30,33 @@ tauri-plugin-process = "2.0"
 # Secret Service). Used to store BYOK API credentials.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
-# JWT signing for Vertex Oauth2
-jsonwebtoken = "9"
+# JWT signing for Vertex Oauth2.
+# `rust_crypto` is REQUIRED: since v10 the default features ship NO crypto
+# backend — RS256 signing then compiles fine but panic!s at runtime (and with
+# `panic = "abort"` that aborts the whole app when Billy requests a token).
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 
-# HTTP for token exchange
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# HTTP for token exchange.
+# `rustls-tls-native-roots` (NOT plain `rustls-tls`): plain rustls-tls trusts
+# only the bundled Mozilla roots, so corporate TLS-inspection proxies (whose
+# MITM CA lives in the OS trust store) break every request — downloads and
+# Vertex token exchange fail on work machines while the browser works fine.
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
 base64 = "0.22"
+# Wraps a tokio file as a byte stream so an APK is streamed to GCS instead of
+# being read into memory first.
+tokio-util = { version = "0.7", features = ["codec"] }
 
 # Async runtime
 tokio = { version = "1.41", features = ["full"] }
 async-trait = "0.1"
 futures = "0.3"
+# CDP screencast mirror of headless web runs (plain ws://, no TLS needed)
+tokio-tungstenite = "0.24"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-bincode = "1.3"
 
 # XML parsing for UIAutomator dumps
 quick-xml = { version = "0.36", features = ["serialize"] }
@@ -73,11 +84,17 @@ hex = "0.4"
 # YAML for Maestro flow generation
 serde_yaml = "0.9"
 
+# PNG image codec (screenshot regression bank)
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 # gRPC client for talking directly to the on-device Maestro driver
 # (bypasses the slow `maestro hierarchy` CLI invocation path when the
-# driver is kept alive by a background `maestro studio` process).
+# driver is kept alive by a background `maestro mcp` process).
 tonic = { version = "0.12", default-features = false, features = ["codegen", "prost", "transport"] }
 prost = "0.13"
+zip = "2"
+flate2 = "1"
+tar = "0.4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 # Auto-update is desktop-only. The plugin downloads the new bundle from
@@ -85,10 +102,60 @@ prost = "0.13"
 # pubkey baked into tauri.conf.json, and installs it.
 tauri-plugin-updater = "2.0"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# ScreenCaptureKit window capture (smooth-video / iOS Simulator mirroring).
+# These crates are macOS-only; gated so non-mac builds don't pull them.
+# The objc2-core-media feature on objc2-screen-capture-kit is REQUIRED — without
+# it the SCStreamOutput delegate method (which takes a CMSampleBuffer) is not
+# generated. (There is no `objc2-core-video` feature on this crate; CVPixelBuffer
+# extraction uses the standalone objc2-core-video dep below.)
+# `catch-all` is REQUIRED: CoreSimulator's ROCK proxies (sim_capture) throw
+# ObjC exceptions when the XCTest runner churns the device IO state. Without
+# catch-all the exception unwinds raw into Rust and aborts the process
+# ("panic in a function that cannot unwind") — even objc2::exception::catch
+# can't intercept it reliably. catch-all wraps every msg_send in @try/@catch
+# at the C level and converts caught exceptions to ordinary Rust panics,
+# which sim_capture contains with catch_unwind on its poll thread.
+objc2 = { version = "0.6", features = ["catch-all"] }
+objc2-foundation = "0.3"
+objc2-screen-capture-kit = { version = "0.3.2", features = ["SCStream", "SCShareableContent", "objc2-core-media", "objc2-core-foundation", "objc2-core-graphics"] }
+# The `objc2-core-video` feature is what gates `CMSampleBuffer::image_buffer()`.
+objc2-core-media = { version = "0.3.2", features = ["objc2-core-video"] }
+objc2-core-video = "0.3.2"
+objc2-core-graphics = { version = "0.3.2", features = ["CGWindow"] }
+objc2-core-foundation = "0.3"
+block2 = "0.6"
+dispatch2 = "0.3"
+# Headless iOS-Simulator framebuffer capture (`sim_capture`) via CoreSimulator /
+# SimulatorKit private APIs: reads the booted device's live display IOSurface.
+objc2-io-surface = "0.3.2"
+libc = "0.2"
+# Physical-iPhone live preview (`avf_capture`): QuickTime-style USB screen
+# capture — CoreMediaIO's AllowScreenCaptureDevices opt-in exposes the plugged
+# device's screen as an AVFoundation "muxed" capture device (~27 fps BGRA).
+# Requires the camera TCC permission (NSCameraUsageDescription in Info.plist).
+objc2-av-foundation = { version = "0.3", features = [
+    "AVCaptureDevice",
+    "AVCaptureSession",
+    "AVCaptureInput",
+    "AVCaptureOutputBase",
+    "AVCaptureVideoDataOutput",
+    "AVMediaFormat",
+    "objc2-core-media",
+] }
+
 [dev-dependencies]
 tempfile = "3.13"
 pretty_assertions = "1.4"
 mockall = "0.14"
+
+# macOS-only: the `sck_smoke` example bootstraps a shared NSApplication so the
+# process opens its WindowServer (CGS) connection before calling ScreenCaptureKit.
+# A bare CLI binary never does this, so SCShareableContent aborts with
+# `CGS_REQUIRE_INIT`. The real app runs inside Tauri's NSApplication, so this is
+# a test-harness-only need, hence a dev-dependency.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSResponder"] }
 
 [features]
 default = ["custom-protocol"]
@@ -98,7 +165,15 @@ hwdecode = []
 devtools = ["tauri/devtools"]
 
 [profile.release]
-panic = "abort"
+# panic = "unwind" (the default) is REQUIRED, do not switch to "abort":
+# - sim_capture's safety net is objc2::exception::catch, which needs ObjC
+#   exceptions to unwind through Rust frames to reach its @catch. With
+#   panic = "abort" every Rust frame is compiled non-unwindable, so a
+#   CoreSimulator proxy exception aborts the WHOLE app before the catch
+#   fires (production crash: SIGABRT on the sim-capture-poll thread the
+#   moment the XCTest runner churned the simulator's IO state).
+# - It also turns any stray panic anywhere into a full app crash instead
+#   of a dead thread/task.
 codegen-units = 1
 lto = true
 opt-level = 3

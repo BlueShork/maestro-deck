@@ -5,6 +5,22 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 /**
+ * Zustand persist migration — exported for unit-test coverage.
+ *
+ * v0/v1 → v2: drop `visible.metrics`. Performance used to be a toggleable
+ * panel; it is now a tab of the run console, always available, so the flag
+ * is gone. The user's other panel preferences are kept.
+ */
+export function migratePanelsStore(persisted: unknown, fromVersion: number): unknown {
+  if (fromVersion < 2) {
+    const state = persisted as Record<string, unknown> | null | undefined;
+    const { metrics: _metrics, ...visible } = (state?.visible ?? {}) as Record<string, unknown>;
+    return { ...state, visible };
+  }
+  return persisted;
+}
+
+/**
  * Which panels are visible in the main layout. Hidden panels collapse
  * to zero size in the `PanelGroup` — their sibling(s) absorb the space.
  * Users re-open them from the View menu in the Toolbar.
@@ -12,7 +28,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
  * Defaults match what the app looked like before resizable panels
  * landed, so a fresh install keeps its familiar layout.
  */
-export type PanelId = "workspace" | "inspector" | "device" | "editor" | "console" | "metrics";
+export type PanelId = "workspace" | "inspector" | "device" | "editor" | "console";
 
 interface PanelsState {
   visible: Record<PanelId, boolean>;
@@ -33,10 +49,6 @@ export const usePanelsStore = create<PanelsState>()(
         device: true,
         editor: true,
         console: true,
-        // Metrics is still gated by the global perfMonitoringEnabled
-        // setting; this flag just decides whether the pane is shown
-        // when perf monitoring *is* enabled.
-        metrics: true,
       },
       toggle: (id) =>
         set((s) => ({
@@ -58,13 +70,14 @@ export const usePanelsStore = create<PanelsState>()(
             device: true,
             editor: true,
             console: true,
-            metrics: true,
           },
         })),
     }),
     {
       name: "maestro-deck.panels",
       storage: createJSONStorage(() => localStorage),
+      version: 2,
+      migrate: migratePanelsStore,
     },
   ),
 );

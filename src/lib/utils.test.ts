@@ -2,7 +2,16 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { describe, it, expect } from "vitest";
-import { cn } from "./utils";
+import { cn, flowUrl } from "./utils";
+
+describe("flowUrl", () => {
+  it("extracts the url header", () => {
+    expect(flowUrl("url: https://example.com\n---\n- launchApp")).toBe("https://example.com");
+  });
+  it("returns undefined when absent", () => {
+    expect(flowUrl("appId: com.x\n---\n- launchApp")).toBeUndefined();
+  });
+});
 
 describe("cn", () => {
   it("joins truthy class names", () => {

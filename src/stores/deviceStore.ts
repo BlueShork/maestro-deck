@@ -4,10 +4,21 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { flowUrl } from "@/lib/utils";
+import { useCloudTargetStore } from "@/stores/cloudTargetStore";
+import { useFlowStore } from "@/stores/flowStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import type { Device } from "@/types";
+
+// Stable fingerprint of the device list so the background poll can skip
+// state updates (and re-renders) when nothing actually changed.
+const deviceListKey = (devices: Device[]): string =>
+  devices
+    .map((d) => `${d.serial}|${d.platform}|${d.booted ? 1 : 0}|${d.physical ? 1 : 0}|${d.model}`)
+    .sort()
+    .join(",");
 
 interface DeviceState {
   devices: Device[];
@@ -22,7 +33,12 @@ interface DeviceState {
   pendingSerial: string | null;
   pendingAction: "connect" | "disconnect" | null;
   error: string | null;
-  refresh: () => Promise<void>;
+  /**
+   * Re-list devices. Pass `{ silent: true }` for the background hotplug
+   * poll: it skips the loading spinner, swallows transient errors, and
+   * leaves the current list untouched unless something actually changed.
+   */
+  refresh: (opts?: { silent?: boolean }) => Promise<void>;
   connect: (serial: string) => Promise<void>;
   disconnect: () => Promise<void>;
   markDisconnected: () => void;
@@ -36,20 +52,43 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   pendingSerial: null,
   pendingAction: null,
   error: null,
-  refresh: async () => {
-    set({ loading: true, error: null });
+  refresh: async (opts) => {
+    const silent = opts?.silent ?? false;
+    if (!silent) set({ loading: true, error: null });
     try {
       const devices = await ipc.listDevices();
-      set({ devices, loading: false });
+      set((state) => {
+        const changed = deviceListKey(state.devices) !== deviceListKey(devices);
+        // Background poll fast-path: when nothing changed and there's no
+        // spinner/error to clear, return the SAME state reference so zustand
+        // skips the notify entirely. Otherwise the poll would re-render the
+        // whole device list every tick and cause hover jank.
+        if (silent && !changed && !state.loading && !state.error) {
+          return state;
+        }
+        return {
+          loading: false,
+          error: null,
+          ...(changed ? { devices } : {}),
+        };
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ loading: false, error: message, devices: [] });
-      toast.error("Failed to list devices", message);
+      if (silent) {
+        // Transient poll failure (e.g. adb briefly busy) — keep the last
+        // known list and stay quiet; the next tick will recover.
+        set((state) => (state.loading ? { loading: false } : state));
+      } else {
+        set({ loading: false, error: message, devices: [] });
+        toast.error("Failed to list devices", message);
+      }
     }
   },
   connect: async (serial) => {
     const device = get().devices.find((d) => d.serial === serial);
     const streamEnabled = useSettingsStore.getState().streamEnabled;
+    // Web targets start from the open flow's `url:` header (if any).
+    const url = device?.platform === "web" ? flowUrl(useFlowStore.getState().content) : undefined;
     set({
       connecting: true,
       pendingSerial: serial,
@@ -57,16 +96,27 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       error: null,
     });
     try {
-      await ipc.connectDevice(serial, streamEnabled);
+      // The backend returns the device it actually connected — for an AVD
+      // (`avd:<name>` serial) that's the real `emulator-<port>` entry, so
+      // `current` never holds the synthetic serial.
+      const connected = await ipc.connectDevice(
+        serial,
+        streamEnabled,
+        device?.platform ?? "android",
+        url,
+      );
+      // Connecting a device is the gesture for "run here now": it takes the
+      // run target back from the cloud, so the two can never both look chosen.
+      useCloudTargetStore.getState().clear();
       set({
-        current: device ?? null,
+        current: connected,
         connecting: false,
         pendingSerial: null,
         pendingAction: null,
       });
       toast.success(
         "Device connected",
-        streamEnabled ? (device?.model ?? serial) : `${device?.model ?? serial} · stream off`,
+        streamEnabled ? connected.model : `${connected.model} · stream off`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

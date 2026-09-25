@@ -3,6 +3,7 @@
 
 import { Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { credentials } from "@/lib/chat/credentials";
@@ -10,11 +11,8 @@ import { useChatStore } from "@/stores/chatStore";
 
 import { ChatMessage } from "./ChatMessage";
 
-interface MessageListProps {
-  onOpenSettings: () => void;
-}
-
-export function MessageList({ onOpenSettings }: MessageListProps) {
+export function MessageList() {
+  const navigate = useNavigate();
   const messages = useChatStore((s) => s.messages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const isOpen = useChatStore((s) => s.isOpen);
@@ -59,7 +57,7 @@ export function MessageList({ onOpenSettings }: MessageListProps) {
             Configure an Anthropic or Vertex AI provider in Settings, then start chatting.
             Credentials stay on this machine, encrypted at rest.
           </p>
-          <Button size="sm" variant="outline" onClick={onOpenSettings}>
+          <Button size="sm" variant="outline" onClick={() => navigate("/settings/ai")}>
             Open settings
           </Button>
         </div>
@@ -75,7 +73,10 @@ export function MessageList({ onOpenSettings }: MessageListProps) {
   }
 
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-8">
+    <div
+      ref={ref}
+      className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150"
+    >
       <div className="flex min-w-0 flex-col gap-5">
         {messages.map((m) => (
           <ChatMessage key={m.id} message={m} />

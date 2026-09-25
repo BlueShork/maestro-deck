@@ -1,9 +1,11 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
+import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
-import { Camera, Moon, Smartphone, Sun } from "lucide-react";
+import { Camera, House, Moon, Smartphone, Sun } from "lucide-react";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -15,18 +17,23 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 
+import { DottedGrid } from "@/components/effects/DottedGrid";
 import { InspectActionMenu } from "@/components/InspectActionMenu";
+import { Logo } from "@/components/Logo";
+import LatticeLoader from "@/components/ui/LatticeLoader";
 import { H264Decoder } from "@/lib/decoder";
+import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
+import { useLocation } from "react-router-dom";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import type { Bounds, Selector, UINode } from "@/types";
+import type { Selector, UINode } from "@/types";
 
 function nodeArea(n: UINode): number {
   const w = n.bounds.right - n.bounds.left;
@@ -77,10 +84,17 @@ function findSmallestAt(root: UINode, x: number, y: number): UINode | null {
   return bestTargetable ?? bestAny;
 }
 
-function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
+function useFrameStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<VideoFrame | null>(null);
   const rafRef = useRef<number | null>(null);
+  const decoderRef = useRef<H264Decoder | null>(null);
+
+  // Pause/resume without recreating the decoder: the scrcpy config packet
+  // (SPS/PPS) only arrives once per stream, so the instance must survive.
+  useEffect(() => {
+    decoderRef.current?.setPaused(paused);
+  }, [paused]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -126,6 +140,7 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
         toast.error("Decoder error", err.message);
       },
     });
+    decoderRef.current = decoder;
 
     void events
       .onFrame((payload) => {
@@ -144,10 +159,210 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
         pendingRef.current.close();
         pendingRef.current = null;
       }
+      decoderRef.current = null;
       decoder.close();
     };
   }, [canvasRef, pushFrame]);
 }
+
+function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
+  const pushFrame = useStreamStore((s) => s.pushFrame);
+  // Hold the decoded bitmap plus the frame's *reported* dimensions. For iOS the
+  // reported dims equal the bitmap's natural size, but for web the PNG is at
+  // devicePixelRatio (e.g. 2400×1532) while the reported size is the CSS
+  // viewport (1200×766) — the coordinate space the hierarchy bounds live in.
+  // We paint at the bitmap's native resolution (crisp) but report the CSS size
+  // so overlay scaling and hit-testing use the right space.
+  const pendingRef = useRef<{ bmp: ImageBitmap; w: number; h: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+
+  useEffect(() => {
+    const unlistens: Array<() => void> = [];
+    let cancelled = false;
+
+    const drawNext = () => {
+      rafRef.current = null;
+      const canvas = canvasRef.current;
+      const pending = pendingRef.current;
+      pendingRef.current = null;
+      if (!pending) return;
+      const { bmp, w, h } = pending;
+      if (!canvas) {
+        bmp.close();
+        return;
+      }
+      // Paint at the bitmap's native resolution so a high-DPR screenshot stays
+      // crisp; report the CSS dimensions as the device coordinate space.
+      if (canvas.width !== bmp.width) canvas.width = bmp.width;
+      if (canvas.height !== bmp.height) canvas.height = bmp.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bmp.close();
+        return;
+      }
+      ctx.drawImage(bmp, 0, 0);
+      pushFrame({ width: w, height: h });
+      bmp.close();
+    };
+
+    // iOS and web both deliver PNG screenshots; only the connected platform's
+    // poller emits, so subscribing to both events is safe.
+    const onShot = async (payload: { data: Uint8Array; width: number; height: number }) => {
+      if (pausedRef.current) return;
+      try {
+        // Copy the exact view region into a fresh buffer: robust if `data`
+        // is ever a subarray, and yields a concrete-buffer typed array that
+        // satisfies BlobPart without an `as` cast. Physical-device frames are
+        // JPEG (0xFFD8 magic), simulator/web frames are PNG — type accordingly.
+        const isJpeg = payload.data[0] === 0xff && payload.data[1] === 0xd8;
+        const blob = new Blob([new Uint8Array(payload.data)], {
+          type: isJpeg ? "image/jpeg" : "image/png",
+        });
+        const bmp = await createImageBitmap(blob);
+        if (cancelled) {
+          bmp.close();
+          return;
+        }
+        if (pendingRef.current) pendingRef.current.bmp.close();
+        // Fall back to the bitmap's own size if the poller reports 0 (older
+        // payloads / iOS where the two coincide anyway).
+        pendingRef.current = {
+          bmp,
+          w: payload.width || bmp.width,
+          h: payload.height || bmp.height,
+        };
+        if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
+      } catch {
+        // Ignore a single bad frame; the next poll replaces it.
+      }
+    };
+
+    const subscribe = (fn: Promise<() => void>) =>
+      void fn.then((un) => (cancelled ? un() : unlistens.push(un)));
+    subscribe(events.onIosFrame(onShot));
+    subscribe(events.onWebFrame(onShot));
+
+    return () => {
+      cancelled = true;
+      unlistens.forEach((un) => un());
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (pendingRef.current) {
+        pendingRef.current.bmp.close();
+        pendingRef.current = null;
+      }
+    };
+  }, [canvasRef, pushFrame]);
+}
+
+function useNativePreviewStream(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  enabled: boolean,
+  paused: boolean,
+) {
+  const pushFrame = useStreamStore((s) => s.pushFrame);
+  const pendingRef = useRef<{ w: number; h: number; rgba: Uint8ClampedArray<ArrayBuffer> } | null>(
+    null,
+  );
+  const rafRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+
+    const drawNext = () => {
+      rafRef.current = null;
+      const canvas = canvasRef.current;
+      const frame = pendingRef.current;
+      pendingRef.current = null;
+      if (!frame || !canvas) return;
+      if (canvas.width !== frame.w) canvas.width = frame.w;
+      if (canvas.height !== frame.h) canvas.height = frame.h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.putImageData(new ImageData(frame.rgba, frame.w, frame.h), 0, 0);
+      pushFrame({ width: frame.w, height: frame.h });
+    };
+
+    const channel = new Channel<ArrayBuffer>();
+    channel.onmessage = (buf) => {
+      if (cancelled || pausedRef.current || buf.byteLength < 8) return;
+      const view = new DataView(buf);
+      const w = view.getUint32(0, true);
+      const h = view.getUint32(4, true);
+      const rgba = new Uint8ClampedArray(buf, 8);
+      if (rgba.length !== w * h * 4) return; // guard against a malformed frame
+      // No copy: ImageData accepts an offset view over a plain ArrayBuffer,
+      // and each channel message arrives in its own buffer (no aliasing).
+      pendingRef.current = { w, h, rgba };
+      if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
+    };
+
+    // Retry a few times: the physical-iPhone DAL device can take 10 s+ to
+    // (re)appear after plugging in or after a previous session died, and a
+    // single failed attempt used to strand the preview on the screenshot
+    // poller forever. `false`/errors just mean "not available yet".
+    void (async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        try {
+          if (await ipc.upgradeIosPreview(channel)) return;
+        } catch {
+          // Backend unavailable for this platform/state — retry below.
+        }
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      pendingRef.current = null;
+      // Backend tears the preview session down on disconnect/start_stream.
+    };
+  }, [canvasRef, enabled, pushFrame]);
+}
+
+/**
+ * Hover highlight for inspect mode. Subscribes to `hovered` itself so that
+ * pointer moves re-render only this leaf, not the whole DeviceView subtree
+ * (canvas, control cluster, handlers).
+ */
+const InspectorOverlay = memo(function InspectorOverlay({
+  enabled,
+  canvasRect,
+  displayW,
+  displayH,
+  overlayScaleX,
+  overlayScaleY,
+  scale,
+}: {
+  enabled: boolean;
+  canvasRect: { width: number; height: number };
+  displayW: number;
+  displayH: number;
+  overlayScaleX: number;
+  overlayScaleY: number;
+  scale: number;
+}) {
+  const hovered = useInspectorStore((s) => s.hovered);
+  const bounds = hovered?.bounds ?? null;
+  if (!enabled || !bounds || scale <= 0) return null;
+  return (
+    <div
+      className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
+      style={{
+        left: (canvasRect.width - displayW) / 2 + bounds.left * overlayScaleX,
+        top: (canvasRect.height - displayH) / 2 + bounds.top * overlayScaleY,
+        width: (bounds.right - bounds.left) * overlayScaleX,
+        height: (bounds.bottom - bounds.top) * overlayScaleY,
+      }}
+    />
+  );
+});
 
 export function DeviceView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -161,7 +376,6 @@ export function DeviceView() {
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const tree = useInspectorStore((s) => s.tree);
-  const hovered = useInspectorStore((s) => s.hovered);
   const setHovered = useInspectorStore((s) => s.setHovered);
   const select = useInspectorStore((s) => s.select);
   const scheduleAutoRefresh = useInspectorStore((s) => s.scheduleAutoRefresh);
@@ -171,10 +385,29 @@ export function DeviceView() {
     x: number;
     y: number;
     node: UINode;
-    selector: Selector | null;
+    selectors: Selector[];
   } | null>(null);
 
-  useFrameStream(canvasRef);
+  // Settings ("/settings/*") and Image Bank ("/image-bank") cover MainView
+  // (App keeps it mounted but CSS-hidden). Every other path redirects to "/",
+  // so `pathname !== "/"` is exactly "the mirror is invisible".
+  const mirrorPaused = useLocation().pathname !== "/";
+
+  // Dark-mode toggle is an Android-only `adb` feature; hidden for iOS and web.
+  const noDarkMode = current?.platform !== "android";
+  // Both hooks mount unconditionally (Rules of Hooks). They listen to
+  // different events (`frame` / `ios_frame` / `web_frame`), so only the
+  // connected platform actually paints — the Android H.264 hook is unchanged.
+  useFrameStream(canvasRef, mirrorPaused);
+  useScreenshotStream(canvasRef, mirrorPaused);
+  useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled, mirrorPaused);
+
+  // Register this canvas in the module-level registry so non-React code
+  // (e.g. Billy's take_screenshot tool) can capture frames without prop-drilling.
+  useEffect(() => {
+    registerDeviceCanvas(canvasRef.current);
+    return () => registerDeviceCanvas(null);
+  }, []);
 
   const deviceWidth = streamW || current?.screen_width || 1080;
   const deviceHeight = streamH || current?.screen_height || 2340;
@@ -202,7 +435,15 @@ export function DeviceView() {
   // max_size=1080, while a Galaxy S24 Ultra is natively 1440×3120). Detect
   // the hierarchy coordinate space from the tree itself so overlays line up
   // and hit-tests resolve to the right element.
+  //
+  // Web is the exception: the screenshot only covers the CSS viewport (e.g.
+  // 1200×766) but the element list includes below-the-fold nodes and a
+  // full-document wrapper whose bounds run far past it (e.g. 1860 tall). Taking
+  // the max bounds would stretch the overlay vertically, so for web the
+  // coordinate space is exactly the reported viewport (streamW/H).
+  const isWeb = current?.platform === "web";
   const hierarchyDims = useMemo(() => {
+    if (isWeb) return streamW > 0 && streamH > 0 ? { w: streamW, h: streamH } : null;
     if (!tree?.root) return null;
     let w = 0;
     let h = 0;
@@ -214,7 +455,7 @@ export function DeviceView() {
       for (const c of n.children) stack.push(c);
     }
     return w > 0 && h > 0 ? { w, h } : null;
-  }, [tree]);
+  }, [tree, isWeb, streamW, streamH]);
 
   const overlayScaleX = hierarchyDims ? displayW / hierarchyDims.w : scale;
   const overlayScaleY = hierarchyDims ? displayH / hierarchyDims.h : scale;
@@ -336,7 +577,7 @@ export function DeviceView() {
           x: e.clientX,
           y: e.clientY,
           node,
-          selector: selectors[0] ?? null,
+          selectors,
         });
       } catch (err) {
         toast.error("Inspect failed", err instanceof Error ? err.message : String(err));
@@ -358,7 +599,7 @@ export function DeviceView() {
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [togglingDark, setTogglingDark] = useState(false);
   useEffect(() => {
-    if (!connectedSerial) {
+    if (!connectedSerial || noDarkMode) {
       setDarkMode(null);
       return;
     }
@@ -376,7 +617,7 @@ export function DeviceView() {
     return () => {
       cancelled = true;
     };
-  }, [connectedSerial]);
+  }, [connectedSerial, noDarkMode]);
   const toggleDarkMode = useCallback(async () => {
     if (togglingDark) return;
     const next = !(darkMode ?? false);
@@ -392,6 +633,23 @@ export function DeviceView() {
       setTogglingDark(false);
     }
   }, [darkMode, togglingDark]);
+
+  // iOS-only Home button: presses the device Home button (XCTest
+  // `/pressButton`) to return to the home screen. Mirrors where the
+  // Android-only dark-mode toggle sits in the control cluster.
+  const isIos = current?.platform === "ios";
+  const [pressingHome, setPressingHome] = useState(false);
+  const pressHome = useCallback(async () => {
+    if (pressingHome) return;
+    setPressingHome(true);
+    try {
+      await ipc.iosPressHome();
+    } catch (err) {
+      toast.error("Home button failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setPressingHome(false);
+    }
+  }, [pressingHome]);
 
   const [capturing, setCapturing] = useState(false);
   const takeScreenshot = useCallback(async () => {
@@ -510,7 +768,10 @@ export function DeviceView() {
     [current, toDeviceCoords, wheelFlush],
   );
 
-  const overlayBounds: Bounds | null = hovered?.bounds ?? null;
+  const canvasStyle = useMemo(
+    () => ({ width: displayW || undefined, height: displayH || undefined }),
+    [displayW, displayH],
+  );
 
   return (
     <div
@@ -522,7 +783,13 @@ export function DeviceView() {
       onContextMenu={(e) => void onContextMenu(e)}
       onWheel={onWheel}
     >
-      {hasFrame ? null : <EmptyState connected={!!current} streamEnabled={streamEnabled} />}
+      {hasFrame ? null : (
+        <EmptyState
+          connected={!!current}
+          streamEnabled={streamEnabled}
+          iosPhysical={current?.platform === "ios" && current?.physical === true}
+        />
+      )}
 
       <canvas
         ref={canvasRef}
@@ -531,37 +798,46 @@ export function DeviceView() {
           !hasFrame && "hidden",
           inspectEnabled && "cursor-crosshair",
         )}
-        style={{
-          width: displayW || undefined,
-          height: displayH || undefined,
-        }}
+        style={canvasStyle}
       />
 
-      {inspectEnabled && overlayBounds && scale > 0 ? (
-        <div
-          className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
-          style={{
-            left: (canvasRect.width - displayW) / 2 + overlayBounds.left * overlayScaleX,
-            top: (canvasRect.height - displayH) / 2 + overlayBounds.top * overlayScaleY,
-            width: (overlayBounds.right - overlayBounds.left) * overlayScaleX,
-            height: (overlayBounds.bottom - overlayBounds.top) * overlayScaleY,
-          }}
-        />
-      ) : null}
+      <InspectorOverlay
+        enabled={inspectEnabled}
+        canvasRect={canvasRect}
+        displayW={displayW}
+        displayH={displayH}
+        overlayScaleX={overlayScaleX}
+        overlayScaleY={overlayScaleY}
+        scale={scale}
+      />
 
       {hasFrame ? (
         <div className="absolute right-3 top-3 z-10 flex gap-2">
-          <button
-            type="button"
-            onClick={() => void toggleDarkMode()}
-            disabled={togglingDark || !connectedSerial}
-            title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
-            aria-label="Toggle device dark mode"
-            aria-pressed={darkMode ?? false}
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-          </button>
+          {isIos ? (
+            <button
+              type="button"
+              onClick={() => void pressHome()}
+              disabled={pressingHome || !connectedSerial}
+              title="Press Home (return to home screen)"
+              aria-label="Press Home button"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <House className="h-4 w-4" />
+            </button>
+          ) : null}
+          {!noDarkMode ? (
+            <button
+              type="button"
+              onClick={() => void toggleDarkMode()}
+              disabled={togglingDark || !connectedSerial}
+              title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
+              aria-label="Toggle device dark mode"
+              aria-pressed={darkMode ?? false}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => void takeScreenshot()}
@@ -580,7 +856,7 @@ export function DeviceView() {
           x={actionMenu.x}
           y={actionMenu.y}
           node={actionMenu.node}
-          selector={actionMenu.selector}
+          selectors={actionMenu.selectors}
           onClose={() => setActionMenu(null)}
         />
       ) : null}
@@ -596,24 +872,89 @@ function formatTimestamp(d: Date): string {
   );
 }
 
-function EmptyState({ connected, streamEnabled }: { connected: boolean; streamEnabled: boolean }) {
+function EmptyState({
+  connected,
+  streamEnabled,
+  iosPhysical,
+}: {
+  connected: boolean;
+  streamEnabled: boolean;
+  iosPhysical: boolean;
+}) {
   const lightweight = connected && !streamEnabled;
+  // Physical iPhones build the on-device XCTest driver on first connect (~10 min),
+  // so a generic "Waiting for frames…" looks frozen. Show progress + reassurance.
+  if (iosPhysical && connected && !lightweight) {
+    return <IosPhysicalWaiting />;
+  }
+  if (!connected) {
+    return (
+      <DottedGrid className="pointer-events-none aspect-[9/19.5] h-full w-auto rounded-2xl border border-border">
+        <Logo className="h-auto w-40 text-foreground" />
+        <div className="max-w-[16rem] text-xs text-muted-foreground">
+          Plug in an Android device with USB debugging enabled, then pick it in the sidebar.
+        </div>
+      </DottedGrid>
+    );
+  }
+  if (lightweight) {
+    return (
+      <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+        <Smartphone className="h-10 w-10 text-muted-foreground/60" />
+        <div className="text-sm font-medium">Lightweight mode</div>
+        <div className="max-w-[16rem] text-xs text-muted-foreground">
+          Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle
+          in Settings to re-enable mirroring.
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
-      <Smartphone className="h-10 w-10 text-muted-foreground/60" />
-      <div className="text-sm font-medium">
-        {lightweight
-          ? "Lightweight mode"
-          : connected
-            ? "Waiting for frames…"
-            : "No device connected"}
-      </div>
+      <PreviewLoader label="Waiting for the first frame" />
       <div className="max-w-[16rem] text-xs text-muted-foreground">
-        {lightweight
-          ? "Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle in Settings to re-enable mirroring."
-          : connected
-            ? "The stream will appear here once scrcpy pushes the first frame."
-            : "Plug in an Android device with USB debugging enabled, then pick it in the sidebar."}
+        The stream will appear here once scrcpy pushes the first frame.
+      </div>
+    </div>
+  );
+}
+
+/** The same loader the cloud preview waits with, so every "the screen is on
+ *  its way" reads the same, local or cloud. */
+function PreviewLoader({ label }: { label: string }) {
+  return (
+    <LatticeLoader
+      label={label}
+      grid={4}
+      pattern="pulse"
+      cellSize={8}
+      gap={3}
+      fontSize={13}
+      className="flex-col text-foreground"
+    />
+  );
+}
+
+/// Physical-iPhone preview placeholder. The first connect builds the XCTest driver
+/// on the device (~10 min), so the loader's stopwatch and a phase message make
+/// clear it's progressing — not frozen.
+function IosPhysicalWaiting() {
+  // After ~25s the bridge is almost certainly in the xcodebuild phase. Only the
+  // label changes, so the loader keeps counting from the first connect.
+  const [building, setBuilding] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setBuilding(true), 25_000);
+    return () => window.clearTimeout(id);
+  }, []);
+  return (
+    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+      <PreviewLoader
+        label={building ? "Building the test driver on your iPhone" : "Connecting to your iPhone"}
+      />
+      <div className="max-w-[18rem] text-xs text-muted-foreground">
+        {building
+          ? "First connect builds the XCTest driver on the device — this can take up to ~10 min. Keep the iPhone unlocked and plugged in; tap Trust if prompted."
+          : "Starting the device bridge…"}
       </div>
     </div>
   );

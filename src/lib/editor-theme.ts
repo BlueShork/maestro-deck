@@ -32,25 +32,25 @@ interface Palette {
 }
 
 const DARK: Palette = {
-  bg: "hsl(224 30% 8%)",
-  surface: "hsl(224 30% 6%)",
-  fg: "hsl(220 15% 82%)",
-  fgMuted: "hsl(220 12% 55%)",
-  selection: "hsl(210 70% 55% / 0.22)",
-  selectionMatch: "hsl(210 70% 55% / 0.10)",
-  caret: "hsl(210 100% 72%)",
-  activeLine: "hsl(220 30% 11%)",
-  activeLineGutter: "hsl(220 30% 13%)",
-  border: "hsl(220 25% 14%)",
-  key: "hsl(282 70% 78%)",
-  string: "hsl(34 80% 73%)",
-  number: "hsl(150 55% 68%)",
-  bool: "hsl(15 80% 70%)",
-  punct: "hsl(220 15% 50%)",
-  comment: "hsl(220 15% 38%)",
-  activeRunBg: "hsl(210 100% 60% / 0.10)",
-  activeRunBorder: "hsl(210 100% 65%)",
-  completionSelected: "hsl(210 70% 55% / 0.18)",
+  bg: "hsl(222 15% 7%)", // == --background
+  surface: "hsl(222 14% 9%)", // == --card
+  fg: "hsl(220 14% 86%)",
+  fgMuted: "hsl(220 9% 58%)",
+  selection: "hsl(210 60% 55% / 0.25)",
+  selectionMatch: "hsl(210 60% 55% / 0.12)",
+  caret: "hsl(160 60% 55%)", // emerald caret — single accent
+  activeLine: "hsl(222 14% 10%)",
+  activeLineGutter: "hsl(222 14% 12%)",
+  border: "hsl(220 10% 18%)", // == --border
+  key: "hsl(280 40% 75%)", // desaturated vs previous 70%
+  string: "hsl(34 60% 70%)",
+  number: "hsl(150 45% 65%)",
+  bool: "hsl(15 60% 68%)",
+  punct: "hsl(220 10% 48%)",
+  comment: "hsl(220 10% 40%)",
+  activeRunBg: "hsl(210 80% 60% / 0.10)",
+  activeRunBorder: "hsl(210 80% 65%)",
+  completionSelected: "hsl(210 60% 55% / 0.20)",
 };
 
 const LIGHT: Palette = {
@@ -92,7 +92,10 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         padding: "10px 0",
       },
       ".cm-content": {
-        caretColor: c.caret,
+        // drawSelection() renders the caret as a .cm-cursor element; the
+        // native one has to stay hidden or both show at once. This overrides
+        // drawSelection's own base theme, which sets the same thing.
+        caretColor: "transparent",
         padding: "0",
       },
       ".cm-line": { padding: "0 14px" },
@@ -135,24 +138,29 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         boxShadow: `inset 2px 0 0 ${c.activeRunBorder}`,
       },
       ".cm-gutterElement.cm-step-line-done": {
-        backgroundColor: "rgba(16,185,129,0.22)",
+        backgroundColor: dark ? "rgba(52,211,153,0.16)" : "rgba(16,185,129,0.22)",
         color: dark ? "rgb(110 231 183)" : "rgb(6 95 70)",
         fontWeight: "600",
       },
       ".cm-gutterElement.cm-step-line-failed": {
-        backgroundColor: "rgba(239,68,68,0.22)",
+        backgroundColor: dark ? "rgba(248,113,113,0.16)" : "rgba(239,68,68,0.22)",
         color: dark ? "rgb(252 165 165)" : "rgb(127 29 29)",
         fontWeight: "600",
       },
+      ".cm-gutterElement.cm-step-line-skipped": {
+        backgroundColor: dark ? "rgba(148,163,184,0.16)" : "rgba(100,116,139,0.14)",
+        color: dark ? "rgb(148 163 184)" : "rgb(71 85 105)",
+        fontWeight: "600",
+      },
       ".cm-gutterElement.cm-step-line-running": {
-        backgroundColor: "rgba(59,130,246,0.22)",
+        backgroundColor: dark ? "rgba(96,165,250,0.16)" : "rgba(59,130,246,0.22)",
         color: dark ? "rgb(147 197 253)" : "rgb(30 64 175)",
         fontWeight: "600",
         animation: "cm-step-pulse 1.2s ease-in-out infinite",
       },
       "@keyframes cm-step-pulse": {
-        "0%, 100%": { backgroundColor: "rgba(59,130,246,0.18)" },
-        "50%": { backgroundColor: "rgba(59,130,246,0.36)" },
+        "0%, 100%": { backgroundColor: dark ? "rgba(96,165,250,0.12)" : "rgba(59,130,246,0.18)" },
+        "50%": { backgroundColor: dark ? "rgba(96,165,250,0.28)" : "rgba(59,130,246,0.36)" },
       },
       ".cm-tooltip": {
         backgroundColor: c.surface,

@@ -1,9 +1,11 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
+import { isCloudSignedIn } from "@/lib/cloudAuth";
 import type { ProviderId } from "@/types/chat";
 
 import { AnthropicProvider } from "./AnthropicProvider";
+import { MaestroDeckProvider } from "./MaestroDeckProvider";
 import { VertexProvider } from "./VertexProvider";
 import { credentials } from "./credentials";
 import type { ChatProvider } from "./provider";
@@ -11,6 +13,10 @@ import type { ChatProvider } from "./provider";
 const cache = new Map<ProviderId, ChatProvider>();
 
 export async function getProvider(id: ProviderId): Promise<ChatProvider | null> {
+  // No credentials to cache: the account is the credential, checked each time
+  // so signing out takes effect on the next message.
+  if (id === "maestrodeck") return isCloudSignedIn() ? new MaestroDeckProvider() : null;
+
   if (cache.has(id)) return cache.get(id)!;
 
   if (id === "anthropic") {

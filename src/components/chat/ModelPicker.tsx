@@ -16,6 +16,7 @@ import { useChatStore } from "@/stores/chatStore";
 import type { ProviderId } from "@/types/chat";
 
 const PROVIDER_LABEL: Record<ProviderId, string> = {
+  maestrodeck: "Maestro Deck",
   anthropic: "Anthropic",
   vertex: "Vertex AI",
 };
@@ -28,11 +29,20 @@ export function ModelPicker() {
   const current = MODELS.find((m) => m.id === model && m.provider === provider);
   const label = current ? `${PROVIDER_LABEL[provider]} · ${current.label}` : "Select model";
 
-  const grouped: Record<ProviderId, typeof MODELS> = { anthropic: [], vertex: [] };
+  const grouped: Record<ProviderId, typeof MODELS> = {
+    maestrodeck: [],
+    anthropic: [],
+    vertex: [],
+  };
   for (const m of MODELS) grouped[m.provider].push(m);
 
   return (
-    <DropdownMenu>
+    // Non-modal: the default modal mode scroll-locks the body and applies
+    // aria-hidden/inert to the ENTIRE app (video canvas, editor, message
+    // list) on every open/close — a full a11y-tree recompute that visibly
+    // janks the picker. A small menu doesn't need outside-interaction
+    // blocking.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"

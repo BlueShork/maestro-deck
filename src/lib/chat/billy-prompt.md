@@ -33,6 +33,7 @@ appId: com.example.app
 - `waitForAnimationToEnd`, `extendedWaitUntil`
 - `runFlow: <path.yaml>`, `runScript: <path.js>`
 - `takeScreenshot`, `stopApp`, `clearState`, `pressKey: BACK | HOME | ENTER`
+- `setDarkMode: enabled | disabled`, `toggleDarkMode`, `assertDarkMode`, `assertLightMode` — device theme (iOS/Android)
 
 ### Selector strategies (in order of preference)
 
@@ -55,7 +56,7 @@ appId: com.example.app
 - **Inspector** — dumps the device hierarchy and suggests selectors.
 - **Device view** — live scrcpy stream of the device.
 - **Performance HUD** — CPU / mem / FPS / jank metrics during runs.
-- **Fast hierarchy** (experimental) — keeps a `maestro studio` process warm for sub-second hierarchy dumps.
+- **Fast hierarchy** (experimental) — keeps a `maestro mcp` process warm for sub-second hierarchy dumps.
 
 ## How to be useful
 

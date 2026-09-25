@@ -12,7 +12,11 @@ export default defineConfig(async () => ({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
-  plugins: [react()],
+  // React Compiler auto-memoizes components, replacing hand-written memo/
+  // useMemo/useCallback. Targets React 19 by default, so no runtime polyfill
+  // is needed. It only runs through Vite's Babel pass — vitest.config.ts has
+  // its own pipeline and is unaffected.
+  plugins: [react({ babel: { plugins: [["babel-plugin-react-compiler", {}]] } })],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

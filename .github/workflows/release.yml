@@ -29,7 +29,7 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -60,7 +60,7 @@ jobs:
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: pnpm
@@ -70,8 +70,19 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Extract release notes from CHANGELOG_EN.md
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "body<<__NOTES__"
+            node scripts/release-notes.mjs "${{ github.ref_name }}"
+            echo "__NOTES__"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build, sign, and publish
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Tauri updater signing — required for the in-app auto-update to
@@ -91,21 +102,23 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Maestro Deck ${{ github.ref_name }}"
-          # Body is taken from CHANGELOG_EN.md by the manifest script
-          # below; tauri-action also pulls it as the release body.
-          releaseBody: "See CHANGELOG_EN.md for details."
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
-          # We disable the action's updater JSON because it silently
-          # skips when the universal-mac sig rename trips its lookup
-          # (see post-step below + manifest job).
-          includeUpdaterJson: false
+          # We disable the action's updater JSON: latest.json is written
+          # by hand (macOS is built locally) and must list every platform.
+          # v1 renamed this input from `includeUpdaterJson` and defaults
+          # it to true, so the old name would silently re-enable it.
+          uploadUpdaterJson: false
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
       # tauri-action renames the macOS bundle to add `_universal` but
       # does NOT rename the matching `.sig` — so the file never makes
       # it to the release. Upload it ourselves under the matching name.
+      # TODO(tauri-action v1): v1 uploads the .sig itself and now names
+      # the bundle `Maestro Deck_<version>_universal.app.tar.gz`. Drop
+      # this step and fix the manifest URLs when macOS CI comes back.
       - name: Upload macOS updater signature
         if: runner.os == 'macOS'
         shell: bash
@@ -142,6 +155,7 @@ jobs:
   #   needs: release
   #   runs-on: ubuntu-latest
   #   steps:
+  #     - uses: actions/checkout@v7
   #     - name: Generate and upload latest.json
   #       env:
   #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -164,7 +178,7 @@ jobs:
   #           --arg win_sig "$WIN_SIG" --arg win_url "$WIN_URL" \
   #           '{
   #             version: $version,
-  #             notes: "See CHANGELOG_EN.md for details.",
+  #             notes: "",
   #             pub_date: $pubdate,
   #             platforms: {
   #               "darwin-x86_64":  { signature: $mac_sig, url: $mac_url },
@@ -172,4 +186,5 @@ jobs:
   #               "windows-x86_64": { signature: $win_sig, url: $win_url }
   #             }
   #           }' > latest.json
+  #         node scripts/release-notes.mjs "$VERSION" latest.json
   #         gh release upload "$TAG" latest.json --repo "$REPO" --clobber

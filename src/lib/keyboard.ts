@@ -14,6 +14,19 @@ export interface ShortcutBinding {
   allowInInput?: boolean;
 }
 
+// When the full-screen settings page is open, the workspace (`MainView`) stays
+// mounted but hidden so returning to it is instant. Its global shortcuts
+// (⌘R run, ⌘S save, inspect-key, ⌘⇧S screenshot) must not fire while the user
+// is in settings, so we gate every `useShortcuts` listener through this flag
+// rather than prop-drilling "settings open" down to each consumer.
+export const IS_MAC = navigator.platform.toLowerCase().includes("mac");
+
+let suppressed = false;
+
+export function setShortcutsSuppressed(value: boolean): void {
+  suppressed = value;
+}
+
 function isEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
@@ -26,8 +39,8 @@ function isEditable(target: EventTarget | null): boolean {
 export function useShortcuts(bindings: ShortcutBinding[]): void {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const isMac = navigator.platform.toLowerCase().includes("mac");
-      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (suppressed) return;
+      const mod = IS_MAC ? e.metaKey : e.ctrlKey;
       for (const b of bindings) {
         if (b.key.toLowerCase() !== e.key.toLowerCase()) continue;
         if (!!b.mod !== mod) continue;

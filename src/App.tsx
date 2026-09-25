@@ -1,61 +1,70 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { listen } from "@tauri-apps/api/event";
-import { tempDir } from "@tauri-apps/api/path";
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
-import { DeviceSelector } from "@/components/DeviceSelector";
-import { DeviceView } from "@/components/DeviceView";
-import { FlowEditor } from "@/components/FlowEditor";
-import { InspectorPanel } from "@/components/InspectorPanel";
-const MetricsPanel = lazy(() =>
-  import("@/components/MetricsPanel").then((m) => ({ default: m.MetricsPanel })),
-);
-import { PanelShell } from "@/components/PanelShell";
-import { RunConsole } from "@/components/RunConsole";
-import { SettingsDialog } from "@/components/SettingsDialog";
-import { Toolbar } from "@/components/Toolbar";
+import { AccountPage } from "@/components/AccountPage";
+import { CloudInviteDialog } from "@/components/CloudInviteDialog";
+import { ImageBankPage } from "@/components/ImageBankPage";
+import { MainView } from "@/components/MainView";
+import { OnboardingOverlay } from "@/components/OnboardingOverlay";
+import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
+import { SettingsPage } from "@/components/settings/SettingsPage";
+import { SetupPopup } from "@/components/SetupPopup";
+import { TourOverlay } from "@/components/TourOverlay";
 import { UpdateDialog } from "@/components/UpdateDialog";
-import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { Toaster } from "@/components/ui/Toast";
+import { summarizeBankReport } from "@/lib/bankReport";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
-import { parseFlow } from "@/lib/flowAst";
-import { buildPartialFlow } from "@/lib/partialFlow";
-import { useShortcuts } from "@/lib/keyboard";
-import { parseLine as parseRunLine } from "@/lib/runStepParser";
+import { setShortcutsSuppressed } from "@/lib/keyboard";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
-import { ChatPanel } from "@/components/chat/ChatPanel";
-import { useChatStore } from "@/stores/chatStore";
+import { startCloudAuthListener, useCloudAuthStore } from "@/stores/cloudAuthStore";
+import { useCloudInviteStore } from "@/stores/cloudInviteStore";
 import { useDeviceStore } from "@/stores/deviceStore";
-import { useFlowStore } from "@/stores/flowStore";
-import { useMetricsStore } from "@/stores/metricsStore";
+import { useReviewStore } from "@/stores/reviewStore";
+import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRegressionStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
+import { useMetricsStore } from "@/stores/metricsStore";
 import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast, useToastStore } from "@/stores/toastStore";
+import { shouldAutoStartWalkthrough, useOnboardingStore } from "@/stores/onboardingStore";
+import { useEnvStore } from "@/stores/envStore";
+import { useTourStore } from "@/stores/tourStore";
 import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
+/**
+ * App shell. Owns the app-wide, route-independent effects (runner event
+ * listeners, theme, startup update check, stream/metrics lifecycle, driver
+ * recovery toasts) so they keep running while the user is on any route —
+ * notably the full-screen settings page.
+ *
+ * `MainView` stays mounted at all times (just hidden behind the settings page)
+ * so returning to the workspace is instant — remounting it would rebuild the
+ * CodeMirror editor and the H.264 decoder from scratch, which is what made the
+ * back transition feel slow. Its global keyboard shortcuts are suppressed while
+ * settings is open so they don't fire from behind the overlay.
+ */
 export default function App() {
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  const inspectKey = useSettingsStore((s) => s.inspectKey);
+  const location = useLocation();
+  const settingsOpen = location.pathname.startsWith("/settings");
+  const imageBankOpen = location.pathname.startsWith("/image-bank");
+  const accountOpen = location.pathname.startsWith("/account");
+  useEffect(() => {
+    setShortcutsSuppressed(settingsOpen || imageBankOpen || accountOpen);
+    return () => setShortcutsSuppressed(false);
+  }, [settingsOpen, imageBankOpen, accountOpen]);
   const theme = useSettingsStore((s) => s.theme);
-  const toggleInspect = useInspectorStore((s) => s.toggle);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
-  const initSteps = useRunStore((s) => s.initSteps);
-  const applyStepEvent = useRunStore((s) => s.applyEvent);
-  const resetSteps = useRunStore((s) => s.resetSteps);
-  const setRunning = useRunStore((s) => s.setRunning);
+  const ingestLine = useRunStore((s) => s.ingestLine);
   const setStopped = useRunStore((s) => s.setStopped);
-  const runningPid = useRunStore((s) => s.pid);
 
   // Restore the last opened file from the previous session. The workspace
   // store hydrates synchronously from localStorage, so the path is available
@@ -63,6 +72,38 @@ export default function App() {
   useEffect(() => {
     const last = useWorkspaceStore.getState().lastOpenFile;
     if (last) void openFlowFile(last, { silent: true });
+  }, []);
+
+  // First launch: start the onboarding tour once. `hasSeenTour` hydrates
+  // synchronously from localStorage, so it's correct on the first tick.
+  useEffect(() => {
+    if (!useTourStore.getState().hasSeenTour) {
+      useTourStore.getState().start();
+    }
+  }, []);
+
+  // Everyone should meet the hands-on walkthrough once, including the users
+  // who went through the tour before it existed — their tour ended long ago
+  // and will never hand over. It waits for the toolchain, since it ends on
+  // "press Run". Marked done as soon as it is seen, so it never returns.
+  const toolsReady = useEnvStore((s) => s.minimalOk === true);
+  const walkthroughDone = useOnboardingStore((s) => s.done);
+  useEffect(() => {
+    if (
+      shouldAutoStartWalkthrough({
+        hasSeenTour: useTourStore.getState().hasSeenTour,
+        walkthroughDone,
+        toolsReady,
+      })
+    ) {
+      useOnboardingStore.getState().start();
+    }
+  }, [toolsReady, walkthroughDone]);
+
+  // Optional Maestro Deck Cloud sign-in: Firebase persists the session
+  // itself, this just keeps cloudAuthStore in sync with it.
+  useEffect(() => {
+    startCloudAuthListener();
   }, []);
 
   // Silent update check on startup. Skipped if the user disabled it in
@@ -111,6 +152,15 @@ export default function App() {
     }
   }, [streamEnabled]);
 
+  // Reset inspect mode whenever the connected device changes (switch, connect,
+  // or disconnect). The inspector state is global, not per-device — without
+  // this, switching devices leaves a stale tree and can strand `loading` on a
+  // dump that targeted the previous device.
+  const currentSerial = useDeviceStore((s) => s.current?.serial ?? null);
+  useEffect(() => {
+    useInspectorStore.getState().disable();
+  }, [currentSerial]);
+
   const appendSample = useMetricsStore((s) => s.appendSample);
   const onTargetChanged = useMetricsStore((s) => s.onTargetChanged);
   const setStoppedReason = useMetricsStore((s) => s.setStoppedReason);
@@ -121,12 +171,12 @@ export default function App() {
     Promise.all([
       events.onRunnerStdout((line) => {
         appendLog("stdout", line);
-        const ev = parseRunLine(line);
-        if (ev) applyStepEvent(ev);
+        ingestLine(line);
       }),
       events.onRunnerStderr((line) => appendLog("stderr", line)),
       events.onRunnerExit(({ code }) => {
         const wasStopped = useRunStore.getState().stopRequested;
+        const exitedPid = useRunStore.getState().pid;
         appendLog(
           "system",
           wasStopped ? "[runner stopped by user]" : `[runner exited with code ${code}]`,
@@ -135,8 +185,72 @@ export default function App() {
         if (wasStopped) toast.success("Flow stopped");
         else if (code === 0) toast.success("Flow completed");
         else toast.error("Flow failed", `exit code ${code}`);
+
+        // First run that actually worked, and only for signed-out users: the
+        // one moment the cloud offer is worth hearing. Delayed so the success
+        // toast lands first — the ask should follow the win, not cover it.
+        if (code === 0 && !wasStopped && !useCloudAuthStore.getState().user) {
+          setTimeout(() => {
+            if (!useCloudAuthStore.getState().user) useCloudInviteStore.getState().offer();
+          }, 1600);
+        }
+        if (code === 0 && !wasStopped && useVisualRegressionStore.getState().enabled) {
+          const target = useRunStore.getState().runTarget;
+          const ws = useWorkspaceStore.getState().folderPath;
+          const device = useDeviceStore.getState().current;
+          if ((target?.kind === "all" || target?.kind === "flow") && ws && device) {
+            const { tolerance, threshold } = effectiveThresholds();
+            const runId = String(exitedPid ?? Date.now());
+            const bankToastId = toast.loading(
+              "Checking screenshot bank…",
+              "Comparing captures against their baselines",
+            );
+            appendLog("system", "[bank] verifying screenshots against the bank…");
+            const common = {
+              workspace: ws,
+              model: device.model,
+              width: device.screen_width,
+              height: device.screen_height,
+              tolerance,
+              threshold,
+              runId,
+              platform: device.platform,
+              ignoreStatusBar: useVisualRegressionStore.getState().ignoreStatusBar,
+            };
+            const compare =
+              target.kind === "all"
+                ? ipc.compareScreenshotsAll(common)
+                : ipc.compareScreenshots({ ...common, flowPath: target.path });
+            void compare
+              .then((report) => {
+                toast.dismiss(bankToastId);
+                const summary = summarizeBankReport(report);
+                summary.logLines.forEach((l) => appendLog("system", l));
+                if (summary.toast.kind === "info")
+                  toast.info(summary.toast.title, summary.toast.detail);
+                else toast.success(summary.toast.title, summary.toast.detail);
+                useReviewStore.getState().setReport(report);
+              })
+              .catch((err) => {
+                toast.dismiss(bankToastId);
+                toast.error("Screenshot bank check failed", String(err));
+                appendLog("system", `[bank] échec comparaison: ${String(err)}`);
+              });
+          }
+        }
       }),
       events.onDeviceDisconnected(() => markDisconnected()),
+      events.onWebStatus((p) => {
+        if (p.stage === "error") toast.error("Web browser", p.message);
+        // toastStore has no warn variant — "warn" renders as info.
+        else toast.info("Web browser", p.message);
+      }),
+      events.onWebTapFallback(() => {
+        toast.info(
+          "Tap sent as coordinates",
+          "The page snapshot wasn't available — the tap may be less precise.",
+        );
+      }),
       events.onMetricsSample((p) =>
         appendSample({
           ts: p.ts,
@@ -144,6 +258,11 @@ export default function App() {
           memMb: p.mem_mb,
           fps: p.fps,
           jankPct: p.jank_pct,
+          frameP50: p.frame_p50_ms,
+          frameP90: p.frame_p90_ms,
+          frameP95: p.frame_p95_ms,
+          frameP99: p.frame_p99_ms,
+          thermalStatus: p.thermal_status,
           netRxKbps: p.net_rx_kbps,
           netTxKbps: p.net_tx_kbps,
         }),
@@ -160,7 +279,7 @@ export default function App() {
     };
   }, [
     appendLog,
-    applyStepEvent,
+    ingestLine,
     setStopped,
     markDisconnected,
     appendSample,
@@ -200,34 +319,27 @@ export default function App() {
     };
   }, []);
 
-  const panelOpen = useMetricsStore((s) => s.panelOpen);
-  const perfEnabled = useSettingsStore((s) => s.perfMonitoringEnabled);
-  const panels = usePanelsStore((s) => s.visible);
-
-  // `defaultSize` values within a PanelGroup must sum to 100 — react-
-  // resizable-panels warns and normalizes otherwise. Since any panel
-  // can be hidden, we compute the fill-sizes dynamically per siblings
-  // count so the totals always balance regardless of visibility.
-  const chatOpen = useChatStore((s) => s.isOpen);
-  const WORKSPACE_SIZE = 15;
-  const INSPECTOR_SIZE = 18;
-  const CHAT_SIZE = 28;
-  const mainSize =
-    100 -
-    (panels.workspace ? WORKSPACE_SIZE : 0) -
-    (panels.inspector ? INSPECTOR_SIZE : 0) -
-    (chatOpen ? CHAT_SIZE : 0);
-
-  const bottomVisible = panels.console || (perfEnabled && panelOpen && panels.metrics);
-  const mainTopSize = bottomVisible ? 65 : 100;
-  const mainBottomSize = 100 - mainTopSize;
-  const deviceConnected = useDeviceStore((s) => Boolean(s.current));
+  // Capture only while the console's Performance tab is on screen — it is the
+  // only reader of the samples.
+  const consoleVisible = usePanelsStore((s) => s.visible.console);
+  const performanceTab = useSettingsStore((s) => s.consoleMode === "performance");
+  const metricsOpen = consoleVisible && performanceTab;
+  // Use device identity (serial + platform + physical) rather than mere presence
+  // so that a direct A→B switch (where deviceConnected stays true) still causes
+  // the effect to re-run, stopping the old collector and starting a new one for
+  // the correct device.
+  const deviceKey = useDeviceStore((s) =>
+    s.current ? `${s.current.serial}:${s.current.platform}:${String(s.current.physical)}` : null,
+  );
 
   useEffect(() => {
-    if (!perfEnabled || !panelOpen || !deviceConnected) {
+    if (!metricsOpen || !deviceKey) {
       void ipc.stopMetrics().catch(() => {});
       return;
     }
+    // Clear any stale samples/package from a previous device so nothing is
+    // misattributed while we wait for the new collector's first sample.
+    useMetricsStore.getState().reset();
     void ipc.startMetrics().catch((err) => {
       toast.error(
         "Performance monitoring failed to start",
@@ -237,261 +349,30 @@ export default function App() {
     return () => {
       void ipc.stopMetrics().catch(() => {});
     };
-  }, [perfEnabled, panelOpen, deviceConnected]);
-
-  const onRun = useCallback(async () => {
-    const { content, filePath } = useFlowStore.getState();
-    let path = filePath;
-    try {
-      if (!path) {
-        const dir = await tempDir();
-        path = `${dir.replace(/\/$/, "")}/maestro-deck-flow.yaml`;
-        await writeTextFile(path, content);
-      } else {
-        await writeTextFile(path, content);
-      }
-      resetSteps();
-      initSteps(parseFlow(content).steps);
-      const pid = await ipc.runFlow(path);
-      setRunning(pid);
-      appendLog("system", `[runner started pid ${pid} · ${path}]`);
-    } catch (err) {
-      toast.error("Run failed", err instanceof Error ? err.message : String(err));
-    }
-  }, [setRunning, appendLog, initSteps, resetSteps]);
-
-  const onRunAll = useCallback(async () => {
-    const folder = useWorkspaceStore.getState().folderPath;
-    if (!folder) return;
-    try {
-      // Persist any unsaved edits to the current file so they're part of the run.
-      const { content, filePath, dirty } = useFlowStore.getState();
-      if (dirty && filePath) {
-        await writeTextFile(filePath, content);
-        useFlowStore.getState().saved(filePath);
-      }
-      const { content: c2 } = useFlowStore.getState();
-      resetSteps();
-      initSteps(parseFlow(c2).steps);
-      const pid = await ipc.runFlow(folder);
-      setRunning(pid);
-      appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
-    } catch (err) {
-      toast.error("Run all failed", err instanceof Error ? err.message : String(err));
-    }
-  }, [setRunning, appendLog, initSteps, resetSteps]);
-
-  const onRunFrom = useCallback(
-    async (line: number) => {
-      const { content } = useFlowStore.getState();
-      const partial = buildPartialFlow(content, line);
-      if (!partial) return;
-      try {
-        const dir = await tempDir();
-        const tempPath = `${dir.replace(/\/$/, "")}/maestro-deck-flow.yaml`;
-        await writeTextFile(tempPath, partial.content);
-        const truncatedAst = parseFlow(partial.content);
-        const remappedSteps = truncatedAst.steps.map((s) => ({
-          ...s,
-          line: partial.lineMap.get(s.line) ?? s.line,
-        }));
-        resetSteps();
-        initSteps(remappedSteps);
-        const pid = await ipc.runFlow(tempPath);
-        setRunning(pid);
-        appendLog(
-          "system",
-          `[runner started pid ${pid} · from line ${partial.firstStepOriginalLine}]`,
-        );
-      } catch (err) {
-        toast.error("Run from here failed", err instanceof Error ? err.message : String(err));
-      }
-    },
-    [setRunning, appendLog, initSteps, resetSteps],
-  );
-
-  const onStop = useCallback(async () => {
-    if (runningPid === null) return;
-    useRunStore.getState().requestStop();
-    try {
-      await ipc.stopFlow(runningPid);
-    } catch (err) {
-      toast.error("Stop failed", err instanceof Error ? err.message : String(err));
-    }
-  }, [runningPid]);
-
-  const shortcuts = useMemo(
-    () => [
-      { key: "r", mod: true, handler: () => void onRun() },
-      {
-        key: "s",
-        mod: true,
-        handler: () => window.dispatchEvent(new CustomEvent("flow:command", { detail: "save" })),
-        allowInInput: true,
-      },
-      { key: inspectKey, handler: () => void toggleInspect() },
-    ],
-    [onRun, toggleInspect, inspectKey],
-  );
-  useShortcuts(shortcuts);
+  }, [metricsOpen, deviceKey]);
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      <Toolbar
-        onRun={() => void onRun()}
-        onRunAll={() => void onRunAll()}
-        onStop={() => void onStop()}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-      <div className="min-h-0 flex-1">
-        <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.outer">
-          {panels.workspace ? (
-            <>
-              <Panel
-                id="workspace"
-                order={1}
-                defaultSize={WORKSPACE_SIZE}
-                minSize={8}
-                className="border-r border-border"
-              >
-                <PanelShell id="workspace">
-                  <WorkspaceTree />
-                </PanelShell>
-              </Panel>
-              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-            </>
-          ) : null}
-
-          {panels.inspector ? (
-            <>
-              <Panel
-                id="inspector"
-                order={2}
-                defaultSize={INSPECTOR_SIZE}
-                minSize={10}
-                className="border-r border-border"
-              >
-                <PanelShell id="inspector">
-                  <DeviceSelector />
-                  <div className="min-h-0 flex-1 overflow-hidden">
-                    <InspectorPanel />
-                  </div>
-                </PanelShell>
-              </Panel>
-              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-            </>
-          ) : null}
-
-          <Panel id="main" order={3} defaultSize={mainSize} minSize={30}>
-            <PanelGroup direction="vertical" autoSaveId="maestro-deck.layout.main">
-              <Panel id="main-top" order={1} defaultSize={mainTopSize} minSize={20}>
-                <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.top">
-                  {streamEnabled && panels.device ? (
-                    <>
-                      <Panel
-                        id="device"
-                        order={1}
-                        // Panels in the same group must have defaultSize
-                        // values that sum to 100, otherwise the library
-                        // warns and normalizes. Collapse to 100 when the
-                        // sibling is hidden so we don't rely on
-                        // normalization + avoid the console warning.
-                        defaultSize={panels.editor ? 55 : 100}
-                        minSize={20}
-                      >
-                        <PanelShell
-                          id="device"
-                          className="items-center justify-center bg-muted/40 p-4"
-                        >
-                          <DeviceView />
-                        </PanelShell>
-                      </Panel>
-                      {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
-                    </>
-                  ) : null}
-
-                  {panels.editor ? (
-                    <Panel
-                      id="editor"
-                      order={2}
-                      defaultSize={streamEnabled && panels.device ? 45 : 100}
-                      minSize={20}
-                      className={
-                        streamEnabled && panels.device ? "border-l border-border" : undefined
-                      }
-                    >
-                      <PanelShell id="editor">
-                        <FlowEditor onRunFrom={onRunFrom} />
-                      </PanelShell>
-                    </Panel>
-                  ) : null}
-                </PanelGroup>
-              </Panel>
-
-              {panels.console || (perfEnabled && panelOpen && panels.metrics) ? (
-                <>
-                  <PanelResizeHandle className={RESIZE_HANDLE_V} />
-                  <Panel id="main-bottom" order={2} defaultSize={mainBottomSize} minSize={10}>
-                    <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
-                      {panels.console ? (
-                        <Panel
-                          id="console"
-                          order={1}
-                          defaultSize={perfEnabled && panelOpen && panels.metrics ? 70 : 100}
-                          minSize={20}
-                        >
-                          <PanelShell id="console">
-                            <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
-                          </PanelShell>
-                        </Panel>
-                      ) : null}
-
-                      {perfEnabled && panelOpen && panels.metrics ? (
-                        <>
-                          {panels.console ? (
-                            <PanelResizeHandle className={RESIZE_HANDLE_H} />
-                          ) : null}
-                          <Panel
-                            id="metrics"
-                            order={2}
-                            defaultSize={panels.console ? 30 : 100}
-                            minSize={15}
-                          >
-                            <PanelShell id="metrics">
-                              <Suspense fallback={null}>
-                                <MetricsPanel />
-                              </Suspense>
-                            </PanelShell>
-                          </Panel>
-                        </>
-                      ) : null}
-                    </PanelGroup>
-                  </Panel>
-                </>
-              ) : null}
-            </PanelGroup>
-          </Panel>
-
-          {chatOpen ? (
-            <>
-              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-              <Panel id="chat" order={4} defaultSize={CHAT_SIZE} minSize={20} maxSize={50}>
-                <ChatPanel onOpenSettings={() => setSettingsOpen(true)} />
-              </Panel>
-            </>
-          ) : null}
-        </PanelGroup>
+    <>
+      {/* Always mounted; hidden (not unmounted) while settings is open so the
+          editor + video decoder survive and returning is instant. */}
+      <div className={settingsOpen || imageBankOpen || accountOpen ? "hidden" : "contents"}>
+        <MainView />
       </div>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <Routes>
+        <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+        <Route path="/settings/:section" element={<SettingsPage />} />
+        <Route path="/image-bank" element={<ImageBankPage />} />
+        <Route path="/account" element={<AccountPage />} />
+        {/* MainView already covers "/"; redirect any other unknown path there. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
       <UpdateDialog />
+      <CloudInviteDialog />
+      <QuitConfirmDialog />
+      <TourOverlay />
+      <OnboardingOverlay />
+      <SetupPopup />
       <Toaster />
-    </div>
+    </>
   );
 }
-
-/** Hover-only thin line between horizontally-stacked panels. */
-const RESIZE_HANDLE_H =
-  "w-[3px] bg-border/0 transition-colors hover:bg-primary/40 data-[resize-handle-state=drag]:bg-primary/60 data-[resize-handle-state=hover]:bg-primary/40";
-/** Same, but rotated for vertically-stacked panels. */
-const RESIZE_HANDLE_V =
-  "h-[3px] bg-border/0 transition-colors hover:bg-primary/40 data-[resize-handle-state=drag]:bg-primary/60 data-[resize-handle-state=hover]:bg-primary/40";

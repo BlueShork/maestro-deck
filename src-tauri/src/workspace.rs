@@ -63,13 +63,11 @@ fn scan(dir: &Path, depth: usize) -> AppResult<Vec<WorkspaceNode>> {
         let ft = entry.file_type()?;
         if ft.is_dir() {
             let children = scan(&path, depth + 1)?;
-            if !children.is_empty() {
-                dirs.push(WorkspaceNode::Dir {
-                    name,
-                    path: path.to_string_lossy().into_owned(),
-                    children,
-                });
-            }
+            dirs.push(WorkspaceNode::Dir {
+                name,
+                path: path.to_string_lossy().into_owned(),
+                children,
+            });
         } else if ft.is_file() && is_yaml(&name) {
             files.push(WorkspaceNode::File {
                 name,
@@ -93,4 +91,55 @@ fn node_name(n: &WorkspaceNode) -> &str {
 fn is_yaml(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower.ends_with(".yaml") || lower.ends_with(".yml")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn names(children: &[WorkspaceNode]) -> Vec<&str> {
+        children.iter().map(node_name).collect()
+    }
+
+    #[test]
+    fn includes_empty_directories() {
+        let tmp = tempdir().unwrap();
+        fs::create_dir(tmp.path().join("empty")).unwrap();
+
+        let tree = list_workspace(tmp.path()).unwrap();
+        let WorkspaceNode::Dir { children, .. } = tree else {
+            panic!("root must be a dir");
+        };
+        assert_eq!(names(&children), vec!["empty"]);
+    }
+
+    #[test]
+    fn still_excludes_hidden_node_modules_and_target() {
+        let tmp = tempdir().unwrap();
+        fs::create_dir(tmp.path().join(".hidden")).unwrap();
+        fs::create_dir(tmp.path().join("node_modules")).unwrap();
+        fs::create_dir(tmp.path().join("target")).unwrap();
+        fs::create_dir(tmp.path().join("keep")).unwrap();
+
+        let tree = list_workspace(tmp.path()).unwrap();
+        let WorkspaceNode::Dir { children, .. } = tree else {
+            panic!("root must be a dir");
+        };
+        assert_eq!(names(&children), vec!["keep"]);
+    }
+
+    #[test]
+    fn dirs_sorted_before_files() {
+        let tmp = tempdir().unwrap();
+        fs::create_dir(tmp.path().join("zzz_dir")).unwrap();
+        fs::write(tmp.path().join("aaa.yaml"), "appId: x").unwrap();
+
+        let tree = list_workspace(tmp.path()).unwrap();
+        let WorkspaceNode::Dir { children, .. } = tree else {
+            panic!("root must be a dir");
+        };
+        assert_eq!(names(&children), vec!["zzz_dir", "aaa.yaml"]);
+    }
 }
