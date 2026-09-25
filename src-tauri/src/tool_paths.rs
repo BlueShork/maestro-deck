@@ -49,8 +49,8 @@ pub struct ToolPaths {
     pub maestro: Option<String>,
     #[serde(default)]
     pub iproxy: Option<String>,
-    /// Apple Team ID used to code-sign the iOS XCTest runner via `maestro studio`
-    /// (simulators) or `maestro-ios-device` (physical devices).
+    /// Apple Team ID used to code-sign the iOS XCTest runner via
+    /// `maestro-ios-device` (physical devices).
     #[serde(default)]
     pub apple_team_id: Option<String>,
     /// `maestro-ios-device` bridge binary (devicelab) used to build/run the
@@ -125,7 +125,7 @@ struct ResolvedCache {
 
 static CACHE: Lazy<RwLock<ResolvedCache>> = Lazy::new(|| RwLock::new(ResolvedCache::default()));
 
-fn invalidate_cache() {
+pub(crate) fn invalidate_cache() {
     let mut c = CACHE.write().unwrap();
     c.adb = None;
     c.maestro = None;
@@ -143,6 +143,20 @@ const IPROXY_DEFAULT: &str = "iproxy";
 const DEVICECTL_DEFAULT: &str = "devicectl";
 const MAESTRO_IOS_DEVICE_DEFAULT: &str = "maestro-ios-device";
 
+/// The copy this app downloaded for itself, if any, ahead of the machine's own
+/// install locations.
+///
+/// It sits at level 3 — after the user's explicit override and `*_BIN`, before
+/// Homebrew and the login shell — so someone who already has a working tool is
+/// never overridden, while a machine whose only copy is the wrong version gets
+/// ours. See tool_setup.
+fn with_managed(tool: crate::tool_setup::ManagedTool, mut common: Vec<PathBuf>) -> Vec<PathBuf> {
+    if let Some(path) = crate::tool_setup::install::managed_path(tool) {
+        common.insert(0, PathBuf::from(path));
+    }
+    common
+}
+
 pub fn adb_bin() -> String {
     if let Some(cached) = CACHE.read().unwrap().adb.clone() {
         return cached;
@@ -152,7 +166,7 @@ pub fn adb_bin() -> String {
         "ADB_BIN",
         ADB_DEFAULT,
         load_overrides().adb.as_deref(),
-        &adb_common_paths(),
+        &with_managed(crate::tool_setup::ManagedTool::Adb, adb_common_paths()),
     );
     CACHE.write().unwrap().adb = Some(resolved.clone());
     resolved
@@ -180,7 +194,10 @@ pub fn maestro_bin() -> String {
         "MAESTRO_BIN",
         MAESTRO_DEFAULT,
         load_overrides().maestro.as_deref(),
-        &maestro_common_paths(),
+        &with_managed(
+            crate::tool_setup::ManagedTool::Maestro,
+            maestro_common_paths(),
+        ),
     );
     CACHE.write().unwrap().maestro = Some(resolved.clone());
     resolved
@@ -234,9 +251,8 @@ pub fn set_maestro_ios_device_path(path: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// User-configured Apple Team ID (or None). The keeper passes it to
-/// `maestro studio --apple-team-id` (simulators) or `maestro-ios-device
-/// --team-id` (physical); if None, maestro uses its own config.
+/// User-configured Apple Team ID (or None). The physical-device keeper passes
+/// it to `maestro-ios-device --team-id`.
 pub fn apple_team_id() -> Option<String> {
     load_overrides()
         .apple_team_id

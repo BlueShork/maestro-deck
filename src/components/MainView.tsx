@@ -3,15 +3,12 @@
 
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { tempDir } from "@tauri-apps/api/path";
-import { Suspense, lazy, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
+import { CloudLivePreview } from "@/components/CloudLivePreview";
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
-import { InspectorPanel } from "@/components/InspectorPanel";
-const MetricsPanel = lazy(() =>
-  import("@/components/MetricsPanel").then((m) => ({ default: m.MetricsPanel })),
-);
 import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
 import { ScreenshotReview } from "@/components/ScreenshotReview";
@@ -19,22 +16,25 @@ import { Toolbar } from "@/components/Toolbar";
 import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { ipc } from "@/lib/ipc";
-import { parseFlow } from "@/lib/flowAst";
+import { flowDisplayName, parseFlow } from "@/lib/flowAst";
 import { buildPartialFlow } from "@/lib/partialFlow";
-import { useShortcuts } from "@/lib/keyboard";
+import { useAppMenu } from "@/lib/appMenu";
+import { IS_MAC, useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { startCloudRun, stopWatchingCloudRun } from "@/lib/cloudRunner";
+import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 /**
  * The primary workspace screen — toolbar plus the resizable panel layout
- * (workspace, inspector, device, editor, console, metrics, chat). Owns the
+ * (workspace, inspector, device, editor, console, chat). Owns the
  * run callbacks and keyboard shortcuts, which only make sense here. Rendered
  * at the `/` route; navigating to `/settings` swaps it out for the full
  * settings page. App-wide effects (runner listeners, theme, metrics) live in
@@ -49,11 +49,15 @@ export function MainView() {
   const setRunning = useRunStore((s) => s.setRunning);
   const setStarting = useRunStore((s) => s.setStarting);
   const startFailed = useRunStore((s) => s.startFailed);
-  const runningPid = useRunStore((s) => s.pid);
 
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const panels = usePanelsStore((s) => s.visible);
   const chatOpen = useChatStore((s) => s.isOpen);
+  const cloudJob = useRunStore((s) => s.cloud);
+  // Every cloud fleet uploads frames: the emulator runner, the Mac worker and
+  // the device-farm worker all write the same live.jpg.
+  const cloudTarget = useCloudTargetStore((s) => s.target);
+  const cloudLive = cloudJob && cloudTarget ? { ...cloudJob, platform: cloudTarget } : null;
 
   // `defaultSize` values within a PanelGroup must sum to 100 — react-
   // resizable-panels warns and normalizes otherwise. Since any panel
@@ -68,11 +72,11 @@ export function MainView() {
     (panels.inspector ? INSPECTOR_SIZE : 0) -
     (chatOpen ? CHAT_SIZE : 0);
 
-  // The bottom row (console / metrics) opens at its minimum height so the
+  // The bottom row (console) opens at its minimum height so the
   // editor + device get the most room; the user can drag it taller and the
   // size persists. `BOTTOM_MIN` must match the `main-bottom` Panel's `minSize`.
   const BOTTOM_MIN = 10;
-  const bottomVisible = panels.console || panels.metrics;
+  const bottomVisible = panels.console;
   const mainTopSize = bottomVisible ? 100 - BOTTOM_MIN : 100;
   const mainBottomSize = 100 - mainTopSize;
 
@@ -93,6 +97,11 @@ export function MainView() {
       resetSteps();
       initSteps(parseFlow(content).steps);
       useRunStore.getState().setRunTarget({ path, kind: "flow" });
+      const cloudTarget = useCloudTargetStore.getState().target;
+      if (cloudTarget) {
+        await startCloudRun(cloudTarget, [path]);
+        return;
+      }
       const pid = await ipc.runFlow(path, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · ${path}]`);
@@ -115,10 +124,16 @@ export function MainView() {
         await writeTextFile(filePath, content);
         useFlowStore.getState().saved(filePath);
       }
-      const { content: c2 } = useFlowStore.getState();
+      const { content: c2, filePath: fp2 } = useFlowStore.getState();
       resetSteps();
       initSteps(parseFlow(c2).steps);
-      useRunStore.getState().setRunTarget({ path: folder, kind: "all" });
+      // Run All executes every flow in the folder through one runner process;
+      // only the open file's flow may drive the editor/console step states.
+      useRunStore.getState().setRunTarget({
+        path: folder,
+        kind: "all",
+        expectedFlow: flowDisplayName(c2, fp2),
+      });
       const pid = await ipc.runFlow(folder, useSettingsStore.getState().appId);
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
@@ -163,29 +178,51 @@ export function MainView() {
   );
 
   const onStop = useCallback(async () => {
-    if (runningPid === null) return;
+    // Read the pid at call time (via getState) rather than subscribing to it,
+    // so MainView — which owns the whole panel layout — doesn't re-render on
+    // every run start/stop.
+    // A cloud run has no local process and no cancel endpoint: the most the
+    // app can do is stop watching, which stopWatchingCloudRun says out loud.
+    if (useRunStore.getState().cloud) {
+      stopWatchingCloudRun();
+      return;
+    }
+    const pid = useRunStore.getState().pid;
+    if (pid === null) return;
     useRunStore.getState().requestStop();
     try {
-      await ipc.stopFlow(runningPid);
+      await ipc.stopFlow(pid);
     } catch (err) {
       toast.error("Stop failed", err instanceof Error ? err.message : String(err));
     }
-  }, [runningPid]);
+  }, []);
 
   const shortcuts = useMemo(
     () => [
-      { key: "r", mod: true, handler: () => void onRun() },
-      {
-        key: "s",
-        mod: true,
-        handler: () => window.dispatchEvent(new CustomEvent("flow:command", { detail: "save" })),
-        allowInInput: true,
-      },
+      // On macOS the menu bar owns ⌘R / ⌘S (useAppMenu); binding them here
+      // too would fire twice.
+      ...(IS_MAC
+        ? []
+        : [
+            { key: "r", mod: true, handler: () => void onRun() },
+            {
+              key: "s",
+              mod: true,
+              handler: () =>
+                window.dispatchEvent(new CustomEvent("flow:command", { detail: "save" })),
+              allowInInput: true,
+            },
+          ]),
       { key: inspectKey, handler: () => void toggleInspect() },
     ],
     [onRun, toggleInspect, inspectKey],
   );
   useShortcuts(shortcuts);
+  useAppMenu({
+    onRun: () => void onRun(),
+    onRunAll: () => void onRunAll(),
+    onStop: () => void onStop(),
+  });
 
   return (
     <>
@@ -225,9 +262,6 @@ export function MainView() {
                 >
                   <PanelShell id="inspector">
                     <DeviceSelector />
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                      <InspectorPanel />
-                    </div>
                   </PanelShell>
                 </Panel>
                 <PanelResizeHandle className={RESIZE_HANDLE_H} />
@@ -253,9 +287,16 @@ export function MainView() {
                         >
                           <PanelShell
                             id="device"
-                            className="items-center justify-center bg-muted/40 p-4"
+                            className="items-center justify-center bg-card p-4"
                           >
                             <DeviceView />
+                            {cloudLive ? (
+                              <CloudLivePreview
+                                jobId={cloudLive.jobId}
+                                status={cloudLive.status}
+                                platform={cloudLive.platform}
+                              />
+                            ) : null}
                           </PanelShell>
                         </Panel>
                         {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
@@ -280,7 +321,7 @@ export function MainView() {
                   </PanelGroup>
                 </Panel>
 
-                {panels.console || panels.metrics ? (
+                {panels.console ? (
                   <>
                     <PanelResizeHandle className={RESIZE_HANDLE_V} />
                     <Panel
@@ -289,40 +330,9 @@ export function MainView() {
                       defaultSize={mainBottomSize}
                       minSize={BOTTOM_MIN}
                     >
-                      <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.bottom">
-                        {panels.console ? (
-                          <Panel
-                            id="console"
-                            order={1}
-                            defaultSize={panels.metrics ? 70 : 100}
-                            minSize={20}
-                          >
-                            <PanelShell id="console">
-                              <RunConsole onRun={() => void onRun()} onStop={() => void onStop()} />
-                            </PanelShell>
-                          </Panel>
-                        ) : null}
-
-                        {panels.metrics ? (
-                          <>
-                            {panels.console ? (
-                              <PanelResizeHandle className={RESIZE_HANDLE_H} />
-                            ) : null}
-                            <Panel
-                              id="metrics"
-                              order={2}
-                              defaultSize={panels.console ? 30 : 100}
-                              minSize={15}
-                            >
-                              <PanelShell id="metrics">
-                                <Suspense fallback={null}>
-                                  <MetricsPanel />
-                                </Suspense>
-                              </PanelShell>
-                            </Panel>
-                          </>
-                        ) : null}
-                      </PanelGroup>
+                      <PanelShell id="console">
+                        <RunConsole />
+                      </PanelShell>
                     </Panel>
                   </>
                 ) : null}

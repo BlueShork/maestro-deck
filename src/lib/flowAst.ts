@@ -56,6 +56,29 @@ export function parseFlow(source: string): FlowAst {
   return { steps, byKey };
 }
 
+/** The display name maestro uses for a flow in its output header
+ *  (` > Flow <name>`): the config doc's `name:` if present, else the file
+ *  stem. Used to gate Run All step matching onto the open file's flow. */
+export function flowDisplayName(source: string, filePath: string | null): string | null {
+  const docs = splitDocs(source);
+  if (docs.length > 1) {
+    try {
+      const header = yaml.load(docs[0].body);
+      if (header && typeof header === "object" && !Array.isArray(header)) {
+        const name = (header as Record<string, unknown>).name;
+        if (typeof name === "string" && name.trim()) return name.trim();
+      }
+    } catch {
+      // malformed header — fall through to the file stem
+    }
+  }
+  const stem = filePath
+    ?.split(/[\\/]/)
+    .pop()
+    ?.replace(/\.[^.]+$/, "");
+  return stem && stem.length > 0 ? stem : null;
+}
+
 interface DocSlice {
   body: string;
   startLine: number;

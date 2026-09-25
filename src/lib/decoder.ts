@@ -136,6 +136,8 @@ export class H264Decoder {
   private decoder: VideoDecoder;
   private configured = false;
   private closed = false;
+  private paused = false;
+  private waitingForKey = false;
 
   constructor(private readonly callbacks: DecoderCallbacks) {
     this.decoder = new VideoDecoder({
@@ -148,6 +150,19 @@ export class H264Decoder {
       },
       error: (e) => this.callbacks.onError(e),
     });
+  }
+
+  /**
+   * Drop incoming pictures without tearing the decoder down. Used while the
+   * mirror is hidden (Settings / Image Bank cover the app): the scrcpy config
+   * packet only arrives once per stream, so the decoder instance must survive
+   * the pause. On resume, delta frames are dropped until the next keyframe so
+   * the decoder never sees a delta whose reference frame was skipped.
+   */
+  setPaused(paused: boolean): void {
+    if (paused === this.paused) return;
+    this.paused = paused;
+    if (!paused) this.waitingForKey = true;
   }
 
   feed(payload: DecoderFramePayload): void {
@@ -166,6 +181,11 @@ export class H264Decoder {
       if (!this.configured) {
         // Drop pictures that arrive before the first config packet.
         return;
+      }
+      if (this.paused) return;
+      if (this.waitingForKey) {
+        if (!payload.isKey) return;
+        this.waitingForKey = false;
       }
       // Backpressure: drop delta frames when the decode queue is too deep.
       // Always let keyframes through to keep the stream resyncable.

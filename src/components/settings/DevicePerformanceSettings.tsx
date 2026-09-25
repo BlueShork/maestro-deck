@@ -42,9 +42,9 @@ export function DevicePerformanceSettings() {
           }
           description={
             <>
-              Keeps a <code className="font-mono">maestro studio</code> process warm in background
-              and talks gRPC directly to the on-device driver. First inspect takes ~15 s, subsequent
-              dumps drop from ~11 s to &lt;1 s. Falls back to the CLI path if studio fails.
+              Keeps a <code className="font-mono">maestro mcp</code> process warm in background and
+              talks gRPC directly to the on-device driver. First inspect takes ~15 s, subsequent
+              dumps drop from ~11 s to &lt;1 s. Falls back to the CLI path if the keeper fails.
             </>
           }
           checked={fastHierarchyEnabled}
@@ -62,7 +62,7 @@ export function DevicePerformanceSettings() {
               </span>
             </>
           }
-          description="Shows the Web Browser (Chromium) device in the device list. Web support is beta and still unstable — off by default."
+          description="Shows the Web Browser (Chromium) device in the device list. Runs are headless with a live view; the interactive browser window is hidden automatically."
           checked={webBrowserEnabled}
           onCheckedChange={setWebBrowserEnabled}
         />

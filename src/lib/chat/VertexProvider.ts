@@ -3,23 +3,13 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import type { ChatMessage } from "@/types/chat";
+import type { ChatMessage, ProviderEvent, ToolSpec } from "@/types/chat";
 
+import { mapAnthropicSSE, toAnthropicBody } from "./anthropicSerde";
+import { mapGeminiSSE, toGeminiBody } from "./geminiSerde";
 import { modelsByProvider } from "./models";
 import type { ChatProvider } from "./provider";
 import { readSSE } from "./sse";
-
-interface AnthropicVertexEvent {
-  type: string;
-  delta?: { type?: string; text?: string };
-}
-
-interface GeminiCandidate {
-  content?: { parts?: { text?: string }[] };
-}
-interface GeminiEvent {
-  candidates?: GeminiCandidate[];
-}
 
 export class VertexProvider implements ChatProvider {
   readonly id = "vertex" as const;
@@ -50,12 +40,14 @@ export class VertexProvider implements ChatProvider {
   async *stream({
     model,
     messages,
+    tools,
     signal,
   }: {
     model: string;
     messages: ChatMessage[];
+    tools: ToolSpec[];
     signal: AbortSignal;
-  }): AsyncIterable<string> {
+  }): AsyncIterable<ProviderEvent> {
     const token = await this.accessToken();
     const isAnthropic = model.startsWith("claude-");
     const publisher = isAnthropic ? "anthropic" : "google";
@@ -65,34 +57,12 @@ export class VertexProvider implements ChatProvider {
       `https://${this.region}-aiplatform.googleapis.com/v1/projects/${this.projectId}` +
       `/locations/${this.region}/publishers/${publisher}/models/${model}:${endpoint}`;
 
-    const systemPrompt = messages
-      .filter((m) => m.role === "system")
-      .map((m) => m.content)
-      .join("\n\n");
-    const nonSystem = messages.filter((m) => m.role !== "system");
-
+    // cache_control marks the system block as cacheable on Vertex
+    // (same semantics as the direct Anthropic API). Implicit cache
+    // already covers Gemini, so toGeminiBody needs no marker.
     const body = isAnthropic
-      ? {
-          anthropic_version: "vertex-2023-10-16",
-          stream: true,
-          max_tokens: 4096,
-          // cache_control marks the system block as cacheable on Vertex
-          // (same semantics as the direct Anthropic API). Implicit cache
-          // already covers Gemini, so the else-branch needs no marker.
-          system: systemPrompt
-            ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
-            : undefined,
-          messages: nonSystem.map((m) => ({ role: m.role, content: m.content })),
-        }
-      : {
-          systemInstruction: systemPrompt
-            ? { role: "system", parts: [{ text: systemPrompt }] }
-            : undefined,
-          contents: nonSystem.map((m) => ({
-            role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }],
-          })),
-        };
+      ? toAnthropicBody(messages, tools, { vertex: true })
+      : toGeminiBody(messages, tools);
 
     const resp = await fetch(url, {
       method: "POST",
@@ -110,20 +80,9 @@ export class VertexProvider implements ChatProvider {
     }
 
     if (isAnthropic) {
-      for await (const evt of readSSE(resp.body) as AsyncIterable<AnthropicVertexEvent>) {
-        if (
-          evt.type === "content_block_delta" &&
-          evt.delta?.type === "text_delta" &&
-          evt.delta.text
-        ) {
-          yield evt.delta.text;
-        }
-      }
+      yield* mapAnthropicSSE(readSSE(resp.body));
     } else {
-      for await (const evt of readSSE(resp.body) as AsyncIterable<GeminiEvent>) {
-        const text = evt.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) yield text;
-      }
+      yield* mapGeminiSSE(readSSE(resp.body));
     }
   }
 }

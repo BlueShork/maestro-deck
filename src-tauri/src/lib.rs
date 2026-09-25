@@ -3,11 +3,15 @@
 
 //! Maestro Deck — source-available visual IDE for Maestro mobile tests.
 
+pub mod app_control;
+mod app_menu;
 #[cfg(target_os = "macos")]
 pub mod avf_capture;
 pub mod bank;
+pub mod cloud;
 pub mod credentials;
 pub mod device;
+mod env_check;
 mod env_shim;
 pub mod error;
 pub mod hierarchy;
@@ -17,8 +21,11 @@ pub mod ios_capture;
 pub mod ios_session;
 pub mod ipc;
 pub mod maestro_health;
+pub mod maestro_mcp;
 pub mod metrics;
+pub mod onboarding;
 pub mod process_ext;
+pub mod prockill;
 pub mod runner;
 pub mod scrcpy;
 pub mod selector;
@@ -26,15 +33,18 @@ pub mod selector;
 pub mod sim_capture;
 pub mod state;
 pub mod tool_paths;
+pub mod tool_setup;
 pub mod vertex;
 pub mod video;
 mod web_session;
 pub mod workspace;
+pub mod workspace_fs;
 pub mod yaml;
 
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{fmt, EnvFilter};
 
+use app_control::{launch_app, stop_app};
 use credentials::{delete_credential, get_credential, save_credential};
 use ipc::commands::*;
 use tool_paths::{get_tool_paths, set_tool_paths};
@@ -52,6 +62,9 @@ pub fn run() {
     // include adb / maestro / java. Inherit the user's shell env before we
     // expose any subprocess command.
     env_shim::enrich_from_login_shell();
+    // After the login shell, so a JDK we installed wins over an older system
+    // one — we only ever install when the machine's own Java was rejected.
+    tool_setup::install::apply_managed_java_env();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -66,8 +79,10 @@ pub fn run() {
 
     builder
         .manage(state::AppState::default())
+        .manage(app_menu::MenuChecks::default())
         .invoke_handler(tauri::generate_handler![
             ping,
+            app_menu::set_menu_checked,
             app_version,
             list_devices,
             connect_device,
@@ -88,8 +103,24 @@ pub fn run() {
             get_dark_mode,
             run_flow,
             stop_flow,
+            launch_app,
+            stop_app,
             bank::ipc::compare_screenshots,
+            bank::ipc::compare_screenshots_all,
             bank::ipc::resolve_comparison,
+            bank::ipc::list_bank,
+            bank::ipc::load_bank_image,
+            bank::ipc::delete_bank_image,
+            bank::ipc::delete_bank_device,
+            onboarding::install_sample_app,
+            onboarding::sample_app_apk,
+            tool_setup::install::setup_tools,
+            tool_setup::install::managed_tools,
+            cloud::cloud_upload_file,
+            cloud::cloud_api_request,
+            cloud::cloud_download_text,
+            workspace_fs::read_workspace_file,
+            workspace_fs::write_workspace_file,
             list_workspace,
             start_metrics,
             stop_metrics,
@@ -102,6 +133,8 @@ pub fn run() {
             delete_credential,
             get_tool_paths,
             set_tool_paths,
+            env_check::environment_status,
+            env_check::install_tool,
         ])
         .setup(|app| {
             ipc::register_events(app)?;
@@ -110,62 +143,11 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.maximize();
             }
-            // macOS only: the default app menu's "Quit" (Cmd+Q) calls AppKit
-            // `terminate:`, which hard-exits WITHOUT a preventable
-            // `RunEvent::ExitRequested` — so the confirm dialog never gets a
-            // chance. Replace the menu with one whose Quit is a plain item that
-            // emits `quit-requested` instead of terminating; the rest mirrors
-            // the macOS defaults (predefined items keep their native behaviour,
-            // so editor copy/paste/undo still work). Windows/Linux have no app
-            // menu and quit via the window close path (handled below).
+            // macOS only: native menu bar (see app_menu.rs, including why Quit
+            // is a custom item). Windows/Linux have no app menu and quit via
+            // the window close path (handled below).
             #[cfg(target_os = "macos")]
-            {
-                use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-                let h = app.handle();
-                let quit = MenuItemBuilder::new("Quit Maestro Deck")
-                    .id("quit")
-                    .accelerator("Cmd+Q")
-                    .build(h)?;
-                let app_menu = SubmenuBuilder::new(h, "Maestro Deck")
-                    .about(Some(AboutMetadata::default()))
-                    .separator()
-                    .services()
-                    .separator()
-                    .hide()
-                    .hide_others()
-                    .show_all()
-                    .separator()
-                    .item(&quit)
-                    .build()?;
-                let edit_menu = SubmenuBuilder::new(h, "Edit")
-                    .undo()
-                    .redo()
-                    .separator()
-                    .cut()
-                    .copy()
-                    .paste()
-                    .select_all()
-                    .build()?;
-                let window_menu = SubmenuBuilder::new(h, "Window")
-                    .minimize()
-                    .maximize()
-                    .separator()
-                    .fullscreen()
-                    .close_window()
-                    .build()?;
-                let menu = MenuBuilder::new(h)
-                    .item(&app_menu)
-                    .item(&edit_menu)
-                    .item(&window_menu)
-                    .build()?;
-                app.set_menu(menu)?;
-                let quit_id = quit.id().clone();
-                app.on_menu_event(move |app, event| {
-                    if event.id() == &quit_id {
-                        let _ = app.emit("quit-requested", ());
-                    }
-                });
-            }
+            app_menu::install(app)?;
             Ok(())
         })
         // Intercept the window close button (and Windows close): hold the close

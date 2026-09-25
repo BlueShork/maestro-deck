@@ -3,8 +3,9 @@
 
 import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
-import { Camera, House, Loader2, Moon, Smartphone, Sun } from "lucide-react";
+import { Camera, House, Moon, Smartphone, Sun } from "lucide-react";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -16,18 +17,23 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 
+import { DottedGrid } from "@/components/effects/DottedGrid";
 import { InspectActionMenu } from "@/components/InspectActionMenu";
+import { Logo } from "@/components/Logo";
+import LatticeLoader from "@/components/ui/LatticeLoader";
 import { H264Decoder } from "@/lib/decoder";
+import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
+import { useLocation } from "react-router-dom";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import type { Bounds, Selector, UINode } from "@/types";
+import type { Selector, UINode } from "@/types";
 
 function nodeArea(n: UINode): number {
   const w = n.bounds.right - n.bounds.left;
@@ -78,10 +84,17 @@ function findSmallestAt(root: UINode, x: number, y: number): UINode | null {
   return bestTargetable ?? bestAny;
 }
 
-function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
+function useFrameStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<VideoFrame | null>(null);
   const rafRef = useRef<number | null>(null);
+  const decoderRef = useRef<H264Decoder | null>(null);
+
+  // Pause/resume without recreating the decoder: the scrcpy config packet
+  // (SPS/PPS) only arrives once per stream, so the instance must survive.
+  useEffect(() => {
+    decoderRef.current?.setPaused(paused);
+  }, [paused]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -127,6 +140,7 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
         toast.error("Decoder error", err.message);
       },
     });
+    decoderRef.current = decoder;
 
     void events
       .onFrame((payload) => {
@@ -145,12 +159,13 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement>) {
         pendingRef.current.close();
         pendingRef.current = null;
       }
+      decoderRef.current = null;
       decoder.close();
     };
   }, [canvasRef, pushFrame]);
 }
 
-function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
+function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   // Hold the decoded bitmap plus the frame's *reported* dimensions. For iOS the
   // reported dims equal the bitmap's natural size, but for web the PNG is at
@@ -160,6 +175,8 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   // so overlay scaling and hit-testing use the right space.
   const pendingRef = useRef<{ bmp: ImageBitmap; w: number; h: number } | null>(null);
   const rafRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   useEffect(() => {
     const unlistens: Array<() => void> = [];
@@ -193,6 +210,7 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
     // iOS and web both deliver PNG screenshots; only the connected platform's
     // poller emits, so subscribing to both events is safe.
     const onShot = async (payload: { data: Uint8Array; width: number; height: number }) => {
+      if (pausedRef.current) return;
       try {
         // Copy the exact view region into a fresh buffer: robust if `data`
         // is ever a subarray, and yields a concrete-buffer typed array that
@@ -238,12 +256,18 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement>) {
   }, [canvasRef, pushFrame]);
 }
 
-function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean) {
+function useNativePreviewStream(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  enabled: boolean,
+  paused: boolean,
+) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   const pendingRef = useRef<{ w: number; h: number; rgba: Uint8ClampedArray<ArrayBuffer> } | null>(
     null,
   );
   const rafRef = useRef<number | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   useEffect(() => {
     if (!enabled) return;
@@ -265,7 +289,7 @@ function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled
 
     const channel = new Channel<ArrayBuffer>();
     channel.onmessage = (buf) => {
-      if (cancelled || buf.byteLength < 8) return;
+      if (cancelled || pausedRef.current || buf.byteLength < 8) return;
       const view = new DataView(buf);
       const w = view.getUint32(0, true);
       const h = view.getUint32(4, true);
@@ -302,6 +326,44 @@ function useNativePreviewStream(canvasRef: RefObject<HTMLCanvasElement>, enabled
   }, [canvasRef, enabled, pushFrame]);
 }
 
+/**
+ * Hover highlight for inspect mode. Subscribes to `hovered` itself so that
+ * pointer moves re-render only this leaf, not the whole DeviceView subtree
+ * (canvas, control cluster, handlers).
+ */
+const InspectorOverlay = memo(function InspectorOverlay({
+  enabled,
+  canvasRect,
+  displayW,
+  displayH,
+  overlayScaleX,
+  overlayScaleY,
+  scale,
+}: {
+  enabled: boolean;
+  canvasRect: { width: number; height: number };
+  displayW: number;
+  displayH: number;
+  overlayScaleX: number;
+  overlayScaleY: number;
+  scale: number;
+}) {
+  const hovered = useInspectorStore((s) => s.hovered);
+  const bounds = hovered?.bounds ?? null;
+  if (!enabled || !bounds || scale <= 0) return null;
+  return (
+    <div
+      className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
+      style={{
+        left: (canvasRect.width - displayW) / 2 + bounds.left * overlayScaleX,
+        top: (canvasRect.height - displayH) / 2 + bounds.top * overlayScaleY,
+        width: (bounds.right - bounds.left) * overlayScaleX,
+        height: (bounds.bottom - bounds.top) * overlayScaleY,
+      }}
+    />
+  );
+});
+
 export function DeviceView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -314,7 +376,6 @@ export function DeviceView() {
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const inspectEnabled = useInspectorStore((s) => s.enabled);
   const tree = useInspectorStore((s) => s.tree);
-  const hovered = useInspectorStore((s) => s.hovered);
   const setHovered = useInspectorStore((s) => s.setHovered);
   const select = useInspectorStore((s) => s.select);
   const scheduleAutoRefresh = useInspectorStore((s) => s.scheduleAutoRefresh);
@@ -324,17 +385,29 @@ export function DeviceView() {
     x: number;
     y: number;
     node: UINode;
-    selector: Selector | null;
+    selectors: Selector[];
   } | null>(null);
+
+  // Settings ("/settings/*") and Image Bank ("/image-bank") cover MainView
+  // (App keeps it mounted but CSS-hidden). Every other path redirects to "/",
+  // so `pathname !== "/"` is exactly "the mirror is invisible".
+  const mirrorPaused = useLocation().pathname !== "/";
 
   // Dark-mode toggle is an Android-only `adb` feature; hidden for iOS and web.
   const noDarkMode = current?.platform !== "android";
   // Both hooks mount unconditionally (Rules of Hooks). They listen to
   // different events (`frame` / `ios_frame` / `web_frame`), so only the
   // connected platform actually paints — the Android H.264 hook is unchanged.
-  useFrameStream(canvasRef);
-  useScreenshotStream(canvasRef);
-  useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled);
+  useFrameStream(canvasRef, mirrorPaused);
+  useScreenshotStream(canvasRef, mirrorPaused);
+  useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled, mirrorPaused);
+
+  // Register this canvas in the module-level registry so non-React code
+  // (e.g. Billy's take_screenshot tool) can capture frames without prop-drilling.
+  useEffect(() => {
+    registerDeviceCanvas(canvasRef.current);
+    return () => registerDeviceCanvas(null);
+  }, []);
 
   const deviceWidth = streamW || current?.screen_width || 1080;
   const deviceHeight = streamH || current?.screen_height || 2340;
@@ -504,7 +577,7 @@ export function DeviceView() {
           x: e.clientX,
           y: e.clientY,
           node,
-          selector: selectors[0] ?? null,
+          selectors,
         });
       } catch (err) {
         toast.error("Inspect failed", err instanceof Error ? err.message : String(err));
@@ -695,7 +768,10 @@ export function DeviceView() {
     [current, toDeviceCoords, wheelFlush],
   );
 
-  const overlayBounds: Bounds | null = hovered?.bounds ?? null;
+  const canvasStyle = useMemo(
+    () => ({ width: displayW || undefined, height: displayH || undefined }),
+    [displayW, displayH],
+  );
 
   return (
     <div
@@ -722,23 +798,18 @@ export function DeviceView() {
           !hasFrame && "hidden",
           inspectEnabled && "cursor-crosshair",
         )}
-        style={{
-          width: displayW || undefined,
-          height: displayH || undefined,
-        }}
+        style={canvasStyle}
       />
 
-      {inspectEnabled && overlayBounds && scale > 0 ? (
-        <div
-          className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
-          style={{
-            left: (canvasRect.width - displayW) / 2 + overlayBounds.left * overlayScaleX,
-            top: (canvasRect.height - displayH) / 2 + overlayBounds.top * overlayScaleY,
-            width: (overlayBounds.right - overlayBounds.left) * overlayScaleX,
-            height: (overlayBounds.bottom - overlayBounds.top) * overlayScaleY,
-          }}
-        />
-      ) : null}
+      <InspectorOverlay
+        enabled={inspectEnabled}
+        canvasRect={canvasRect}
+        displayW={displayW}
+        displayH={displayH}
+        overlayScaleX={overlayScaleX}
+        overlayScaleY={overlayScaleY}
+        scale={scale}
+      />
 
       {hasFrame ? (
         <div className="absolute right-3 top-3 z-10 flex gap-2">
@@ -785,7 +856,7 @@ export function DeviceView() {
           x={actionMenu.x}
           y={actionMenu.y}
           node={actionMenu.node}
-          selector={actionMenu.selector}
+          selectors={actionMenu.selectors}
           onClose={() => setActionMenu(null)}
         />
       ) : null}
@@ -816,53 +887,74 @@ function EmptyState({
   if (iosPhysical && connected && !lightweight) {
     return <IosPhysicalWaiting />;
   }
+  if (!connected) {
+    return (
+      <DottedGrid className="pointer-events-none aspect-[9/19.5] h-full w-auto rounded-2xl border border-border">
+        <Logo className="h-auto w-40 text-foreground" />
+        <div className="max-w-[16rem] text-xs text-muted-foreground">
+          Plug in an Android device with USB debugging enabled, then pick it in the sidebar.
+        </div>
+      </DottedGrid>
+    );
+  }
+  if (lightweight) {
+    return (
+      <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+        <Smartphone className="h-10 w-10 text-muted-foreground/60" />
+        <div className="text-sm font-medium">Lightweight mode</div>
+        <div className="max-w-[16rem] text-xs text-muted-foreground">
+          Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle
+          in Settings to re-enable mirroring.
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
-      <Smartphone className="h-10 w-10 text-muted-foreground/60" />
-      <div className="text-sm font-medium">
-        {lightweight
-          ? "Lightweight mode"
-          : connected
-            ? "Waiting for frames…"
-            : "No device connected"}
-      </div>
+      <PreviewLoader label="Waiting for the first frame" />
       <div className="max-w-[16rem] text-xs text-muted-foreground">
-        {lightweight
-          ? "Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle in Settings to re-enable mirroring."
-          : connected
-            ? "The stream will appear here once scrcpy pushes the first frame."
-            : "Plug in an Android device with USB debugging enabled, then pick it in the sidebar."}
+        The stream will appear here once scrcpy pushes the first frame.
       </div>
     </div>
   );
 }
 
+/** The same loader the cloud preview waits with, so every "the screen is on
+ *  its way" reads the same, local or cloud. */
+function PreviewLoader({ label }: { label: string }) {
+  return (
+    <LatticeLoader
+      label={label}
+      grid={4}
+      pattern="pulse"
+      cellSize={8}
+      gap={3}
+      fontSize={13}
+      className="flex-col text-foreground"
+    />
+  );
+}
+
 /// Physical-iPhone preview placeholder. The first connect builds the XCTest driver
-/// on the device (~10 min), so we show an animated spinner, a phase message, and a
-/// running elapsed timer to make clear it's progressing — not frozen.
+/// on the device (~10 min), so the loader's stopwatch and a phase message make
+/// clear it's progressing — not frozen.
 function IosPhysicalWaiting() {
-  const [elapsed, setElapsed] = useState(0);
+  // After ~25s the bridge is almost certainly in the xcodebuild phase. Only the
+  // label changes, so the loader keeps counting from the first connect.
+  const [building, setBuilding] = useState(false);
   useEffect(() => {
-    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => window.clearInterval(id);
+    const id = window.setTimeout(() => setBuilding(true), 25_000);
+    return () => window.clearTimeout(id);
   }, []);
-  // After ~25s the bridge is almost certainly in the xcodebuild phase.
-  const building = elapsed >= 25;
-  const mm = Math.floor(elapsed / 60);
-  const ss = String(elapsed % 60).padStart(2, "0");
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
-      <Loader2 className="h-10 w-10 animate-spin text-muted-foreground/70" />
-      <div className="text-sm font-medium">
-        {building ? "Building the test driver on your iPhone…" : "Connecting to your iPhone…"}
-      </div>
+      <PreviewLoader
+        label={building ? "Building the test driver on your iPhone" : "Connecting to your iPhone"}
+      />
       <div className="max-w-[18rem] text-xs text-muted-foreground">
         {building
           ? "First connect builds the XCTest driver on the device — this can take up to ~10 min. Keep the iPhone unlocked and plugged in; tap Trust if prompted."
           : "Starting the device bridge…"}
-      </div>
-      <div className="font-mono text-xs text-muted-foreground/80">
-        Elapsed {mm}:{ss}
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
 [package]
 name = "maestro-deck"
-version = "0.7.0"
+version = "0.9.6"
 description = "Source-available visual IDE for Maestro mobile tests"
-authors = ["Ethan Morisset <blueshork.dev@gmail.com>"]
+authors = ["Ethan Morisset <contact@maestrodeck.cloud>"]
 license = "BUSL-1.1"
 repository = "https://github.com/BlueShork/maestro-deck"
 edition = "2021"
@@ -41,13 +41,18 @@ jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 # only the bundled Mozilla roots, so corporate TLS-inspection proxies (whose
 # MITM CA lives in the OS trust store) break every request — downloads and
 # Vertex token exchange fail on work machines while the browser works fine.
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
 base64 = "0.22"
+# Wraps a tokio file as a byte stream so an APK is streamed to GCS instead of
+# being read into memory first.
+tokio-util = { version = "0.7", features = ["codec"] }
 
 # Async runtime
 tokio = { version = "1.41", features = ["full"] }
 async-trait = "0.1"
 futures = "0.3"
+# CDP screencast mirror of headless web runs (plain ws://, no TLS needed)
+tokio-tungstenite = "0.24"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -85,9 +90,12 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 
 # gRPC client for talking directly to the on-device Maestro driver
 # (bypasses the slow `maestro hierarchy` CLI invocation path when the
-# driver is kept alive by a background `maestro studio` process).
+# driver is kept alive by a background `maestro mcp` process).
 tonic = { version = "0.12", default-features = false, features = ["codegen", "prost", "transport"] }
 prost = "0.13"
+zip = "2"
+flate2 = "1"
+tar = "0.4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 # Auto-update is desktop-only. The plugin downloads the new bundle from

@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 describe("panelsStore", () => {
-  it("defaults panels to visible except the metrics tab", () => {
+  it("defaults every panel to visible", () => {
     const { visible } = usePanelsStore.getState();
     expect(visible).toEqual({
       workspace: true,
@@ -34,8 +34,6 @@ describe("panelsStore", () => {
       device: true,
       editor: true,
       console: true,
-      // The Performance tab is closed by default — opening it starts capture.
-      metrics: false,
     });
   });
 
@@ -53,8 +51,8 @@ describe("panelsStore", () => {
   });
 
   it("hide forces a panel hidden", () => {
-    usePanelsStore.getState().hide("metrics");
-    expect(usePanelsStore.getState().visible.metrics).toBe(false);
+    usePanelsStore.getState().hide("console");
+    expect(usePanelsStore.getState().visible.console).toBe(false);
   });
 
   it("does not affect other panels when toggling one", () => {
@@ -65,58 +63,47 @@ describe("panelsStore", () => {
     expect(v.console).toBe(true);
   });
 
-  it("migratePanelsStore v0→v1 forces metrics:false even when persisted as true", () => {
+  it.each([0, 1])("migratePanelsStore from v%i drops the old metrics flag", (from) => {
     const persisted = {
       visible: {
-        workspace: true,
+        workspace: false,
         inspector: true,
         device: true,
         editor: true,
         console: true,
-        metrics: true, // old persisted value from before the closed-by-default change
+        metrics: true,
       },
     };
-    const result = migratePanelsStore(persisted, 0) as {
+    const result = migratePanelsStore(persisted, from) as {
       visible: Record<string, boolean>;
     };
-    expect(result.visible.metrics).toBe(false);
-    // Other flags must be preserved
-    expect(result.visible.workspace).toBe(true);
-    expect(result.visible.inspector).toBe(true);
-    expect(result.visible.device).toBe(true);
-    expect(result.visible.editor).toBe(true);
-    expect(result.visible.console).toBe(true);
+    expect(result.visible).toEqual({
+      workspace: false,
+      inspector: true,
+      device: true,
+      editor: true,
+      console: true,
+    });
   });
 
-  it("migratePanelsStore v0→v1 tolerates missing visible object", () => {
+  it("migratePanelsStore tolerates a missing visible object", () => {
     const result = migratePanelsStore(null, 0) as {
       visible: Record<string, boolean>;
     };
-    expect(result.visible.metrics).toBe(false);
+    expect(result.visible).toEqual({});
   });
 
-  it("migratePanelsStore is a no-op for current version (fromVersion >= 1)", () => {
-    const persisted = {
-      visible: { workspace: false, metrics: true },
-    };
-    const result = migratePanelsStore(persisted, 1);
-    // Must return the persisted value unchanged
-    expect(result).toBe(persisted);
+  it("migratePanelsStore is a no-op for the current version", () => {
+    const persisted = { visible: { workspace: false } };
+    expect(migratePanelsStore(persisted, 2)).toBe(persisted);
   });
 
-  it("showAll restores every panel except the metrics tab", () => {
+  it("showAll restores every panel", () => {
     const s = usePanelsStore.getState();
     s.hide("workspace");
     s.hide("inspector");
     s.hide("device");
     s.showAll();
-    const v = usePanelsStore.getState().visible;
-    expect(v.workspace).toBe(true);
-    expect(v.inspector).toBe(true);
-    expect(v.device).toBe(true);
-    expect(v.editor).toBe(true);
-    expect(v.console).toBe(true);
-    // Restoring panels shouldn't silently start metric capture.
-    expect(v.metrics).toBe(false);
+    expect(Object.values(usePanelsStore.getState().visible).every(Boolean)).toBe(true);
   });
 });

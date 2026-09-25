@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 
 use crate::device::Device;
-use crate::hierarchy::studio::StudioKeeper;
+use crate::hierarchy::driver_keeper::DriverKeeper;
 use crate::hierarchy::HierarchyTree;
 use crate::ios_session::IosDriverKeeper;
 use crate::selector::SpatialIndex;
@@ -25,11 +25,11 @@ pub struct AppState {
     pub stream_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
     pub scrcpy_child: AsyncMutex<Option<tokio::process::Child>>,
 
-    // Background `maestro studio` process that keeps the on-device
+    // Background `maestro mcp` process that keeps the on-device
     // gRPC driver alive for the fast-hierarchy path. Lazily spawned
     // on the first fast-mode inspect request and torn down when the
     // device disconnects (see `commands::disconnect_device`).
-    pub studio: AsyncMutex<Option<Arc<StudioKeeper>>>,
+    pub driver_keeper: AsyncMutex<Option<Arc<DriverKeeper>>>,
 
     pub ios_driver: AsyncMutex<Option<Arc<IosDriverKeeper>>>,
     pub ios_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
@@ -39,7 +39,7 @@ pub struct AppState {
     /// `/status` + `/hierarchy` and inspect hangs. The poller pauses while set.
     pub ios_inspect_active: std::sync::atomic::AtomicBool,
     /// True while a `maestro test` run is in flight on an iOS **simulator**.
-    /// The simulator driver (`maestro studio` on :22087) and `maestro test`
+    /// The simulator driver (`maestro mcp` keeper, runner on :22087) and `maestro test`
     /// can't coexist, so the run stops the keeper first — this flag then blocks
     /// `ensure_ios_keeper` from re-warming a competing keeper (inspector dumps,
     /// taps) until the run exits, which would otherwise deadlock both on :22087.
@@ -47,8 +47,26 @@ pub struct AppState {
     #[cfg(target_os = "macos")]
     pub ios_preview_session: AsyncMutex<Option<crate::ios_session::PreviewHandle>>,
 
-    pub web_driver: AsyncMutex<Option<Arc<crate::web_session::WebStudioKeeper>>>,
+    pub web_driver: AsyncMutex<Option<Arc<crate::web_session::WebDriverKeeper>>>,
     pub web_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
+    /// True while a `maestro -p web test` run is in flight. The web keeper's
+    /// browser and the test's own browser can't coexist, so `run_flow` stops the
+    /// keeper first — this flag then blocks `ensure_web_keeper` from re-spawning
+    /// a competing one (inspect, taps) until the run exits. Mirror of
+    /// `ios_sim_run_active`.
+    pub web_run_active: std::sync::atomic::AtomicBool,
+    /// Consecutive `WebDriverKeeper::start` failures — drives the exponential
+    /// respawn backoff (1 s / 2 s / 4 s) in `ensure_web_keeper`, reset on success.
+    pub web_respawn_fails: std::sync::atomic::AtomicU32,
+    /// Last real page URL seen in the web session (from the preview's CDP
+    /// target; never a blank/`data:` tab). Survives keeper teardown so a
+    /// respawn — after a run, or after a transient driver failure — restores
+    /// the user's page instead of a blank tab.
+    pub web_last_url: RwLock<Option<String>>,
+    /// Abort handle of the CDP run mirror (live view of a headless web run).
+    /// Fired by the runner's exit task — or by teardown if the user
+    /// disconnects mid-run.
+    pub web_run_mirror_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
 
     /// Set once the user has confirmed quitting (or opted out of the prompt).
     /// The window-close / app-exit handlers prevent the first quit to show the

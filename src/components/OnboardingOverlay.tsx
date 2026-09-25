@@ -1,0 +1,359 @@
+// Copyright (c) 2026 Ethan Morisset
+// SPDX-License-Identifier: BUSL-1.1
+
+import { Cloud, Loader2, Smartphone, X } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { LoginCard } from "@/components/LoginCard";
+import { Button } from "@/components/ui/Button";
+import { ipc } from "@/lib/ipc";
+import { cn } from "@/lib/utils";
+import { useCloudAuthStore } from "@/stores/cloudAuthStore";
+import { useCloudTargetStore } from "@/stores/cloudTargetStore";
+import { useDeviceStore } from "@/stores/deviceStore";
+import { useFlowStore } from "@/stores/flowStore";
+import {
+  ONBOARDING_FLOW,
+  onboardingRunState,
+  useOnboardingStore,
+  walkthroughBlocks,
+  walkthroughCandidates,
+} from "@/stores/onboardingStore";
+import { useRunStore } from "@/stores/runStore";
+import { toast } from "@/stores/toastStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
+
+/**
+ * The hands-on half of onboarding: pick where to run, install the sample app,
+ * write a real flow, run it.
+ *
+ * It drives the product rather than reimplementing it — the run goes through
+ * the same Run button, the same store, the same cloud path as any other. What
+ * it adds is the order and the explanation.
+ */
+export function OnboardingOverlay() {
+  const active = useOnboardingStore((s) => s.active);
+  const step = useOnboardingStore((s) => s.step);
+  const hasFolder = useWorkspaceStore((s) => s.folderPath !== null);
+
+  if (!active) return null;
+
+  const blocking = walkthroughBlocks(step, hasFolder);
+
+  return (
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex",
+        blocking
+          ? "items-center justify-center bg-background/70 backdrop-blur-sm"
+          : // No backdrop and no hit area: the step is asking for something in
+            // the app behind it, so every click has to reach through.
+            "pointer-events-none items-end justify-center p-4",
+      )}
+    >
+      <div
+        className={cn(
+          "pointer-events-auto relative w-[min(560px,calc(100vw-48px))] rounded-xl border border-border bg-card p-5",
+          blocking ? "shadow-2xl" : "shadow-xl",
+        )}
+      >
+        {/* Quitting is available at every step, as promised on the way in. */}
+        <button
+          type="button"
+          aria-label="Leave the walkthrough"
+          onClick={() => useOnboardingStore.getState().quit()}
+          className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        {step === "choose-target" ? <ChooseTarget /> : null}
+        {step === "sign-in" ? <SignInStep /> : null}
+        {step === "install" ? <InstallStep /> : null}
+        {step === "write" ? <WriteStep /> : null}
+        {step === "run" ? <RunStep /> : null}
+      </div>
+    </div>
+  );
+}
+
+function Title({ children, sub }: { children: string; sub: string }) {
+  return (
+    <div className="mb-4 pr-6">
+      <h2 className="text-base font-semibold tracking-tight">{children}</h2>
+      <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{sub}</p>
+    </div>
+  );
+}
+
+function ChooseTarget() {
+  const signedIn = useCloudAuthStore((s) => s.user !== null);
+
+  return (
+    <>
+      <Title sub="Both work. They differ in what you get to watch, and what it costs.">
+        Where should your first test run?
+      </Title>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => useOnboardingStore.getState().chooseTarget("device")}
+          className="rounded-lg border border-border p-3 text-left transition-colors hover:border-foreground/30 hover:bg-accent/40"
+        >
+          <Smartphone className="mb-2 h-4 w-4 text-muted-foreground" />
+          <div className="text-xs font-semibold">On your phone</div>
+          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+            Plug it in with USB debugging on. You watch it happen in the mirror, and it costs
+            nothing.
+          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => useOnboardingStore.getState().chooseTarget("cloud", { signedIn })}
+          className="rounded-lg border border-border p-3 text-left transition-colors hover:border-foreground/30 hover:bg-accent/40"
+        >
+          <Cloud className="mb-2 h-4 w-4 text-muted-foreground" />
+          <div className="text-xs font-semibold">In the cloud</div>
+          {/* Said here, not discovered later: a slow live view, and it is billed. */}
+          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+            No phone needed. You watch the emulator about once a second, it needs an account, and it
+            spends one of your runs.
+          </p>
+        </button>
+      </div>
+    </>
+  );
+}
+
+function SignInStep() {
+  const user = useCloudAuthStore((s) => s.user);
+
+  // The dialog exists so the onboarding never navigates away; the moment the
+  // account is live we carry on from the same step.
+  useEffect(() => {
+    if (user) useOnboardingStore.getState().signedIn();
+  }, [user]);
+
+  return (
+    <>
+      <Title sub="Cloud runs need an account. This takes a minute, and you come straight back here.">
+        Create your account
+      </Title>
+      <LoginCard />
+    </>
+  );
+}
+
+function InstallStep() {
+  const target = useOnboardingStore((s) => s.target);
+  const devices = useDeviceStore((s) => s.devices);
+  const current = useDeviceStore((s) => s.current);
+  const [busy, setBusy] = useState(false);
+
+  if (target === "cloud") {
+    return (
+      <>
+        <Title sub="The sample app ships with Maestro Deck and is uploaded with your run, so there is nothing to install here.">
+          Nothing to install
+        </Title>
+        <StepButton onClick={() => useOnboardingStore.getState().next()}>Continue</StepButton>
+      </>
+    );
+  }
+
+  const candidates = walkthroughCandidates(devices);
+
+  if (candidates.length === 0) {
+    return (
+      <>
+        <Title sub="Plug it in over USB with developer mode and USB debugging enabled. This screen picks it up on its own — there is nothing to click behind this dialog.">
+          Connect your phone
+        </Title>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Waiting for a device…
+        </div>
+      </>
+    );
+  }
+
+  // Whatever is already selected, else the first Android we can see. The run
+  // needs a *connected* device, so this step connects it rather than sending
+  // the user to a panel this dialog is covering.
+  const chosen = candidates.find((d) => d.serial === current?.serial) ?? candidates[0];
+
+  const install = async () => {
+    setBusy(true);
+    try {
+      if (current?.serial !== chosen.serial) {
+        await useDeviceStore.getState().connect(chosen.serial);
+      }
+      await ipc.installSampleApp(chosen.serial);
+      useOnboardingStore.getState().next();
+    } catch (err) {
+      toast.error("Install failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Title sub={`A tiny sign-in screen, built for this walkthrough. It goes on ${chosen.model}.`}>
+        Install the sample app
+      </Title>
+      <StepButton onClick={() => void install()} busy={busy}>
+        {busy ? "Installing…" : `Install it on ${chosen.model}`}
+      </StepButton>
+    </>
+  );
+}
+
+function WriteStep() {
+  const folder = useWorkspaceStore((s) => s.folderPath);
+  const [busy, setBusy] = useState(false);
+
+  const write = async () => {
+    if (!folder) return;
+    setBusy(true);
+    try {
+      await ipc.writeWorkspaceFile(folder, "onboarding.yaml", ONBOARDING_FLOW);
+      // Straight into the editor: the point is to read it, not to find it.
+      useFlowStore.getState().loaded(ONBOARDING_FLOW, `${folder}/onboarding.yaml`);
+      useOnboardingStore.getState().next();
+    } catch (err) {
+      toast.error("Could not write the flow", err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!folder) {
+    return (
+      <>
+        <Title sub="Open a folder from the workspace panel on the left. Your flow belongs somewhere you can find it again — that is how you will work day to day.">
+          Choose where your flows live
+        </Title>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Title sub="Six steps: launch the app, check the screen, fill the field, submit, check it worked. Each line is one step, and the comments explain them.">
+        Write your first flow
+      </Title>
+      <StepButton onClick={() => void write()} busy={busy}>
+        Create onboarding.yaml
+      </StepButton>
+    </>
+  );
+}
+
+function RunStep() {
+  const target = useOnboardingStore((s) => s.target);
+  const running = useRunStore((s) => s.running || s.starting);
+  const exitCode = useRunStore((s) => s.exitCode);
+  const cloudTarget = useCloudTargetStore((s) => s.target);
+  const state = onboardingRunState(running, exitCode);
+  const [armError, setArmError] = useState<string | null>(null);
+
+  // Point Run at the cloud and give it the sample APK to upload. Without the
+  // apk the cloud Run button stays disabled, and the walkthrough would send
+  // the user to press a button that cannot be pressed — or, worse, silently
+  // run on whatever device happens to be connected.
+  useEffect(() => {
+    if (target !== "cloud" || running) return;
+    if (cloudTarget === "android") return;
+    void (async () => {
+      try {
+        const apk = await ipc.sampleAppApk();
+        useWorkspaceStore.getState().setCloudApkPath(apk);
+        useCloudTargetStore.getState().select("android");
+        setArmError(null);
+      } catch (err) {
+        setArmError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+  }, [target, cloudTarget, running]);
+
+  const cloud = target === "cloud";
+
+  const titles: Record<typeof state, string> = {
+    waiting: "Run it",
+    running: "Run it",
+    passed: "That was it.",
+    failed: "It did not pass — and that is worth seeing too",
+  };
+
+  const subs: Record<typeof state, string> = {
+    waiting: cloud
+      ? "Press Run in cloud, up in the toolbar. The emulator takes a few minutes to boot, then its screen shows where the mirror would be. The console reports each status, then the log when the run ends."
+      : "Press Run, up in the toolbar. Watch the mirror, and the steps light up in the editor as they pass.",
+    running: "Watching it go.",
+    passed: "",
+    failed:
+      "The console below says which step failed, and the failing line is marked in the editor. That is exactly how you will debug your own flows.",
+  };
+
+  return (
+    <>
+      <Title sub={subs[state]}>{titles[state]}</Title>
+
+      {armError ? (
+        <p className="mb-2 text-[11px] text-destructive-foreground">
+          The sample app could not be prepared for the cloud: {armError}
+        </p>
+      ) : null}
+
+      {state === "running" ? (
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Running…
+        </div>
+      ) : null}
+
+      {state === "waiting" ? (
+        <p className="text-[11px] text-muted-foreground">Waiting for you to press Run.</p>
+      ) : null}
+
+      {state === "passed" ? (
+        <>
+          <p className="mb-3 text-[13px] leading-snug text-muted-foreground">
+            {cloud
+              ? "You wrote a test and ran it on a hosted emulator, without plugging anything in. Everything else in Maestro Deck is that loop, with more commands."
+              : "You wrote a test and ran it on a real device. Everything else in Maestro Deck is that loop, with more commands."}
+          </p>
+          <StepButton onClick={() => useOnboardingStore.getState().quit()}>Done</StepButton>
+        </>
+      ) : null}
+
+      {state === "failed" ? (
+        // No pretending it passed, and no dead end either: pressing Run again
+        // is the whole loop, and leaving is always available.
+        <StepButton onClick={() => useOnboardingStore.getState().quit()}>
+          Close and take a look
+        </StepButton>
+      ) : null}
+    </>
+  );
+}
+
+function StepButton({
+  children,
+  onClick,
+  busy,
+}: {
+  children: string;
+  onClick: () => void;
+  busy?: boolean;
+}) {
+  return (
+    <Button size="sm" onClick={onClick} disabled={busy} className={cn("mt-1")}>
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+      {children}
+    </Button>
+  );
+}

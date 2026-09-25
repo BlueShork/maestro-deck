@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
 import {
   ChevronRight,
@@ -26,7 +25,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/ContextMenu";
-import { openFlowFile } from "@/lib/flow-io";
+import { openFlowFile, pickWorkspaceFolder } from "@/lib/flow-io";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import {
@@ -37,7 +36,6 @@ import {
   renameEntry,
 } from "@/lib/workspace-ops";
 import { useFlowStore } from "@/stores/flowStore";
-import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { WorkspaceNode } from "@/types";
 
@@ -90,16 +88,6 @@ export function WorkspaceTree() {
     if (folderPath) void refresh(folderPath);
     else setTree(null);
   }, [folderPath, refresh, setTree]);
-
-  const onOpenFolder = useCallback(async () => {
-    try {
-      const picked = await openDialog({ directory: true, multiple: false });
-      if (typeof picked !== "string") return;
-      setFolder(picked);
-    } catch (err) {
-      toast.error("Open folder failed", err instanceof Error ? err.message : String(err));
-    }
-  }, [setFolder]);
 
   const onClose = useCallback(() => setFolder(null), [setFolder]);
 
@@ -194,7 +182,7 @@ export function WorkspaceTree() {
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => void onOpenFolder()}
+              onClick={() => void pickWorkspaceFolder()}
               aria-label="Open folder"
               className="h-6 w-6"
             >
@@ -205,7 +193,7 @@ export function WorkspaceTree() {
       </div>
 
       {!folderPath ? (
-        <EmptyState onOpenFolder={() => void onOpenFolder()} />
+        <EmptyState onOpenFolder={() => void pickWorkspaceFolder()} />
       ) : error ? (
         <div className="m-3 rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive-foreground">
           {error}
@@ -371,7 +359,7 @@ function TreeItem({
                 <button
                   type="button"
                   onClick={() => toggle(node.path)}
-                  className="flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left text-xs text-foreground/90 transition-colors hover:bg-accent/40"
+                  className="flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left text-xs text-foreground/90 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <ChevronRight
                     className={cn(
@@ -504,15 +492,18 @@ function TreeItem({
           <div
             className={cn(
               "group relative flex items-center transition-colors",
-              isActive ? "bg-primary/15" : "hover:bg-accent/40",
+              isActive ? "bg-accent" : "hover:bg-accent/50",
             )}
             onContextMenu={(e) => e.stopPropagation()}
           >
+            {isActive && (
+              <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground/40" />
+            )}
             <button
               type="button"
               onClick={() => void openFlowFile(node.path)}
               className={cn(
-                "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs",
+                "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 isActive ? "text-foreground" : "text-foreground/85",
               )}
               style={{ paddingLeft: `${depth * 12 + 22}px` }}
@@ -521,7 +512,7 @@ function TreeItem({
               <FileCode2
                 className={cn(
                   "h-3.5 w-3.5 shrink-0",
-                  isActive ? "text-primary" : "text-muted-foreground",
+                  isActive ? "text-foreground" : "text-muted-foreground",
                 )}
               />
               <span className="truncate">{node.name}</span>

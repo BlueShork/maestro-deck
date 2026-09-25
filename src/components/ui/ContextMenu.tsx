@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from "react";
+import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,7 @@ export const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
 export const ContextMenuGroup = ContextMenuPrimitive.Group;
 
 export const ContextMenuContent = forwardRef<
-  ElementRef<typeof ContextMenuPrimitive.Content>,
+  ComponentRef<typeof ContextMenuPrimitive.Content>,
   ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>
 >(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.Portal>
@@ -28,7 +28,7 @@ export const ContextMenuContent = forwardRef<
 ContextMenuContent.displayName = "ContextMenuContent";
 
 export const ContextMenuItem = forwardRef<
-  ElementRef<typeof ContextMenuPrimitive.Item>,
+  ComponentRef<typeof ContextMenuPrimitive.Item>,
   ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item>
 >(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.Item
@@ -43,7 +43,7 @@ export const ContextMenuItem = forwardRef<
 ContextMenuItem.displayName = "ContextMenuItem";
 
 export const ContextMenuLabel = forwardRef<
-  ElementRef<typeof ContextMenuPrimitive.Label>,
+  ComponentRef<typeof ContextMenuPrimitive.Label>,
   ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Label>
 >(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.Label
@@ -55,7 +55,7 @@ export const ContextMenuLabel = forwardRef<
 ContextMenuLabel.displayName = "ContextMenuLabel";
 
 export const ContextMenuSeparator = forwardRef<
-  ElementRef<typeof ContextMenuPrimitive.Separator>,
+  ComponentRef<typeof ContextMenuPrimitive.Separator>,
   ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Separator>
 >(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.Separator

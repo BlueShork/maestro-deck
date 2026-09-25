@@ -50,7 +50,7 @@ export function BillySettings() {
           value={draft}
           onChange={(e) => setDraft(e.currentTarget.value)}
           spellCheck={false}
-          className="h-80 w-full resize-y rounded border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed"
+          className="h-80 w-full resize-y rounded border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
 
         <p className="text-[11px] text-muted-foreground">

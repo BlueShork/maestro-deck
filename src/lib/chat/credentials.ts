@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import type { AnthropicCredentials, ProviderId, VertexCredentials } from "@/types/chat";
+import type { AnthropicCredentials, ByokProviderId, VertexCredentials } from "@/types/chat";
 
 /**
  * Credential store backed by the OS keychain (macOS Keychain Services,
@@ -14,7 +14,7 @@ import type { AnthropicCredentials, ProviderId, VertexCredentials } from "@/type
  * revoke them at any time from their OS-level keychain UI.
  */
 
-async function readJson<T>(provider: ProviderId): Promise<T | null> {
+async function readJson<T>(provider: ByokProviderId): Promise<T | null> {
   const value = await invoke<string | null>("get_credential", { provider });
   if (!value) return null;
   try {
@@ -24,7 +24,7 @@ async function readJson<T>(provider: ProviderId): Promise<T | null> {
   }
 }
 
-async function writeJson<T>(provider: ProviderId, value: T): Promise<void> {
+async function writeJson<T>(provider: ByokProviderId, value: T): Promise<void> {
   await invoke("save_credential", { provider, payload: JSON.stringify(value) });
 }
 
@@ -41,7 +41,7 @@ export const credentials = {
   async getVertex() {
     return readJson<VertexCredentials>("vertex");
   },
-  async clear(provider: ProviderId) {
+  async clear(provider: ByokProviderId) {
     await invoke("delete_credential", { provider });
   },
 };

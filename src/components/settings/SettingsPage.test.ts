@@ -25,6 +25,7 @@ describe("resolveSection", () => {
       "general",
       "device",
       "tools",
+      "environment",
       "ai",
       "billy",
       "visual-regression",

@@ -21,7 +21,9 @@ interface Props {
 function Row({ ok, children }: { ok: boolean; children: ReactNode }) {
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className={ok ? "text-green-600" : "text-destructive"}>{ok ? "✓" : "✗"}</span>
+      <span className={ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+        {ok ? "✓" : "✗"}
+      </span>
       <span className="flex-1">{children}</span>
     </div>
   );
@@ -105,7 +107,7 @@ export function PhysicalIosSetup({
                   type="button"
                   disabled={installing}
                   onClick={onInstall}
-                  className="rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+                  className="rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {installing ? "Installing…" : "Install"}
                 </button>
@@ -129,7 +131,7 @@ export function PhysicalIosSetup({
           </div>
 
           {allReady && (
-            <div className="rounded bg-green-600/10 px-2 py-1 text-[11px] text-green-700">
+            <div className="rounded bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-700 dark:text-emerald-400">
               Ready — plug in your iPhone and select it.
             </div>
           )}

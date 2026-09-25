@@ -238,9 +238,9 @@ export function ToolPathsSettings() {
           className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
         />
         <p className="text-[11px] text-muted-foreground">
-          Used to code-sign the iOS test driver when launching it via{" "}
-          <code className="font-mono">maestro studio</code>. Found in your Apple Developer account
-          (Membership → Team ID). Leave empty if maestro is already configured with it.
+          Used to code-sign the iOS test driver on a physical iPhone (via{" "}
+          <code className="font-mono">maestro-ios-device</code>). Found in your Apple Developer
+          account (Membership → Team ID). Leave empty if maestro is already configured with it.
         </p>
       </div>
 

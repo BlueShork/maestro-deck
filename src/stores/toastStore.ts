@@ -10,7 +10,7 @@ export interface Toast {
   title: string;
   description?: string;
   variant: ToastVariant;
-  /** Controlled open state so Radix can run the exit animation. */
+  /** Controlled open state so SwipeToast can run the exit animation. */
   open: boolean;
   /** If true, skip the auto-dismiss timer — caller is responsible for
    *  calling `dismiss(id)` explicitly (used for long-running ops like
@@ -21,15 +21,21 @@ export interface Toast {
 interface ToastState {
   toasts: Toast[];
   push: (t: Omit<Toast, "id" | "open">) => string;
-  /** Trigger the exit animation; the toast is removed from the list when Radix
-   *  signals it has finished closing via `setClosed`. */
+  /** Trigger the exit animation; the toast is removed from the list when
+   *  SwipeToast signals it has finished closing via `setClosed`. */
   dismiss: (id: string) => void;
   setClosed: (id: string) => void;
 }
 
-// Time the slide-out animation needs to complete before the new toast slides
-// in. Has to match Tailwind's `animate-out fade-out-0` default (~150ms).
+// Head start the outgoing toast gets to sink out before the new one rises in
+// its place (SwipeToast's full exit is ~340ms; the overlap is intentional).
 const SWAP_DELAY_MS = 180;
+
+// Toasts pushed but not yet inserted (waiting out SWAP_DELAY_MS), mapped to
+// whether they were dismissed meanwhile. A quick operation can finish — and
+// dismiss its toast — inside the delay; without this the dismiss hit nothing
+// and the toast appeared afterwards, stuck forever if persistent.
+const pending = new Map<string, { dismissed: boolean }>();
 
 export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
@@ -41,7 +47,11 @@ export const useToastStore = create<ToastState>((set, get) => ({
       set((s) => ({
         toasts: s.toasts.map((x) => (x.open ? { ...x, open: false } : x)),
       }));
+      pending.set(id, { dismissed: false });
       setTimeout(() => {
+        const dismissed = pending.get(id)?.dismissed ?? false;
+        pending.delete(id);
+        if (dismissed) return;
         set((s) => ({
           toasts: [...s.toasts.filter((x) => x.open), { ...t, id, open: true }],
         }));
@@ -51,10 +61,16 @@ export const useToastStore = create<ToastState>((set, get) => ({
     }
     return id;
   },
-  dismiss: (id) =>
+  dismiss: (id) => {
+    const waiting = pending.get(id);
+    if (waiting) {
+      waiting.dismissed = true;
+      return;
+    }
     set((s) => ({
       toasts: s.toasts.map((x) => (x.id === id ? { ...x, open: false } : x)),
-    })),
+    }));
+  },
   setClosed: (id) => set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) })),
 }));
 

@@ -7,9 +7,10 @@ import { AiSettings } from "@/components/AiSettings";
 import { ToolPathsSettings } from "@/components/ToolPathsSettings";
 import { AboutSettings } from "@/components/settings/AboutSettings";
 import { BillySettings } from "@/components/settings/BillySettings";
-import { VisualRegressionSettings } from "@/components/settings/VisualRegressionSettings";
 import { DevicePerformanceSettings } from "@/components/settings/DevicePerformanceSettings";
+import { EnvironmentSettings } from "@/components/settings/EnvironmentSettings";
 import { GeneralSettings } from "@/components/settings/GeneralSettings";
+import { VisualRegressionSettings } from "@/components/settings/VisualRegressionSettings";
 
 export interface SettingsSectionDef {
   id: string;
@@ -22,6 +23,7 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = [
   { id: "general", label: "General", render: () => <GeneralSettings /> },
   { id: "device", label: "Device & Performance", render: () => <DevicePerformanceSettings /> },
   { id: "tools", label: "Tools", render: () => <ToolPathsSettings /> },
+  { id: "environment", label: "Environment", render: () => <EnvironmentSettings /> },
   { id: "ai", label: "AI", render: () => <AiSettings /> },
   { id: "billy", label: "Billy AI", render: () => <BillySettings /> },
   {

@@ -52,6 +52,18 @@ pub fn list_devices() -> AppResult<Vec<Device>> {
         Ok(ios) => devices.extend(ios),
         Err(e) => warn!(error = ?e, "ios device discovery failed"),
     }
+    // Shutdown AVDs, launchable on demand. Running emulators are excluded —
+    // they're already in the adb list above. Same independent-degradation
+    // rule: no SDK or a flaky `emulator` binary must not hide real devices.
+    let emulator_serials: Vec<String> = devices
+        .iter()
+        .filter(|d| d.serial.starts_with("emulator-"))
+        .map(|d| d.serial.clone())
+        .collect();
+    match crate::device::avd::list_shutdown_avds(&emulator_serials) {
+        Ok(avds) => devices.extend(avds),
+        Err(e) => warn!(error = ?e, "avd discovery failed"),
+    }
     // Web is always available as a synthetic target; connect-time errors
     // surface if maestro/Chromium can't start.
     devices.push(crate::device::web::synthetic_target());
@@ -66,7 +78,7 @@ pub async fn connect_device(
     url: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> AppResult<()> {
+) -> AppResult<Device> {
     use crate::device::Platform;
     // A previous disconnect may have left a simulator keeper warm for fast
     // reconnect. If we're now connecting something that isn't an iOS device,
@@ -79,6 +91,14 @@ pub async fn connect_device(
     }
     match platform {
         Platform::Android => {
+            // A shutdown AVD is addressed as `avd:<name>`. Boot it first and
+            // continue with the real `emulator-<port>` serial adb assigned —
+            // the returned Device carries that real serial so the frontend's
+            // `current` never holds the synthetic one.
+            let serial = match serial.strip_prefix(crate::device::avd::AVD_SERIAL_PREFIX) {
+                Some(name) => crate::device::avd::launch_avd(name).await?,
+                None => serial,
+            };
             let device = adb::get_device_info(&serial)?;
             info!(
                 serial = %serial,
@@ -86,7 +106,7 @@ pub async fn connect_device(
                 stream = stream_enabled,
                 "device connected",
             );
-            *state.connected_device.write() = Some(device);
+            *state.connected_device.write() = Some(device.clone());
 
             // Defensive cleanup: any leftover scrcpy server from a previous run holds
             // the abstract socket name and would block start_server with EADDRINUSE.
@@ -97,11 +117,11 @@ pub async fn connect_device(
                 // they go through the scrcpy control channel, but inspect (Maestro
                 // hierarchy) and run (maestro test) operate independently of the
                 // stream.
-                return Ok(());
+                return Ok(device);
             }
 
             setup_scrcpy(&serial, app, state.inner()).await;
-            Ok(())
+            Ok(device)
         }
         Platform::Ios => {
             // Resolve model/OS for display (simctl, fast). Screen size is unknown
@@ -112,7 +132,7 @@ pub async fn connect_device(
                 .find(|d| d.serial == serial)
                 .ok_or(AppError::NoDevice)?;
             info!(udid = %serial, model = %device.model, stream = stream_enabled, "iOS device connected");
-            *state.connected_device.write() = Some(device);
+            *state.connected_device.write() = Some(device.clone());
 
             // Boot the sim + spawn the driver WITHOUT blocking on readiness.
             let keeper = ensure_ios_keeper(&serial, state.inner()).await?;
@@ -129,24 +149,32 @@ pub async fn connect_device(
             tokio::spawn(async move {
                 keeper.wait_until_ready().await;
             });
-            Ok(())
+            Ok(device)
         }
         Platform::Web => {
             // `url` is read from the open flow's `url:` header on the frontend
-            // and navigated to on a fresh studio spawn.
-            let keeper = ensure_web_keeper(url.as_deref(), state.inner()).await?;
+            // and navigated to on a fresh keeper spawn. Seed the remembered
+            // page so an early respawn restores it even before the first
+            // preview frame lands.
+            if let Some(u) = url.as_deref() {
+                *state.web_last_url.write() = Some(u.to_string());
+            }
+            let keeper = ensure_web_keeper(url.as_deref(), Some(&app), state.inner()).await?;
             let mut device = crate::device::web::synthetic_target();
-            if let Ok(s) = keeper.http().device_screen().await {
+            if let Ok(s) = keeper
+                .snapshot(std::time::Duration::from_millis(1500))
+                .await
+            {
                 device.screen_width = s.width;
                 device.screen_height = s.height;
             }
             info!(stream = stream_enabled, "web browser connected");
-            *state.connected_device.write() = Some(device);
+            *state.connected_device.write() = Some(device.clone());
             if stream_enabled {
                 let abort = crate::web_session::spawn_screenshot_poller(app, keeper);
                 *state.web_screenshot_abort.lock().await = Some(abort);
             }
-            Ok(())
+            Ok(device)
         }
     }
 }
@@ -285,7 +313,7 @@ pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResu
             if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
                 let _ = abort.send(());
             }
-            let keeper = ensure_web_keeper(None, state.inner()).await?;
+            let keeper = ensure_web_keeper(None, None, state.inner()).await?;
             let abort = crate::web_session::spawn_screenshot_poller(app, keeper);
             *state.web_screenshot_abort.lock().await = Some(abort);
         }
@@ -368,15 +396,15 @@ async fn setup_scrcpy(serial: &str, app: AppHandle, state: &AppState) {
 
 #[tauri::command]
 pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
-    // Keep a simulator's studio warm so reconnecting the same sim is fast.
+    // Keep a simulator's keeper warm so reconnecting the same sim is fast.
     teardown_all_sessions(state.inner(), true).await;
     Ok(())
 }
 
 /// Tear down every running session and its spawned subprocesses: the
-/// background `maestro studio` keeper plus the connected platform's stream /
+/// background `maestro mcp` driver keeper plus the connected platform's stream /
 /// driver / browser. Shared by `disconnect_device` and the quit handler so a
-/// fast Cmd+Q doesn't leave orphaned studio / chromedriver / Chrome / iproxy
+/// fast Cmd+Q doesn't leave orphaned maestro / chromedriver / Chrome / iproxy
 /// processes behind.
 pub async fn teardown_all_sessions(state: &AppState, keep_ios_sim_warm: bool) {
     let (serial, platform) = {
@@ -390,11 +418,11 @@ pub async fn teardown_all_sessions(state: &AppState, keep_ios_sim_warm: bool) {
     *state.last_hierarchy.write() = None;
     *state.spatial_index.write() = None;
 
-    // Tear down the background studio process if one was spawned for
+    // Tear down the background driver keeper if one was spawned for
     // fast-hierarchy mode — it holds an adb forward + instrumentation
     // session that must be released before another device can take
     // over the forwarded port.
-    if let Some(keeper) = state.studio.lock().await.take() {
+    if let Some(keeper) = state.driver_keeper.lock().await.take() {
         keeper.stop().await;
     }
 
@@ -442,9 +470,9 @@ async fn teardown_scrcpy(serial: &str, state: &AppState) {
 }
 
 /// Tear down the iOS session: stop the screenshot poller, the native preview
-/// stream (if active), and the keeper (kills `maestro studio` + `iproxy`).
+/// stream (if active), and the keeper (kills `maestro mcp` + `iproxy`).
 /// `keep_sim_warm`: on a plain disconnect we leave a **simulator** keeper's
-/// `maestro studio` running so reconnecting the same booted sim reuses the
+/// `maestro mcp` running so reconnecting the same booted sim reuses the
 /// already-installed XCTest driver (seconds instead of the ~1-2 min cold
 /// start). The keeper is retired later by `ensure_ios_keeper` (different
 /// device) or by `connect_device` (switching to a non-iOS target). On quit we
@@ -466,33 +494,67 @@ async fn teardown_ios(state: &AppState, keep_sim_warm: bool) {
     }
 }
 
-/// Ensure a `WebStudioKeeper` is running, returning it. Respawns if the cached
+/// Ensure a `WebDriverKeeper` is running, returning it. Respawns if the cached
 /// keeper has died. `url` is navigated to on a fresh spawn (from the open flow).
 async fn ensure_web_keeper(
     url: Option<&str>,
+    app: Option<&AppHandle>,
     state: &AppState,
-) -> AppResult<std::sync::Arc<crate::web_session::WebStudioKeeper>> {
+) -> AppResult<std::sync::Arc<crate::web_session::WebDriverKeeper>> {
+    use std::sync::atomic::Ordering::SeqCst;
+    if state.web_run_active.load(SeqCst) {
+        return Err(AppError::Other(
+            "a web flow run is in progress — wait for it to finish before \
+             inspecting or interacting"
+                .into(),
+        ));
+    }
     let mut slot = state.web_driver.lock().await;
+    // Liveness = keeper process up + its Chrome answering DevTools
+    // (sub-second), NOT a fresh hierarchy: `inspect_screen` stalls on
+    // busy/navigating pages, and treating that as "dead" would tear down
+    // the whole session (Chrome relaunch + reload) on every hiccup.
     let alive = match slot.as_ref() {
-        Some(k) => k.http().is_alive().await,
+        Some(k) => k.is_alive().await,
         None => false,
     };
     if !alive {
         if let Some(existing) = slot.take() {
             existing.stop().await;
         }
-        let keeper =
-            crate::web_session::WebStudioKeeper::start(crate::web_session::STUDIO_PORT, url)
-                .await?;
-        *slot = Some(keeper);
+        // Exponential backoff after consecutive start failures so a broken
+        // maestro install doesn't get hammered in a respawn loop.
+        let fails = state.web_respawn_fails.load(SeqCst);
+        if fails > 0 {
+            let delay = 1u64 << (fails - 1).min(2); // 1 s, 2 s, 4 s (capped)
+            tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+        }
+        // Respawn on the page the user was on: explicit url (connect) wins,
+        // else the last real page seen by the poller — never a blank tab.
+        let remembered = state.web_last_url.read().clone();
+        let effective = url.or(remembered.as_deref());
+        match crate::web_session::WebDriverKeeper::start(effective, app).await {
+            Ok(keeper) => {
+                state.web_respawn_fails.store(0, SeqCst);
+                *slot = Some(keeper);
+            }
+            Err(e) => {
+                state.web_respawn_fails.fetch_add(1, SeqCst);
+                return Err(e);
+            }
+        }
     }
     Ok(slot.as_ref().unwrap().clone())
 }
 
-/// Tear down the web session: stop the poller and kill the studio process.
+/// Tear down the web session: stop the poller, the run mirror (if a run is
+/// in flight) and kill the keeper process.
 async fn teardown_web(state: &AppState) {
     if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
         let _ = abort.send(());
+    }
+    if let Some(mirror) = state.web_run_mirror_abort.lock().await.take() {
+        let _ = mirror.send(());
     }
     if let Some(keeper) = state.web_driver.lock().await.take() {
         keeper.stop().await;
@@ -553,8 +615,12 @@ pub async fn enter_inspect_mode(
         return finalize_hierarchy(tree, state.inner()).await;
     }
     if device.platform == crate::device::Platform::Web {
-        let keeper = ensure_web_keeper(None, state.inner()).await?;
-        let screen = keeper.http().device_screen().await?;
+        let keeper = ensure_web_keeper(None, Some(&app), state.inner()).await?;
+        // Reuse the poller's fresh event instead of opening a second SSE
+        // consumer and waiting for one — inspect becomes near-instant.
+        let screen = keeper
+            .snapshot(std::time::Duration::from_millis(1500))
+            .await?;
         let tree = crate::hierarchy::web::parse_device_screen_hierarchy(
             &screen.elements,
             (screen.width, screen.height),
@@ -578,11 +644,11 @@ pub async fn enter_inspect_mode(
     .await
     .ok();
 
-    // Fast path: reuse a long-lived `maestro studio` subprocess that
+    // Fast path: reuse a long-lived `maestro mcp` keeper that
     // keeps the on-device driver installed and listening on port 7001,
     // then talk gRPC directly to fetch the hierarchy. First call pays
-    // the studio startup cost (~10-15 s); subsequent calls return in
-    // <500 ms. Falls back to the CLI path if studio fails to start or
+    // the keeper startup cost (~10-15 s); subsequent calls return in
+    // <500 ms. Falls back to the CLI path if the keeper fails to start or
     // the gRPC RPC itself errors, so the app stays usable even when
     // the fast path is broken on a given setup.
     if fast_mode {
@@ -624,7 +690,7 @@ async fn ensure_ios_keeper(
         .unwrap_or(false);
     let mut slot = state.ios_driver.lock().await;
     // Reuse the keeper for the same device while its bridge process
-    // (`maestro studio` / `maestro-ios-device`) is still running — even if the
+    // (`maestro mcp` / `maestro-ios-device`) is still running — even if the
     // driver isn't *ready* yet (it may be warming). Respawn for a different
     // device, a dead process, OR a zombie bridge whose on-device runner died
     // (JVM alive, nothing listening on :22087 — `is_healthy` probes /status
@@ -636,7 +702,7 @@ async fn ensure_ios_keeper(
     if !reuse {
         // A simulator run owns the :22087 driver exclusively. Re-warming a
         // keeper now (e.g. an inspector auto-dump or a tap) would spawn a
-        // second `maestro studio` that fights `maestro test` for the driver —
+        // second `maestro mcp` session that fights `maestro test` for the driver —
         // and both hang forever. Refuse until the run clears the flag.
         if !physical
             && state
@@ -656,13 +722,13 @@ async fn ensure_ios_keeper(
     Ok(slot.as_ref().unwrap().clone())
 }
 
-/// Fast-mode helper: ensure a `maestro studio` keeper is running for
+/// Fast-mode helper: ensure a driver keeper is running for
 /// the given device, then fetch the hierarchy over gRPC. Reuses an
-/// existing keeper if one is already up to avoid paying studio's
+/// existing keeper if one is already up to avoid paying its
 /// 10-15 s startup cost on every inspect call.
 async fn dump_via_grpc(serial: &str, state: &AppState) -> AppResult<HierarchyTree> {
     {
-        let mut slot = state.studio.lock().await;
+        let mut slot = state.driver_keeper.lock().await;
         let needs_spawn = match slot.as_ref() {
             Some(k) => k.serial() != serial,
             None => true,
@@ -671,7 +737,7 @@ async fn dump_via_grpc(serial: &str, state: &AppState) -> AppResult<HierarchyTre
             if let Some(existing) = slot.take() {
                 existing.stop().await;
             }
-            let keeper = hierarchy::studio::StudioKeeper::start(serial).await?;
+            let keeper = hierarchy::driver_keeper::DriverKeeper::start(serial).await?;
             *slot = Some(Arc::new(keeper));
         }
     }
@@ -679,11 +745,11 @@ async fn dump_via_grpc(serial: &str, state: &AppState) -> AppResult<HierarchyTre
     match hierarchy::grpc_client::dump_hierarchy().await {
         Ok(tree) => Ok(tree),
         Err(e @ AppError::StaleDriver(_)) => {
-            // Driver is a zombie (orphan studio from a previous session,
+            // Driver is a zombie (orphan keeper from a previous session,
             // or on-device instrumentation died after sleep/wake). Drop
             // the keeper so the next call respawns cleanly via the
-            // orphan-kill path in `StudioKeeper::start`.
-            if let Some(existing) = state.studio.lock().await.take() {
+            // orphan-kill path in `DriverKeeper::start`.
+            if let Some(existing) = state.driver_keeper.lock().await.take() {
                 existing.stop().await;
             }
             Err(e)
@@ -743,6 +809,7 @@ pub async fn send_input(
     event: InputEvent,
     screen_w: u16,
     screen_h: u16,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<()> {
     // The caller knows which coordinate system its (x, y) values are in
@@ -773,8 +840,8 @@ pub async fn send_input(
             input::ios::send(&event, keeper.http(), screen_w, screen_h, pt_w, pt_h).await
         }
         crate::device::Platform::Web => {
-            let keeper = ensure_web_keeper(None, state.inner()).await?;
-            input::web::send(&event, keeper.http(), screen_w, screen_h).await
+            let keeper = ensure_web_keeper(None, Some(&app), state.inner()).await?;
+            input::web::send(&event, &keeper, screen_w, screen_h, &app).await
         }
     }
 }
@@ -969,10 +1036,48 @@ pub async fn run_flow(
 
     if device.platform == crate::device::Platform::Web {
         // Web flows run with no `--udid`; maestro targets the browser via the
-        // flow's `url:` header. Pause the studio keeper so its browser doesn't
-        // contend with the one `maestro test` launches.
-        teardown_web(state.inner()).await;
-        return runner::spawn_web_runner(app, &file_path, app_id).await;
+        // flow's `url:` header, in its own HEADLESS Chrome — which coexists
+        // fine with the web keeper's hidden browser (verified live). Keep
+        // the keeper warm for instant post-run recovery; pause only its
+        // preview poller and mirror the run's Chrome over CDP instead, so the
+        // canvas shows the test executing live.
+        if let Some(abort) = state.web_screenshot_abort.lock().await.take() {
+            let _ = abort.send(());
+        }
+        // Mark the run active so inspect/tap don't touch the keeper mid-run.
+        // Cleared by the runner's exit task — or here if the spawn fails.
+        state
+            .web_run_active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        // A leftover headless Chrome from the previous run would win the
+        // mirror's discovery race and freeze the canvas on the old run's
+        // final frame — reap it before attaching to the new run.
+        crate::web_session::run_mirror::kill_stale_run_chromes().await;
+        let mirror = crate::web_session::run_mirror::spawn_run_mirror(app.clone());
+        *state.web_run_mirror_abort.lock().await = Some(mirror);
+        // Pin the headless run's viewport to the interactive session's, so
+        // the flow sees the same responsive layout it was authored against
+        // (maestro's headless default is a narrower 1024x768). Prefer the
+        // keeper's live dims; fall back to the dims captured at connect.
+        let screen_size = {
+            let keeper = state.web_driver.lock().await.clone();
+            keeper
+                .and_then(|k| {
+                    k.recent_screen(std::time::Duration::from_secs(10))
+                        .map(|s| (s.width, s.height))
+                })
+                .or(Some((device.screen_width, device.screen_height)))
+        };
+        let spawned = runner::spawn_web_runner(app, &file_path, app_id, screen_size).await;
+        if spawned.is_err() {
+            state
+                .web_run_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            if let Some(m) = state.web_run_mirror_abort.lock().await.take() {
+                let _ = m.send(());
+            }
+        }
+        return spawned;
     }
 
     if device.platform == crate::device::Platform::Ios {
@@ -990,7 +1095,7 @@ pub async fn run_flow(
             )
             .await;
         }
-        // iOS simulator: `maestro --udid <udid> test`. Stop the studio keeper
+        // iOS simulator: `maestro --udid <udid> test`. Stop the driver keeper
         // first — it holds the XCTest driver on :22087, which `maestro test`
         // needs to bring up itself; running both contends for the simulator.
         // But KEEP the screenshot poller running: it captures the framebuffer
@@ -1030,9 +1135,9 @@ pub async fn run_flow(
     .await
     .ok();
 
-    // With maestro 2.5.x, `maestro test` uses an adb-socket
+    // Since maestro 2.5, `maestro test` uses an adb-socket
     // (AdbSocketFactory) instead of a host TCP forward, so it cohabits
-    // peacefully with our running studio. No cleanup needed.
+    // peacefully with our running driver keeper. No cleanup needed.
     runner::spawn_runner(app, &serial, &file_path, app_id, None).await
 }
 
@@ -1072,7 +1177,7 @@ pub fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult
 }
 
 /// Extract the first `x.y.z` semver from arbitrary `maestro --version` output.
-fn parse_maestro_version(out: &str) -> Option<String> {
+pub(crate) fn parse_maestro_version(out: &str) -> Option<String> {
     let bytes = out.as_bytes();
     let mut i = 0;
     while i < bytes.len() {

@@ -31,7 +31,7 @@ pub struct Device {
     pub booted: bool,
     /// True only for physical iPhones (discovered via `devicectl`). Selects the
     /// `maestro-ios-device` bridge keeper + HTTP screenshot path instead of the
-    /// simulator's `simctl`/`maestro studio` path. False for Android, Web, and
+    /// simulator's `simctl`/`maestro mcp` path. False for Android, Web, and
     /// iOS simulators.
     #[serde(default)]
     pub physical: bool,
@@ -76,6 +76,7 @@ pub struct DeviceListEntry {
 }
 
 pub mod adb;
+pub mod avd;
 pub mod ios;
 pub mod web;
 

@@ -30,7 +30,11 @@
     "fs:allow-exists",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://www.maestrodeck.cloud/*" }]
+      "allow": [
+        { "url": "https://www.maestrodeck.cloud/*" },
+        { "url": "https://dashboard.maestrodeck.cloud/*" },
+        { "url": "https://apps.apple.com/app/id6780199621" }
+      ]
     },
     {
       "identifier": "fs:scope",

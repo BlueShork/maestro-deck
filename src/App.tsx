@@ -5,16 +5,24 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
+import { AccountPage } from "@/components/AccountPage";
+import { CloudInviteDialog } from "@/components/CloudInviteDialog";
+import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
+import { OnboardingOverlay } from "@/components/OnboardingOverlay";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
+import { SetupPopup } from "@/components/SetupPopup";
+import { TourOverlay } from "@/components/TourOverlay";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { Toaster } from "@/components/ui/Toast";
+import { summarizeBankReport } from "@/lib/bankReport";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
-import { parseLine as parseRunLine } from "@/lib/runStepParser";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
+import { startCloudAuthListener, useCloudAuthStore } from "@/stores/cloudAuthStore";
+import { useCloudInviteStore } from "@/stores/cloudInviteStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useReviewStore } from "@/stores/reviewStore";
 import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRegressionStore";
@@ -25,6 +33,9 @@ import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
 import { toast, useToastStore } from "@/stores/toastStore";
+import { shouldAutoStartWalkthrough, useOnboardingStore } from "@/stores/onboardingStore";
+import { useEnvStore } from "@/stores/envStore";
+import { useTourStore } from "@/stores/tourStore";
 import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
@@ -43,14 +54,16 @@ import { useWorkspaceStore } from "@/stores/workspaceStore";
 export default function App() {
   const location = useLocation();
   const settingsOpen = location.pathname.startsWith("/settings");
+  const imageBankOpen = location.pathname.startsWith("/image-bank");
+  const accountOpen = location.pathname.startsWith("/account");
   useEffect(() => {
-    setShortcutsSuppressed(settingsOpen);
+    setShortcutsSuppressed(settingsOpen || imageBankOpen || accountOpen);
     return () => setShortcutsSuppressed(false);
-  }, [settingsOpen]);
+  }, [settingsOpen, imageBankOpen, accountOpen]);
   const theme = useSettingsStore((s) => s.theme);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
-  const applyStepEvent = useRunStore((s) => s.applyEvent);
+  const ingestLine = useRunStore((s) => s.ingestLine);
   const setStopped = useRunStore((s) => s.setStopped);
 
   // Restore the last opened file from the previous session. The workspace
@@ -59,6 +72,38 @@ export default function App() {
   useEffect(() => {
     const last = useWorkspaceStore.getState().lastOpenFile;
     if (last) void openFlowFile(last, { silent: true });
+  }, []);
+
+  // First launch: start the onboarding tour once. `hasSeenTour` hydrates
+  // synchronously from localStorage, so it's correct on the first tick.
+  useEffect(() => {
+    if (!useTourStore.getState().hasSeenTour) {
+      useTourStore.getState().start();
+    }
+  }, []);
+
+  // Everyone should meet the hands-on walkthrough once, including the users
+  // who went through the tour before it existed — their tour ended long ago
+  // and will never hand over. It waits for the toolchain, since it ends on
+  // "press Run". Marked done as soon as it is seen, so it never returns.
+  const toolsReady = useEnvStore((s) => s.minimalOk === true);
+  const walkthroughDone = useOnboardingStore((s) => s.done);
+  useEffect(() => {
+    if (
+      shouldAutoStartWalkthrough({
+        hasSeenTour: useTourStore.getState().hasSeenTour,
+        walkthroughDone,
+        toolsReady,
+      })
+    ) {
+      useOnboardingStore.getState().start();
+    }
+  }, [toolsReady, walkthroughDone]);
+
+  // Optional Maestro Deck Cloud sign-in: Firebase persists the session
+  // itself, this just keeps cloudAuthStore in sync with it.
+  useEffect(() => {
+    startCloudAuthListener();
   }, []);
 
   // Silent update check on startup. Skipped if the user disabled it in
@@ -126,8 +171,7 @@ export default function App() {
     Promise.all([
       events.onRunnerStdout((line) => {
         appendLog("stdout", line);
-        const ev = parseRunLine(line);
-        if (ev) applyStepEvent(ev);
+        ingestLine(line);
       }),
       events.onRunnerStderr((line) => appendLog("stderr", line)),
       events.onRunnerExit(({ code }) => {
@@ -141,43 +185,72 @@ export default function App() {
         if (wasStopped) toast.success("Flow stopped");
         else if (code === 0) toast.success("Flow completed");
         else toast.error("Flow failed", `exit code ${code}`);
+
+        // First run that actually worked, and only for signed-out users: the
+        // one moment the cloud offer is worth hearing. Delayed so the success
+        // toast lands first — the ask should follow the win, not cover it.
+        if (code === 0 && !wasStopped && !useCloudAuthStore.getState().user) {
+          setTimeout(() => {
+            if (!useCloudAuthStore.getState().user) useCloudInviteStore.getState().offer();
+          }, 1600);
+        }
         if (code === 0 && !wasStopped && useVisualRegressionStore.getState().enabled) {
           const target = useRunStore.getState().runTarget;
           const ws = useWorkspaceStore.getState().folderPath;
           const device = useDeviceStore.getState().current;
-          if (target?.kind === "all") {
-            appendLog(
-              "system",
-              "[bank] comparaison de banque ignorée pour Run All (non supporté dans cette version)",
-            );
-          } else if (target?.kind === "flow" && ws && device) {
+          if ((target?.kind === "all" || target?.kind === "flow") && ws && device) {
             const { tolerance, threshold } = effectiveThresholds();
             const runId = String(exitedPid ?? Date.now());
-            void ipc
-              .compareScreenshots({
-                workspace: ws,
-                flowPath: target.path,
-                model: device.model,
-                width: device.screen_width,
-                height: device.screen_height,
-                tolerance,
-                threshold,
-                runId,
-              })
+            const bankToastId = toast.loading(
+              "Checking screenshot bank…",
+              "Comparing captures against their baselines",
+            );
+            appendLog("system", "[bank] verifying screenshots against the bank…");
+            const common = {
+              workspace: ws,
+              model: device.model,
+              width: device.screen_width,
+              height: device.screen_height,
+              tolerance,
+              threshold,
+              runId,
+              platform: device.platform,
+              ignoreStatusBar: useVisualRegressionStore.getState().ignoreStatusBar,
+            };
+            const compare =
+              target.kind === "all"
+                ? ipc.compareScreenshotsAll(common)
+                : ipc.compareScreenshots({ ...common, flowPath: target.path });
+            void compare
               .then((report) => {
+                toast.dismiss(bankToastId);
+                const summary = summarizeBankReport(report);
+                summary.logLines.forEach((l) => appendLog("system", l));
+                if (summary.toast.kind === "info")
+                  toast.info(summary.toast.title, summary.toast.detail);
+                else toast.success(summary.toast.title, summary.toast.detail);
                 useReviewStore.getState().setReport(report);
-                const seeded = report.comparisons.filter((c) => c.status === "seeded").length;
-                const missing = report.comparisons.filter((c) => c.status === "missing").length;
-                if (seeded > 0)
-                  appendLog("system", `[bank] ${seeded} reference screenshot(s) created`);
-                if (missing > 0)
-                  appendLog("system", `[bank] ${missing} expected screenshot(s) missing`);
               })
-              .catch((err) => appendLog("system", `[bank] échec comparaison: ${String(err)}`));
+              .catch((err) => {
+                toast.dismiss(bankToastId);
+                toast.error("Screenshot bank check failed", String(err));
+                appendLog("system", `[bank] échec comparaison: ${String(err)}`);
+              });
           }
         }
       }),
       events.onDeviceDisconnected(() => markDisconnected()),
+      events.onWebStatus((p) => {
+        if (p.stage === "error") toast.error("Web browser", p.message);
+        // toastStore has no warn variant — "warn" renders as info.
+        else toast.info("Web browser", p.message);
+      }),
+      events.onWebTapFallback(() => {
+        toast.info(
+          "Tap sent as coordinates",
+          "The page snapshot wasn't available — the tap may be less precise.",
+        );
+      }),
       events.onMetricsSample((p) =>
         appendSample({
           ts: p.ts,
@@ -206,7 +279,7 @@ export default function App() {
     };
   }, [
     appendLog,
-    applyStepEvent,
+    ingestLine,
     setStopped,
     markDisconnected,
     appendSample,
@@ -246,7 +319,11 @@ export default function App() {
     };
   }, []);
 
-  const metricsOpen = usePanelsStore((s) => s.visible.metrics);
+  // Capture only while the console's Performance tab is on screen — it is the
+  // only reader of the samples.
+  const consoleVisible = usePanelsStore((s) => s.visible.console);
+  const performanceTab = useSettingsStore((s) => s.consoleMode === "performance");
+  const metricsOpen = consoleVisible && performanceTab;
   // Use device identity (serial + platform + physical) rather than mere presence
   // so that a direct A→B switch (where deviceConnected stays true) still causes
   // the effect to re-run, stopping the old collector and starting a new one for
@@ -278,17 +355,23 @@ export default function App() {
     <>
       {/* Always mounted; hidden (not unmounted) while settings is open so the
           editor + video decoder survive and returning is instant. */}
-      <div className={settingsOpen ? "hidden" : "contents"}>
+      <div className={settingsOpen || imageBankOpen || accountOpen ? "hidden" : "contents"}>
         <MainView />
       </div>
       <Routes>
         <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
+        <Route path="/image-bank" element={<ImageBankPage />} />
+        <Route path="/account" element={<AccountPage />} />
         {/* MainView already covers "/"; redirect any other unknown path there. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <UpdateDialog />
+      <CloudInviteDialog />
       <QuitConfirmDialog />
+      <TourOverlay />
+      <OnboardingOverlay />
+      <SetupPopup />
       <Toaster />
     </>
   );

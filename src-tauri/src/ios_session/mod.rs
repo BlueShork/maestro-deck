@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-//! iOS Simulator driver session: boots a simulator and lets `maestro studio`
-//! install/launch/hold the on-device XCTest HTTP server, which on a simulator
+//! iOS Simulator driver session: boots a simulator and lets a `maestro mcp`
+//! keeper install/launch/hold the on-device XCTest HTTP server, which on a simulator
 //! is reachable directly on `127.0.0.1:22087` (the sim shares the host network —
 //! no forwarding/tunnel). Exposes a typed HTTP client for `/viewHierarchy`,
 //! `/touch`, `/inputText`, `/swipeV2`, `/screenshot`, `/deviceInfo`, `/status`.
@@ -260,43 +260,37 @@ const READY_ATTEMPTS: u32 = 360;
 const READY_BACKOFF_MS: u64 = 500;
 /// Passed to maestro as MAESTRO_DRIVER_STARTUP_TIMEOUT so it doesn't give up on
 /// a cold simulator before the driver is ready (ms). Matched to our own ~180 s
-/// readiness budget above — at the old 120 s, maestro studio threw
+/// readiness budget above — at the old 120 s, maestro threw
 /// IOSDriverTimeoutException while we were still happily waiting.
 const DRIVER_STARTUP_TIMEOUT_MS: &str = "180000";
+/// Budget for the keeper's warm-up tool call (runner install + first hierarchy).
+const WARMUP_TIMEOUT: Duration = Duration::from_secs(200);
 
-fn studio_args(udid: &str) -> Vec<&str> {
-    vec!["--device", udid, "studio", "--no-window"]
+/// Global flags that put the UDID in the keeper's command line
+/// (`maestro --device <udid> mcp --no-viewer`) — the MCP server ignores
+/// them, but they scope the orphan sweep to this simulator.
+fn keeper_global_args(udid: &str) -> [&str; 2] {
+    ["--device", udid]
 }
 
-/// SIGKILL orphan `maestro … --device <udid> … studio` processes left behind
-/// by a crashed/SIGKILLed session (their `kill_on_drop` never ran). Scoped to
-/// this UDID so a legitimate Android studio keeper is never touched. Unix-only
-/// (`pgrep`/`kill`); simulators only exist on macOS anyway.
-async fn kill_orphan_studios_for(udid: &str) {
-    #[cfg(unix)]
-    {
-        let pattern = format!("maestro.*--device {udid}.*studio");
-        let Ok(output) = Command::new("pgrep").args(["-f", &pattern]).output().await else {
-            return;
-        };
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            let Ok(pid) = line.trim().parse::<u32>() else {
-                continue;
-            };
-            warn!(
-                pid,
-                udid, "SIGKILL orphan maestro studio (stale iOS driver)"
-            );
-            let _ = Command::new("kill")
-                .args(["-9", &pid.to_string()])
-                .output()
-                .await;
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = udid;
-    }
+/// Command-line needles of the simulator keeper for `udid`.
+fn keeper_needles(udid: &str) -> [String; 4] {
+    [
+        "maestro".to_string(),
+        format!("--device {udid}"),
+        "mcp".to_string(),
+        "--no-viewer".to_string(),
+    ]
+}
+
+/// SIGKILL orphan simulator keepers (`maestro --device <udid> mcp`) left
+/// behind by a crashed/SIGKILLed session (their `kill_on_drop` never ran).
+/// Scoped to this UDID so a legitimate Android keeper — or a user's own
+/// `maestro mcp` — is never touched.
+async fn kill_orphan_keepers_for(udid: &str) {
+    let needles = keeper_needles(udid);
+    let needles: Vec<&str> = needles.iter().map(String::as_str).collect();
+    crate::prockill::kill_matching(&needles, "orphan iOS simulator keeper").await;
 }
 
 /// SIGKILL orphan `maestro-ios-device … --device <udid>` bridges left behind by
@@ -333,7 +327,7 @@ async fn kill_orphan_bridges_for(udid: &str) {
 /// Which kind of iOS target a keeper drives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IosTarget {
-    /// Booted simulator: `simctl boot` + `maestro studio`, driver on :22087,
+    /// Booted simulator: `simctl boot` + `maestro mcp`, driver on :22087,
     /// screenshots via `simctl`.
     Simulator,
     /// Physical iPhone: the `maestro-ios-device` bridge builds/runs the runner
@@ -342,16 +336,20 @@ enum IosTarget {
     Physical,
 }
 
-/// Holds the on-device XCTest runner alive (`maestro studio` for simulators,
+/// Holds the on-device XCTest runner alive (`maestro mcp` for simulators,
 /// `maestro-ios-device` for physical devices) and owns the HTTP client + cached
 /// DeviceInfo for the session.
 pub struct IosDriverKeeper {
     udid: String,
     http: IosHttpClient,
     device_info: parking_lot::RwLock<Option<DeviceInfo>>,
-    /// The supervised bridge child: `maestro studio` (sim) or
-    /// `maestro-ios-device` (physical).
+    /// Simulators: the `maestro mcp` keeper holding the runner session.
+    mcp: Option<Arc<crate::maestro_mcp::McpClient>>,
+    /// Physical devices: the supervised `maestro-ios-device` bridge child.
     driver_child: AsyncMutex<Option<Child>>,
+    /// Error from the simulator keeper's warm-up call (e.g. device not
+    /// found) — lets `wait_until_ready` fail fast.
+    warmup_error: Arc<parking_lot::Mutex<Option<String>>>,
     target: IosTarget,
     /// Last time a `/status` probe succeeded (see [`Self::is_healthy`]).
     health_checked: parking_lot::Mutex<Option<std::time::Instant>>,
@@ -382,8 +380,8 @@ impl IosDriverKeeper {
         self.device_info.read().is_some()
     }
 
-    /// True while the ON-DEVICE runner still answers `/status`. The bridge
-    /// process (`maestro studio`) can outlive the XCTest runner it launched —
+    /// True while the ON-DEVICE runner still answers `/status`. The keeper
+    /// process (`maestro mcp`) can outlive the XCTest runner it launched —
     /// the JVM stays up while nothing listens on :22087 anymore, so a keeper
     /// that only checks `is_process_alive` becomes a permanent zombie (every
     /// tap / Home press fails with "driver unreachable" forever). A warming
@@ -421,18 +419,19 @@ impl IosDriverKeeper {
         }
     }
 
-    /// Boot the simulator and spawn `maestro studio` (installs/launches the XCTest
-    /// runner on :22087).
+    /// Boot the simulator and spawn a `maestro mcp` keeper, then open its
+    /// device session in the background (installs/launches the XCTest runner
+    /// on :22087).
     async fn spawn_simulator(udid: &str) -> AppResult<Arc<Self>> {
-        // After a crash / SIGKILL, `kill_on_drop` never fires and the studio
+        // After a crash / SIGKILL, `kill_on_drop` never fires and the keeper
         // JVM (which holds the XCTest driver on :22087) outlives the app.
         // Stale instances then fight the fresh one for the driver, and the
         // inspector hangs on a zombie runner for the whole readiness budget.
-        // Any studio targeting this UDID at spawn time is an orphan (the
+        // Any keeper targeting this UDID at spawn time is an orphan (the
         // keeper for the current session is stopped before respawning), so
-        // cull them first — mirrors `hierarchy::studio::kill_orphan_studios`
-        // on the Android path.
-        kill_orphan_studios_for(udid).await;
+        // cull them first — mirrors `hierarchy::driver_keeper` on the
+        // Android path.
+        kill_orphan_keepers_for(udid).await;
 
         // Boot the sim (idempotent — `simctl boot` errors if already booted, ignored).
         let _ = Command::new("xcrun")
@@ -440,25 +439,41 @@ impl IosDriverKeeper {
             .output()
             .await;
 
-        let maestro = crate::tool_paths::maestro_bin();
-        let studio = Command::new(&maestro)
-            .args(studio_args(udid))
-            .env("MAESTRO_DRIVER_STARTUP_TIMEOUT", DRIVER_STARTUP_TIMEOUT_MS)
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    AppError::RunnerNotFound
-                } else {
-                    AppError::IosCommandFailed(format!("maestro studio: {e}"))
+        let mcp = Arc::new(
+            crate::maestro_mcp::McpClient::spawn(
+                &keeper_global_args(udid),
+                &[("MAESTRO_DRIVER_STARTUP_TIMEOUT", DRIVER_STARTUP_TIMEOUT_MS)],
+            )
+            .await
+            .map_err(|e| match e {
+                AppError::RunnerNotFound => e,
+                other => AppError::IosCommandFailed(format!("maestro mcp: {other}")),
+            })?,
+        );
+
+        // Opening the session is what installs + launches the runner. It can
+        // take minutes on a cold simulator, so it runs in the background —
+        // `wait_until_ready` observes the runner itself on :22087.
+        let warmup_error: Arc<parking_lot::Mutex<Option<String>>> = Arc::default();
+        {
+            let mcp = mcp.clone();
+            let slot = warmup_error.clone();
+            let args = serde_json::json!({ "device_id": udid });
+            tokio::spawn(async move {
+                if let Err(e) = mcp.call_tool("inspect_screen", args, WARMUP_TIMEOUT).await {
+                    warn!(error = %e, "iOS simulator keeper warm-up failed");
+                    *slot.lock() = Some(e.to_string());
                 }
-            })?;
+            });
+        }
 
         Ok(Arc::new(Self {
             udid: udid.to_string(),
             http: IosHttpClient::new(DRIVER_PORT)?,
             device_info: parking_lot::RwLock::new(None),
-            driver_child: AsyncMutex::new(Some(studio)),
+            mcp: Some(mcp),
+            driver_child: AsyncMutex::new(None),
+            warmup_error,
             target: IosTarget::Simulator,
             health_checked: parking_lot::Mutex::new(None),
         }))
@@ -474,7 +489,7 @@ impl IosDriverKeeper {
                 "Set your Apple Team ID in Settings to drive a physical iOS device".into(),
             )
         })?;
-        // Same zombie problem as simulator studios: after a crash/SIGKILL the
+        // Same zombie problem as simulator keepers: after a crash/SIGKILL the
         // bridge outlives the app AND keeps its port. Each leftover instance
         // holds 600x, so a fresh bridge binds the NEXT free port (observed: 9
         // orphans on 6001-6009) while our HTTP client polls PHYSICAL_BRIDGE_PORT
@@ -503,7 +518,9 @@ impl IosDriverKeeper {
             udid: udid.to_string(),
             http: IosHttpClient::new(PHYSICAL_BRIDGE_PORT)?,
             device_info: parking_lot::RwLock::new(None),
+            mcp: None,
             driver_child: AsyncMutex::new(Some(bridge)),
+            warmup_error: Arc::default(),
             target: IosTarget::Physical,
             health_checked: parking_lot::Mutex::new(None),
         }))
@@ -517,10 +534,14 @@ impl IosDriverKeeper {
             return true;
         }
         for attempt in 0..READY_ATTEMPTS {
-            // Bail out promptly if `maestro studio` exited (e.g. the session was
-            // torn down on disconnect/run) instead of probing a dead socket for
-            // the full budget.
+            // Bail out promptly if the keeper exited (e.g. the session was torn
+            // down on disconnect/run) or failed to open the device, instead of
+            // probing a dead socket for the full budget.
             if !self.is_process_alive().await {
+                return false;
+            }
+            if let Some(e) = self.warmup_error.lock().clone() {
+                warn!(udid = %self.udid, error = %e, "iOS driver keeper failed to start");
                 return false;
             }
             if self.http.status().await {
@@ -541,16 +562,22 @@ impl IosDriverKeeper {
     }
 
     pub async fn stop(&self) {
+        if let Some(mcp) = &self.mcp {
+            mcp.stop().await;
+        }
         if let Some(mut c) = self.driver_child.lock().await.take() {
             let _ = c.kill().await;
         }
         // Leave the simulator booted for reuse (no-op for physical devices).
     }
 
-    /// True while the bridge child (`maestro studio` / `maestro-ios-device`) is
-    /// still running (regardless of driver readiness). Used to decide whether a
+    /// True while the keeper (`maestro mcp` / `maestro-ios-device`) is still
+    /// running (regardless of driver readiness). Used to decide whether a
     /// cached keeper is reusable.
     pub async fn is_process_alive(&self) -> bool {
+        if let Some(mcp) = &self.mcp {
+            return mcp.is_alive().await;
+        }
         match self.driver_child.lock().await.as_mut() {
             Some(child) => matches!(child.try_wait(), Ok(None)),
             None => false,
@@ -779,11 +806,44 @@ mod tests {
         assert_eq!(s, r#"{"button":"home"}"#);
     }
 
+    /// Live end-to-end check on a booted simulator: the `maestro mcp` keeper
+    /// brings the XCTest runner up and its hierarchy parses.
+    ///   MAESTRO_BIN=/path/to/maestro-2.10.0 IOS_UDID=<udid> cargo test \
+    ///     --manifest-path src-tauri/Cargo.toml ios_sim_keeper_end_to_end -- --ignored --nocapture
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn ios_sim_keeper_end_to_end() {
+        let udid = std::env::var("IOS_UDID").expect("set IOS_UDID");
+        let t = std::time::Instant::now();
+        let keeper = IosDriverKeeper::spawn(&udid, false).await.expect("spawn");
+        assert!(keeper.wait_until_ready().await, "driver never became ready");
+        let di = keeper.device_info().expect("device info");
+        eprintln!("ready in {:?}: {di:?}", t.elapsed());
+        let t = std::time::Instant::now();
+        let json = keeper.http().view_hierarchy().await.expect("hierarchy");
+        let screen = (di.width_points as i32, di.height_points as i32);
+        let tree = crate::hierarchy::ios::parse_ios_axelement(&json, Some(screen)).expect("parse");
+        eprintln!("hierarchy {} bytes in {:?}", json.len(), t.elapsed());
+        assert!(tree.root.is_some_and(|r| !r.children.is_empty()));
+        assert!(keeper.is_healthy().await);
+        keeper.stop().await;
+        assert!(!keeper.is_process_alive().await);
+    }
+
     #[test]
-    fn builds_studio_args() {
-        assert_eq!(
-            studio_args("UDID-1"),
-            vec!["--device", "UDID-1", "studio", "--no-window"]
+    fn keeper_command_line_is_scoped_to_its_udid() {
+        let args = crate::maestro_mcp::mcp_args(&keeper_global_args("UDID-1"));
+        assert_eq!(args, vec!["--device", "UDID-1", "mcp", "--no-viewer"]);
+        let jvm = format!(
+            "java -classpath /opt/maestro/lib/* maestro.cli.AppKt {}",
+            args.join(" ")
         );
+        let needles = keeper_needles("UDID-1");
+        let needles: Vec<&str> = needles.iter().map(String::as_str).collect();
+        assert!(crate::prockill::cmdline_matches(&jvm, &needles));
+        let other = jvm.replace("UDID-1", "UDID-2");
+        assert!(!crate::prockill::cmdline_matches(&other, &needles));
+        let user_mcp = "java -classpath /opt/maestro/lib/* maestro.cli.AppKt mcp";
+        assert!(!crate::prockill::cmdline_matches(user_mcp, &needles));
     }
 }

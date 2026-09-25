@@ -7,8 +7,16 @@ interface ImportMetaEnv {
   readonly MODE: string;
 }
 
+/** Minimal slice of Vite's HMR API — only what modules owning singletons need
+ *  to opt out of hot patching. Absent in production builds. */
+interface ImportMetaHot {
+  accept(cb?: (mod: unknown) => void): void;
+  invalidate(): void;
+}
+
 interface ImportMeta {
   readonly env: ImportMetaEnv;
+  readonly hot?: ImportMetaHot;
 }
 
 // Vite's `?raw` suffix returns the file contents as a plain string.
