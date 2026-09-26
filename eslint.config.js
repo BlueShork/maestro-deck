@@ -49,7 +49,11 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
-      ...reactHooks.configs.recommended.rules,
+      // v6+ folds the React Compiler diagnostics (refs, set-state-in-effect,
+      // purity, …) into `recommended`. Keep the classic pair until the
+      // existing violations are cleaned up, then switch back to the preset.
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": [
         "warn",
