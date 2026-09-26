@@ -2,7 +2,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { Button } from "@/components/ui/Button";
-import { SettingsSection, ToggleRow } from "@/components/settings/SettingsPrimitives";
+import {
+  SettingsRow,
+  SettingsSection,
+  SettingsSubgroup,
+  ToggleRow,
+  settingsInputClass,
+} from "@/components/settings/SettingsPrimitives";
+import { cn } from "@/lib/utils";
 import {
   useVisualRegressionStore,
   DEFAULT_TOLERANCE,
@@ -28,14 +35,17 @@ function ThresholdField({
 }) {
   const isDefault = value === null;
   return (
-    <label className={`flex flex-col gap-1.5 ${disabled ? "opacity-50" : ""}`}>
-      <span className="flex items-center gap-2 text-sm font-medium">
-        {label}
-        {isDefault && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
-            default
-          </span>
-        )}
+    <label className={cn("flex items-center justify-between gap-6", disabled && "opacity-50")}>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="flex items-center gap-2 text-sm">
+          {label}
+          {isDefault && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              default
+            </span>
+          )}
+        </span>
+        <span className="text-xs leading-relaxed text-muted-foreground">{hint}</span>
       </span>
       <input
         type="number"
@@ -45,9 +55,8 @@ function ThresholdField({
         disabled={disabled}
         value={value ?? fallback}
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-        className="w-36 rounded border border-border bg-transparent px-2 py-1 text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        className={cn(settingsInputClass, "w-28 shrink-0 tabular-nums")}
       />
-      <span className="text-xs text-muted-foreground">{hint}</span>
     </label>
   );
 }
@@ -68,24 +77,37 @@ export function VisualRegressionSettings() {
   return (
     <SettingsSection
       title="Visual Regression"
-      description="Compare run screenshots against a per-device bank. After a successful flow run, captures from takeScreenshot commands are diffed against their baseline; significant changes open a review where you keep the bank or replace it."
+      description={
+        <>
+          Catches unintended UI changes. After a flow passes, every screenshot taken by a{" "}
+          <code className="font-mono">takeScreenshot</code> command is compared with its baseline in
+          the screenshot bank (one bank per device model). When a screenshot changed too much, a
+          review opens where you keep the baseline or accept the new look.
+        </>
+      }
     >
-      <div className="flex flex-col gap-5">
+      <SettingsSubgroup title="Comparison">
         <ToggleRow
-          label="Enable visual regression"
-          description="When off, flows run normally and no screenshot comparison happens."
+          label="Compare screenshots after each run"
+          description="When off, flows run normally and nothing is compared."
           checked={enabled}
           onCheckedChange={setEnabled}
         />
         <ToggleRow
           label="Ignore system chrome"
-          description="Exclude transient UI from comparison to avoid false positives: the top status bar (clock, notch, carrier), the bottom home indicator / navigation bar, and the right-edge scroll indicator."
+          description="Leaves out the parts of the screen that change on their own — status bar (clock, notch, carrier), home indicator / navigation bar and the scroll indicator — to avoid false alarms."
           checked={ignoreStatusBar}
           onCheckedChange={setIgnoreStatusBar}
         />
+      </SettingsSubgroup>
+
+      <SettingsSubgroup
+        title="Sensitivity"
+        description="Raise these if harmless rendering noise gets flagged; lower them to catch smaller changes."
+      >
         <ThresholdField
           label="Per-pixel tolerance"
-          hint={`How different a single pixel must be to count as changed (pixelmatch scale, 0–1). Higher absorbs more anti-aliasing noise. Default ${DEFAULT_TOLERANCE}.`}
+          hint={`How different one pixel must be to count as changed, from 0 to 1. Higher absorbs more anti-aliasing noise. Default ${DEFAULT_TOLERANCE}.`}
           step="0.01"
           value={tolerance}
           fallback={DEFAULT_TOLERANCE}
@@ -94,19 +116,19 @@ export function VisualRegressionSettings() {
         />
         <ThresholdField
           label="Changed-pixel threshold"
-          hint={`Share of changed pixels above which a screenshot is flagged as a regression (0–1). ${DEFAULT_THRESHOLD} ≈ 0.1% of the image. Default ${DEFAULT_THRESHOLD}.`}
+          hint={`Share of changed pixels above which a screenshot counts as a regression, from 0 to 1. ${DEFAULT_THRESHOLD} ≈ 0.1% of the image. Default ${DEFAULT_THRESHOLD}.`}
           step="0.001"
           value={threshold}
           fallback={DEFAULT_THRESHOLD}
           disabled={!enabled}
           onChange={setThreshold}
         />
-        <div>
+        <SettingsRow label="Restore defaults" description="Resets both values above.">
           <Button size="sm" variant="outline" onClick={reset} disabled={!enabled || !isCustomized}>
-            Reset to defaults
+            Reset
           </Button>
-        </div>
-      </div>
+        </SettingsRow>
+      </SettingsSubgroup>
     </SettingsSection>
   );
 }

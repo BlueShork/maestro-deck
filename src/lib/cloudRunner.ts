@@ -8,6 +8,7 @@ import {
   type CloudJobPlatform,
 } from "@/lib/cloudJobs";
 import { runVerdict, watchCloudJob, type CloudWatch } from "@/lib/cloudRun";
+import { track } from "@/lib/telemetry";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useRunStore } from "@/stores/runStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -105,6 +106,7 @@ export async function startCloudRun(
   const { jobId } = await submitCloudJob({ platform, appPath, yamlPaths });
 
   run.cloudRunStarted(jobId);
+  track("cloud_run_started", { platform, flow_count: yamlPaths.length });
   // The run is debited when execution starts, not when the job is accepted:
   // finalize writes quotaConsumed: false and the runner flips it on claim. A
   // job that never starts costs nothing — but once started it cannot be

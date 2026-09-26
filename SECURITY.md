@@ -26,7 +26,7 @@ in the release notes unless you prefer to remain anonymous.
 
 ## Scope
 
-Maestro Deck is an offline desktop app. The relevant attack surface includes:
+Maestro Deck is a local-first desktop app. The relevant attack surface includes:
 
 - The Tauri IPC bridge between the webview and the Rust backend
 - The local filesystem access granted via `tauri-plugin-fs`

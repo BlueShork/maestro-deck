@@ -1,9 +1,11 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Loader2 } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { SettingsRow, SettingsSubgroup } from "@/components/settings/SettingsPrimitives";
+import { Button } from "@/components/ui/Button";
 import { ipc, type IosPhysicalSetupStatus } from "@/lib/ipc";
 
 interface Props {
@@ -18,14 +20,33 @@ interface Props {
   refreshKey?: number;
 }
 
-function Row({ ok, children }: { ok: boolean; children: ReactNode }) {
+function Row({
+  ok,
+  label,
+  hint,
+  action,
+}: {
+  ok: boolean;
+  label: string;
+  hint?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
-    <div className="flex items-start gap-2 text-xs">
-      <span className={ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
-        {ok ? "✓" : "✗"}
-      </span>
-      <span className="flex-1">{children}</span>
-    </div>
+    <SettingsRow
+      label={
+        <span className="flex items-center gap-2">
+          {ok ? (
+            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <X className="h-3.5 w-3.5 text-destructive" />
+          )}
+          {label}
+        </span>
+      }
+      description={!ok && hint ? <span className="pl-[22px]">{hint}</span> : undefined}
+    >
+      {!ok ? action : null}
+    </SettingsRow>
   );
 }
 
@@ -60,83 +81,59 @@ export function PhysicalIosSetup({
   const allReady = xcode && is251 && patched && bridge && teamIdSet;
 
   return (
-    <div className="flex flex-col gap-2 rounded border border-border bg-muted/20 p-3">
-      <div className="text-xs font-semibold">Physical iPhone setup</div>
-
-      {loading && (
+    <SettingsSubgroup
+      title="Setup checklist"
+      description="Everything a real iPhone needs, checked live. Fix the ✗ rows from top to bottom."
+    >
+      {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin" />
           Checking your setup…
         </div>
-      )}
-
-      {!loading && (
+      ) : (
         <>
-          <Row ok={xcode}>
-            Xcode installed
-            {!xcode && (
-              <span className="text-muted-foreground">
-                {" "}
-                — install full Xcode from the App Store
-              </span>
-            )}
-          </Row>
-
-          <Row ok={is251}>
-            maestro 2.5.1
-            {!is251 && (
-              <span className="text-muted-foreground">
-                {" — "}
-                {status?.maestroVersion ? `found ${status.maestroVersion}, ` : ""}need 2.5.1
-              </span>
-            )}
-          </Row>
-
-          <Row ok={patched}>
-            maestro patched (physical-device driver)
-            {!patched && (
-              <span className="text-muted-foreground"> — installed by the bridge below</span>
-            )}
-          </Row>
-
-          <Row ok={bridge}>
-            <span className="flex items-center gap-2">
-              Driver bridge installed
-              {!bridge && (
-                <button
-                  type="button"
-                  disabled={installing}
-                  onClick={onInstall}
-                  className="rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {installing ? "Installing…" : "Install"}
-                </button>
-              )}
+          <Row
+            ok={xcode}
+            label="Xcode installed"
+            hint="Install the full Xcode from the App Store."
+          />
+          <Row
+            ok={is251}
+            label="Maestro 2.5.1"
+            hint={`${status?.maestroVersion ? `Found ${status.maestroVersion}; ` : ""}physical iPhones still need 2.5.1.`}
+          />
+          <Row
+            ok={patched}
+            label="Maestro patched for physical devices"
+            hint="Installed together with the driver bridge below."
+          />
+          <Row
+            ok={bridge}
+            label="Driver bridge installed"
+            hint="Downloads the bridge, the patched Maestro 2.5.1 jars and the XCTest runner (once, needs network)."
+            action={
+              <Button size="sm" disabled={installing} onClick={onInstall}>
+                {installing ? "Installing…" : "Install"}
+              </Button>
+            }
+          />
+          <Row ok={teamIdSet} label="Apple Team ID set" hint="Fill it in below." />
+          <div className="flex flex-col gap-1 text-xs leading-relaxed text-muted-foreground">
+            <span>
+              On the iPhone: turn on Developer Mode (Settings → Privacy &amp; Security → Developer
+              Mode), then tap Trust when you plug it in.
             </span>
-          </Row>
-
-          <Row ok={teamIdSet}>
-            Apple Team ID set
-            {!teamIdSet && <span className="text-muted-foreground"> — fill the field below</span>}
-          </Row>
-
-          <div className="mt-1 border-t border-border pt-2 text-[11px] text-muted-foreground">
-            <div>
-              • On the iPhone: enable Developer Mode (Settings → Privacy &amp; Security → Developer
-              Mode) and tap Trust when plugged in.
-            </div>
-            <div>
-              • First connect builds the driver on the device (~10 min); later connects are fast.
-            </div>
+            <span>
+              The first connection builds the driver on the phone (~10 min); later ones are fast.
+            </span>
           </div>
-
           {allReady && (
-            <div className="rounded bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-700 dark:text-emerald-400">
-              Ready — plug in your iPhone and select it.
+            <div className="bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-400">
+              Ready — plug in your iPhone and pick it in the device list.
             </div>
           )}
         </>
       )}
-    </div>
+    </SettingsSubgroup>
   );
 }

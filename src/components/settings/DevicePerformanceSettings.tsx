@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import {
+  SettingsBadge,
   SettingsSection,
   SettingsSubgroup,
   ToggleRow,
@@ -18,13 +19,13 @@ export function DevicePerformanceSettings() {
 
   return (
     <SettingsSection
-      title="Device & Performance"
-      description="Control how the app mirrors devices and inspects their UI hierarchy."
+      title="Devices & Performance"
+      description="How devices are mirrored, how fast the inspector reads their screen, and which kinds of targets show up in the device list. Trade a feature for speed here if your machine is struggling."
     >
       <SettingsSubgroup title="Mirroring">
         <ToggleRow
           label="Live device stream"
-          description="Off = run flows on a connected device without scrcpy mirroring. Saves ~250 MB RAM and ~10% CPU."
+          description="Mirrors the connected device's screen in the app. Turn it off to run flows without the mirror — saves about 250 MB of RAM and 10% CPU. Applies to the connected device right away."
           checked={streamEnabled}
           onCheckedChange={setStreamEnabled}
         />
@@ -34,17 +35,15 @@ export function DevicePerformanceSettings() {
         <ToggleRow
           label={
             <>
-              Fast hierarchy{" "}
-              <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
-                experimental
-              </span>
+              Fast hierarchy
+              <SettingsBadge>experimental</SettingsBadge>
             </>
           }
           description={
             <>
-              Keeps a <code className="font-mono">maestro mcp</code> process warm in background and
-              talks gRPC directly to the on-device driver. First inspect takes ~15 s, subsequent
-              dumps drop from ~11 s to &lt;1 s. Falls back to the CLI path if the keeper fails.
+              Keeps a <code className="font-mono">maestro mcp</code> process warm in the background
+              and talks to the on-device driver directly. The first inspect takes ~15 s, then each
+              one drops from ~11 s to under 1 s. Falls back to the slower CLI if the helper fails.
             </>
           }
           checked={fastHierarchyEnabled}
@@ -52,17 +51,15 @@ export function DevicePerformanceSettings() {
         />
       </SettingsSubgroup>
 
-      <SettingsSubgroup title="Beta targets">
+      <SettingsSubgroup title="Device list">
         <ToggleRow
           label={
             <>
-              Web Browser target{" "}
-              <span className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
-                beta
-              </span>
+              Web browser target
+              <SettingsBadge>beta</SettingsBadge>
             </>
           }
-          description="Shows the Web Browser (Chromium) device in the device list. Runs are headless with a live view; the interactive browser window is hidden automatically."
+          description="Adds a Chromium browser to the device list so you can write and run web flows. Runs headless with a live view in the app."
           checked={webBrowserEnabled}
           onCheckedChange={setWebBrowserEnabled}
         />

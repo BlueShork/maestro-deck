@@ -26,7 +26,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://www.google.com; frame-src https://www.google.com; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://*.googleapis.com https://api.anthropic.com https://www.google.com https://dashboard.maestrodeck.cloud",
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://www.google.com; frame-src https://www.google.com; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://*.googleapis.com https://api.anthropic.com https://www.google.com https://dashboard.maestrodeck.cloud https://eu.i.posthog.com",
       "dangerousDisableAssetCspModification": true
     }
   },
@@ -49,7 +49,7 @@
     "resources": ["resources/*"],
     "category": "DeveloperTool",
     "shortDescription": "Source-available visual IDE for Maestro mobile tests",
-    "longDescription": "Maestro Deck is a fast, offline, source-available visual editor for creating Maestro mobile UI test flows. No login, no telemetry, no cloud."
+    "longDescription": "Maestro Deck is a fast, local-first, source-available visual editor for creating Maestro mobile UI test flows. No account required."
   },
   "plugins": {
     "updater": {
