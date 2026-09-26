@@ -57,7 +57,9 @@ describe("telemetry consent", () => {
       physical: true,
       distinct_id: installId,
       $process_person_profile: false,
+      $app_version: "test",
     });
+    expect(["Mac OS X", "Windows", "Linux", "Other"]).toContain(event?.properties.$os);
   });
 
   it("drops queued events when consent is withdrawn before they are sent", async () => {

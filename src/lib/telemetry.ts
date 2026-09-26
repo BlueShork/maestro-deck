@@ -56,10 +56,10 @@ export function setScreen(name: string): void {
 
 function osName(): string {
   const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
-  if (/Mac OS X|Macintosh/i.test(ua)) return "macos";
-  if (/Windows/i.test(ua)) return "windows";
-  if (/Linux/i.test(ua)) return "linux";
-  return "other";
+  if (/Mac OS X|Macintosh/i.test(ua)) return "Mac OS X";
+  if (/Windows/i.test(ua)) return "Windows";
+  if (/Linux/i.test(ua)) return "Linux";
+  return "Other";
 }
 
 function enabled(): boolean {
@@ -80,8 +80,8 @@ export function track<E extends TelemetryEvent>(event: E, properties: TelemetryE
       $session_id: sessionId,
       $process_person_profile: false,
       $lib: "maestro-deck",
-      app_version: __APP_VERSION__,
-      os: osName(),
+      $app_version: __APP_VERSION__,
+      $os: osName(),
     },
   });
   if (queue.length >= MAX_BATCH) void flush();
