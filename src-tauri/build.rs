@@ -11,7 +11,7 @@ fn main() {
     let fds = protox::compile(["proto/maestro_android.proto"], ["proto"])
         .expect("failed to parse maestro_android.proto with protox");
 
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_server(false)
         .build_client(true)
         .compile_fds(fds)

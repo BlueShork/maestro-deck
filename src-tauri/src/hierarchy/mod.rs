@@ -27,6 +27,7 @@ use std::process::Command;
 
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
+use quick_xml::XmlVersion;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -360,8 +361,11 @@ fn build_node(
     let decoder = reader.decoder();
     for attr in e.attributes().flatten() {
         let key = attr.key.as_ref();
+        // Spec-compliant attribute normalization turns literal tab/CR/LF
+        // into spaces, but UiAutomator escapes newlines as `&#10;`, and
+        // character references are preserved, so multi-line text survives.
         let value = attr
-            .decode_and_unescape_value(decoder)
+            .decoded_and_normalized_value(XmlVersion::Implicit1_0, decoder)
             .map_err(|err| AppError::HierarchyParse(err.to_string()))?;
         match key {
             // Note: we deliberately ignore the XML `index` attribute
@@ -545,6 +549,15 @@ mod tests {
         let tree =
             parse_xml("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<hierarchy/>").expect("parse");
         assert!(tree.root.is_none());
+    }
+
+    #[test]
+    fn keeps_escaped_newlines_in_text() {
+        let tree = parse_xml(
+            "<hierarchy><node text=\"Line 1&#10;Line 2\" bounds=\"[0,0][1,1]\" class=\"X\" package=\"p\"/></hierarchy>",
+        )
+        .expect("parse");
+        assert_eq!(tree.root.unwrap().text.as_deref(), Some("Line 1\nLine 2"));
     }
 
     #[test]
