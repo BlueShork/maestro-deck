@@ -4,6 +4,7 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { track } from "@/lib/telemetry";
 import { flowUrl } from "@/lib/utils";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { useFlowStore } from "@/stores/flowStore";
@@ -108,6 +109,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
       // Connecting a device is the gesture for "run here now": it takes the
       // run target back from the cloud, so the two can never both look chosen.
       useCloudTargetStore.getState().clear();
+      track("device_connected", { platform: connected.platform, physical: connected.physical });
       set({
         current: connected,
         connecting: false,

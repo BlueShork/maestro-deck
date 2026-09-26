@@ -4,6 +4,7 @@
 import { create } from "zustand";
 
 import { ipc } from "@/lib/ipc";
+import { track } from "@/lib/telemetry";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -135,6 +136,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       // instead of a silent "Dumping…" that reads as a freeze.
       const device = useDeviceStore.getState().current;
       const coldIosSim = device?.platform === "ios" && !device.physical;
+      track("inspector_opened", { platform: device?.platform ?? "unknown" });
       const toastId = toast.loading(
         coldIosSim
           ? "Starting iOS simulator driver… first inspect can take ~1–2 min"

@@ -4,6 +4,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import {
+  SettingsField,
+  SettingsSubgroup,
+  settingsInputClass,
+} from "@/components/settings/SettingsPrimitives";
 import { Button } from "@/components/ui/Button";
 import { credentials } from "@/lib/chat/credentials";
 import { MAESTRODECK_MODEL } from "@/lib/chat/models";
@@ -111,43 +116,42 @@ export function AiSettings() {
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-muted-foreground">AI assistant</span>
-        <p className="text-[11px] text-muted-foreground">
-          Use Billy as provided by Maestro Deck with your account, or bring your own key. Keys are
-          stored encrypted in a local Stronghold vault and never leave this machine except when
-          calling the provider you configure.
-        </p>
-      </div>
-
-      <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5 self-start">
-        {PROVIDER_TABS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => setProvider(p.id)}
-            className={cn(
-              "rounded px-3 py-1 text-xs font-medium transition-colors",
-              provider === p.id
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
+    <SettingsSubgroup
+      title="Provider"
+      description="Where Billy's answers come from. Use Billy through your Maestro Deck account, or bring your own key — keys are stored encrypted in a local vault and only ever sent to the provider you pick."
+    >
+      <div className="flex">
+        <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
+          {PROVIDER_TABS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setProvider(p.id)}
+              aria-pressed={provider === p.id}
+              className={cn(
+                "rounded px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                provider === p.id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {provider === "maestrodeck" ? (
         <MaestroDeckSettings />
       ) : provider === "anthropic" ? (
-        <div className="flex flex-col gap-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-muted-foreground">
-              API key {anthropicSaved && <em className="text-emerald-500">(saved)</em>}
-            </span>
+        <div className="flex flex-col gap-3">
+          <SettingsField
+            label={<>API key {anthropicSaved && <SavedTag />}</>}
+            htmlFor="ai-anthropic-key"
+            description="Create one at console.anthropic.com → API keys."
+          >
             <input
+              id="ai-anthropic-key"
               type="password"
               value={apiKey}
               onChange={(e) => {
@@ -155,9 +159,9 @@ export function AiSettings() {
                 setAnthropicSaved(false);
               }}
               placeholder="sk-ant-…"
-              className="rounded border border-border bg-background px-2 py-1.5 font-mono text-xs"
+              className={settingsInputClass}
             />
-          </label>
+          </SettingsField>
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -179,10 +183,10 @@ export function AiSettings() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-muted-foreground">GCP project ID</span>
+        <div className="flex flex-col gap-3">
+          <SettingsField label="GCP project ID" htmlFor="ai-vertex-project">
             <input
+              id="ai-vertex-project"
               type="text"
               value={projectId}
               onChange={(e) => {
@@ -190,18 +194,18 @@ export function AiSettings() {
                 setVertexSaved(false);
               }}
               placeholder="my-gcp-project"
-              className="rounded border border-border bg-background px-2 py-1.5 font-mono text-xs"
+              className={settingsInputClass}
             />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-muted-foreground">Region</span>
+          </SettingsField>
+          <SettingsField label="Region" htmlFor="ai-vertex-region">
             <select
+              id="ai-vertex-region"
               value={region}
               onChange={(e) => {
                 setRegion(e.target.value);
                 setVertexSaved(false);
               }}
-              className="rounded border border-border bg-background px-2 py-1.5 text-xs"
+              className={settingsInputClass}
             >
               {REGIONS.map((r) => (
                 <option key={r} value={r}>
@@ -209,12 +213,14 @@ export function AiSettings() {
                 </option>
               ))}
             </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-muted-foreground">
-              Service account JSON {vertexSaved && <em className="text-emerald-500">(saved)</em>}
-            </span>
+          </SettingsField>
+          <SettingsField
+            label={<>Service account JSON {vertexSaved && <SavedTag />}</>}
+            htmlFor="ai-vertex-sa"
+            description="A key for a service account with the Vertex AI User role."
+          >
             <textarea
+              id="ai-vertex-sa"
               value={serviceAccountJson}
               onChange={(e) => {
                 setServiceAccountJson(e.target.value);
@@ -222,9 +228,9 @@ export function AiSettings() {
               }}
               rows={4}
               placeholder='{"type":"service_account",…}'
-              className="resize-none rounded border border-border bg-background px-2 py-1.5 font-mono text-[10px]"
+              className={cn(settingsInputClass, "resize-none text-[10px]")}
             />
-          </label>
+          </SettingsField>
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -252,16 +258,22 @@ export function AiSettings() {
       {status && (
         <div
           className={cn(
-            "rounded-md border px-2 py-1 text-[11px]",
+            "text-xs",
             status.kind === "ok"
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
-              : "border-destructive/40 bg-destructive/10 text-destructive",
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-destructive/10 text-destructive",
           )}
         >
           {status.msg}
         </div>
       )}
-    </div>
+    </SettingsSubgroup>
+  );
+}
+
+function SavedTag() {
+  return (
+    <span className="ml-1 text-xs font-normal text-emerald-600 dark:text-emerald-400">saved</span>
   );
 }
 
@@ -274,38 +286,34 @@ function MaestroDeckSettings() {
   const setChatProvider = useChatStore((s) => s.setProvider);
 
   return (
-    <div className="flex flex-col gap-2">
-      <p className="text-[11px] text-muted-foreground">
+    <div className="flex flex-col gap-3">
+      <p className="text-xs leading-relaxed text-muted-foreground">
         The same Billy as in the Maestro Deck iPhone app, with every desktop tool: he sees the
         device, taps, and writes and runs your flows. No key needed, free with a Maestro Deck
         account. Your conversation is sent to Maestro Deck Cloud to be answered.
       </p>
       {!ready ? null : user ? (
-        <>
-          <span className="text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">
             Signed in as <span className="text-foreground">{user.email}</span>
           </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => setChatProvider("maestrodeck", MAESTRODECK_MODEL.id)}
-              disabled={inUse}
-            >
-              {inUse ? "Used by the chat" : "Use in the chat"}
-            </Button>
-          </div>
-        </>
+          <Button
+            size="sm"
+            onClick={() => setChatProvider("maestrodeck", MAESTRODECK_MODEL.id)}
+            disabled={inUse}
+          >
+            {inUse ? "Used by the chat" : "Use in the chat"}
+          </Button>
+        </div>
       ) : (
-        <>
-          <span className="text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">
             Sign in to your Maestro Deck account to use it.
           </span>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => navigate("/account")}>
-              Sign in
-            </Button>
-          </div>
-        </>
+          <Button size="sm" onClick={() => navigate("/account")}>
+            Sign in
+          </Button>
+        </div>
       )}
     </div>
   );

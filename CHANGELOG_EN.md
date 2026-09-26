@@ -1,3 +1,10 @@
+# Unreleased
+
+## Privacy
+- **Optional, anonymous usage statistics.** On first launch the app now asks whether you want to share anonymous usage statistics, so we can see how many people use Maestro Deck and which features to build next. Nothing is sent unless you opt in, and no flows, files, device names or personal data are ever included. Change your choice any time in Settings → Privacy.
+
+---
+
 # What's New in v0.9.6
 
 ## Fixes

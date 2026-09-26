@@ -34,9 +34,9 @@ describe("PhysicalIosSetup", () => {
   // async status probe never resolves — the component renders its loading state.
   // That is exactly what we assert here: before the status is known, the card
   // shows a "checking" placeholder instead of a flash of false ✗ rows.
-  it("always shows the card title", () => {
+  it("always shows the checklist title", () => {
     const html = render();
-    expect(html).toMatch(/Physical iPhone setup/i);
+    expect(html).toMatch(/Setup checklist/i);
   });
 
   it("shows a loading placeholder until the status is known", () => {

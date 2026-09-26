@@ -9,6 +9,7 @@ import { MAESTRODECK_MODEL } from "@/lib/chat/models";
 import { getProvider } from "@/lib/chat/registry";
 import { getEffectiveBillyPrompt } from "@/lib/chat/systemPrompt";
 import { ALL_TOOLS, executeTool } from "@/lib/chat/tools";
+import { track } from "@/lib/telemetry";
 import { useFlowStore } from "@/stores/flowStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { WorkspaceNode } from "@/types";
@@ -107,6 +108,10 @@ export const useChatStore = create<ChatState>()(
           return null;
         }
 
+        track("billy_message_sent", {
+          provider: get().currentProvider,
+          via_voice: opts?.viaVoice ?? false,
+        });
         const userMsg: ChatMessage = {
           id: crypto.randomUUID(),
           role: "user",

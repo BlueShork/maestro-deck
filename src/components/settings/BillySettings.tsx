@@ -4,7 +4,8 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { SettingsSection } from "@/components/settings/SettingsPrimitives";
+import { AiSettings } from "@/components/AiSettings";
+import { SettingsSection, SettingsSubgroup } from "@/components/settings/SettingsPrimitives";
 import { BILLY_SYSTEM_PROMPT } from "@/lib/chat/systemPrompt";
 import { useBillyPromptStore } from "@/stores/billyPromptStore";
 
@@ -30,43 +31,42 @@ export function BillySettings() {
   return (
     <SettingsSection
       title="Billy AI"
-      description="Billy is the in-app AI assistant. This is its system prompt — the role and Maestro knowledge it works from. Edit it to tailor Billy to your project; reset to restore the version shipped with the app."
+      description="Billy is the AI assistant in the chat panel. He can see the connected device, tap around, and write, fix and run flows for you. Choose where his answers come from, and optionally tailor his instructions to your project."
     >
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            System prompt
-          </span>
-          {isCustomized ? (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-              Customized
-            </span>
-          ) : (
-            <span className="text-[10px] text-muted-foreground">Default</span>
-          )}
+      <AiSettings />
+
+      <SettingsSubgroup
+        title="System prompt"
+        description="The role and Maestro knowledge Billy works from. Edit it to add your app's conventions; changes apply from Billy's next message. Saving an empty prompt restores the default."
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm">Instructions</span>
+            {isCustomized ? (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                Customized
+              </span>
+            ) : (
+              <span className="text-[10px] text-muted-foreground">Default</span>
+            )}
+          </div>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.currentTarget.value)}
+            spellCheck={false}
+            aria-label="Billy system prompt"
+            className="h-80 w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={onSave} disabled={!dirty}>
+              Save
+            </Button>
+            <Button size="sm" variant="outline" onClick={onReset} disabled={!isCustomized}>
+              Reset to default
+            </Button>
+          </div>
         </div>
-
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.currentTarget.value)}
-          spellCheck={false}
-          className="h-80 w-full resize-y rounded border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-
-        <p className="text-[11px] text-muted-foreground">
-          Changes take effect on Billy&apos;s next message. Clearing the editor and saving is
-          treated as a reset to the default.
-        </p>
-
-        <div className="flex gap-2">
-          <Button size="sm" onClick={onSave} disabled={!dirty}>
-            Save
-          </Button>
-          <Button size="sm" variant="outline" onClick={onReset} disabled={!isCustomized}>
-            Reset to default
-          </Button>
-        </div>
-      </div>
+      </SettingsSubgroup>
     </SettingsSection>
   );
 }
