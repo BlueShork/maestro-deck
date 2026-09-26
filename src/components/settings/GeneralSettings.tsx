@@ -5,6 +5,7 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import {
+  SettingsRow,
   SettingsSection,
   SettingsSubgroup,
   ToggleRow,
@@ -28,25 +29,18 @@ export function GeneralSettings() {
 
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
-  const inspectKey = useSettingsStore((s) => s.inspectKey);
-  const setInspectKey = useSettingsStore((s) => s.setInspectKey);
-  const autoSaveEnabled = useSettingsStore((s) => s.autoSaveEnabled);
-  const setAutoSaveEnabled = useSettingsStore((s) => s.setAutoSaveEnabled);
   const autoCheckUpdatesEnabled = useSettingsStore((s) => s.autoCheckUpdatesEnabled);
   const setAutoCheckUpdatesEnabled = useSettingsStore((s) => s.setAutoCheckUpdatesEnabled);
   const confirmBeforeQuit = useSettingsStore((s) => s.confirmBeforeQuit);
   const setConfirmBeforeQuit = useSettingsStore((s) => s.setConfirmBeforeQuit);
-  const appId = useSettingsStore((s) => s.appId);
-  const setAppId = useSettingsStore((s) => s.setAppId);
 
   return (
     <SettingsSection
       title="General"
-      description="Appearance, editor, and app preferences are saved locally."
+      description="How Maestro Deck looks and behaves as an app. Every preference on these pages is saved on this machine and applies immediately."
     >
       <SettingsSubgroup title="Appearance">
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Theme</span>
+        <SettingsRow label="Theme" description="System follows your OS light / dark setting.">
           <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
             {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
               const active = theme === value;
@@ -56,7 +50,7 @@ export function GeneralSettings() {
                   type="button"
                   onClick={() => setTheme(value)}
                   className={cn(
-                    "flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "flex items-center justify-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     active
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
@@ -69,91 +63,47 @@ export function GeneralSettings() {
               );
             })}
           </div>
-        </div>
+        </SettingsRow>
       </SettingsSubgroup>
 
-      <SettingsSubgroup title="Editor">
-        <ToggleRow
-          label="Auto-save modified flows"
-          description="Automatically saves the open YAML 1 second after you stop typing."
-          checked={autoSaveEnabled}
-          onCheckedChange={setAutoSaveEnabled}
-        />
-
-        <label className="flex items-center justify-between gap-3">
-          <span>Inspect shortcut key</span>
-          <input
-            type="text"
-            value={inspectKey}
-            maxLength={1}
-            onChange={(e) => setInspectKey(e.currentTarget.value.toLowerCase() || "i")}
-            className="w-12 rounded border border-border bg-background px-2 py-1 text-center font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </label>
-      </SettingsSubgroup>
-
-      <SettingsSubgroup title="Flows">
-        <label className="flex flex-col gap-1.5">
-          <span>App ID</span>
-          <input
-            type="text"
-            value={appId}
-            placeholder="com.example.app"
-            onChange={(e) => setAppId(e.currentTarget.value)}
-            className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <span className="text-xs text-muted-foreground">
-            Passed to maestro as <code>-e APP_ID=…</code> on every run, so flows that reference{" "}
-            <code>{"${APP_ID}"}</code> (e.g. your CI flows) run locally without editing each file.
-            Leave empty to pass nothing.
-          </span>
-        </label>
-      </SettingsSubgroup>
-
-      <SettingsSubgroup title="Application">
+      <SettingsSubgroup title="Startup & quitting">
         <ToggleRow
           label="Check for updates on startup"
-          description="Silently checks GitHub releases and prompts you when a new version is available."
+          description="Silently checks GitHub releases a few seconds after launch and offers the update when one is available."
           checked={autoCheckUpdatesEnabled}
           onCheckedChange={setAutoCheckUpdatesEnabled}
         />
-
         <ToggleRow
           label="Confirm before quitting"
-          description="Asks for confirmation on Cmd+Q / window close so a stray quit doesn't drop a running session."
+          description="Asks before Cmd+Q or closing the window, so a stray quit doesn't stop a running flow."
           checked={confirmBeforeQuit}
           onCheckedChange={setConfirmBeforeQuit}
         />
       </SettingsSubgroup>
 
-      <SettingsSubgroup title="Onboarding">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-col">
-            <span>Guided tour</span>
-            <span className="text-xs text-muted-foreground">
-              Replay the first-launch walkthrough of the workspace.
-            </span>
-          </div>
+      <SettingsSubgroup
+        title="Help & onboarding"
+        description="Both open on the main workspace, since that's what they walk you through."
+      >
+        <SettingsRow
+          label="Guided tour"
+          description="A quick tour of the workspace panels, as shown on first launch."
+        >
           <Button
             size="sm"
             variant="outline"
             onClick={() => {
-              // The tour anchors live on the main workspace, so leave settings first.
               navigate("/");
               startTour();
             }}
           >
-            Replay tutorial
+            Replay tour
           </Button>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-col">
-            <span>Hands-on walkthrough</span>
-            <span className="text-xs text-muted-foreground">
-              Install the sample app, write a flow and run it, step by step.
-            </span>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          label="Hands-on walkthrough"
+          description="Installs the sample app, then helps you write a flow and run it, step by step."
+        >
           <Button
             size="sm"
             variant="outline"
@@ -166,7 +116,7 @@ export function GeneralSettings() {
           >
             Start walkthrough
           </Button>
-        </div>
+        </SettingsRow>
       </SettingsSubgroup>
     </SettingsSection>
   );

@@ -23,13 +23,20 @@ describe("resolveSection", () => {
   it("exposes the expected sections in sidebar order", () => {
     expect(SETTINGS_SECTIONS.map((s) => s.id)).toEqual([
       "general",
+      "privacy",
+      "editor",
       "device",
-      "tools",
-      "environment",
+      "iphone",
+      "toolchain",
       "ai",
-      "billy",
       "visual-regression",
       "about",
     ]);
+  });
+
+  it("sends links from before the reorganisation to their new section", () => {
+    expect(resolveSection("tools").id).toBe("toolchain");
+    expect(resolveSection("environment").id).toBe("toolchain");
+    expect(resolveSection("billy").id).toBe("ai");
   });
 });
