@@ -77,22 +77,14 @@ export default function App() {
     if (last) void openFlowFile(last, { silent: true });
   }, []);
 
-  // Anonymous usage statistics, only if the user opted in (a no-op
-  // otherwise). The screen is recorded even without consent so events sent
-  // after a later opt-in still carry it. Declared before app_opened so that
-  // event already knows the screen.
   useEffect(() => {
     setScreen(screenName(location.pathname));
   }, [location.pathname]);
 
-  // A fresh opt-in sends its own app_opened from the dialog.
   useEffect(() => {
     track("app_opened", {});
   }, []);
 
-  // First launch: start the onboarding tour once — after the telemetry
-  // question is answered, so the two overlays never stack. `hasSeenTour` and
-  // the consent hydrate synchronously from localStorage.
   const telemetryAnswered = useTelemetryStore((s) => s.consent !== null);
   useEffect(() => {
     if (telemetryAnswered && !useTourStore.getState().hasSeenTour) {

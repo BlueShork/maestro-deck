@@ -29,7 +29,6 @@ export interface SettingsSectionDef {
   id: string;
   label: string;
   icon: LucideIcon;
-  /** Sidebar heading the section is listed under; null = ungrouped (About). */
   group: string | null;
   render: () => ReactNode;
 }
@@ -95,7 +94,6 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = [
   { id: "about", label: "About", icon: Info, group: null, render: () => <AboutSettings /> },
 ];
 
-/** Section ids from before the reorganisation, so old links still land right. */
 const LEGACY_IDS: Record<string, string> = {
   tools: "toolchain",
   environment: "toolchain",

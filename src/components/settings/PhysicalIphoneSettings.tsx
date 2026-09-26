@@ -18,7 +18,6 @@ export function PhysicalIphoneSettings() {
   const paths = useToolPaths();
   const [bridgeInstalled, setBridgeInstalled] = useState<boolean | null>(null);
   const [installing, setInstalling] = useState(false);
-  // Bump to make the checklist re-fetch its status.
   const [setupRefresh, setSetupRefresh] = useState(0);
 
   async function refreshBridge() {
@@ -47,7 +46,6 @@ export function PhysicalIphoneSettings() {
     }
   }
 
-  // The checklist reflects the saved Team ID, so refresh it after each save.
   const { saved } = paths;
   useEffect(() => {
     if (saved) setSetupRefresh((n) => n + 1);

@@ -6,7 +6,6 @@ import type { ReactNode } from "react";
 import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils";
 
-/** One settings page: a title, an explanation of what lives here, then its groups. */
 export function SettingsSection({
   title,
   description,
@@ -29,11 +28,6 @@ export function SettingsSection({
   );
 }
 
-/**
- * A titled card of related settings. Each direct child is one row, separated
- * by a hairline — pass rows (`SettingsRow`, `ToggleRow`, `SettingsField`) or any
- * block that should read as one.
- */
 export function SettingsSubgroup({
   title,
   description,
@@ -60,7 +54,6 @@ export function SettingsSubgroup({
   );
 }
 
-/** Small uppercase tag next to a label ("beta", "experimental"). */
 export function SettingsBadge({ children }: { children: ReactNode }) {
   return (
     <span className="ml-1.5 rounded border border-border bg-muted px-1 py-0.5 align-middle font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
@@ -69,7 +62,6 @@ export function SettingsBadge({ children }: { children: ReactNode }) {
   );
 }
 
-/** A setting whose control sits on the right: label + description on the left. */
 export function SettingsRow({
   label,
   description,
@@ -92,7 +84,6 @@ export function SettingsRow({
   );
 }
 
-/** A setting whose control needs the full width (text inputs, paths): stacked. */
 export function SettingsField({
   label,
   htmlFor,
@@ -119,7 +110,6 @@ export function SettingsField({
   );
 }
 
-/** Shared look for text inputs across settings. */
 export const settingsInputClass =
   "w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 

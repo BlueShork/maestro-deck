@@ -9,7 +9,6 @@ import { resolveSection, SETTINGS_SECTIONS } from "@/components/settings/section
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
-/** Consecutive sections sharing a sidebar heading, in declaration order. */
 function groupSections() {
   const out: Array<{ group: string | null; sections: typeof SETTINGS_SECTIONS }> = [];
   for (const s of SETTINGS_SECTIONS) {

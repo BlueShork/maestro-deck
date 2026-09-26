@@ -34,11 +34,6 @@ function draftFrom(v: ToolPathsView): ToolPathsDraft {
   };
 }
 
-/**
- * Tool path overrides, shared by the Toolchain and Physical iPhone pages. The
- * backend saves all overrides in one call, so each page edits its own fields
- * and sends the others back as last loaded.
- */
 export function useToolPaths() {
   const [view, setView] = useState<ToolPathsView | null>(null);
   const [draft, setDraft] = useState<ToolPathsDraft>(EMPTY);

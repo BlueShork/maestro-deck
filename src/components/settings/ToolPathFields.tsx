@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/Button";
 
 type ToolPaths = ReturnType<typeof useToolPaths>;
 
-/** One binary path override, with Browse and the path currently in use. */
 export function ToolPathField({
   paths,
   tool,
@@ -68,7 +67,6 @@ export function ToolPathField({
   );
 }
 
-/** Save row for tool path edits; they apply on the next adb / Maestro call. */
 export function ToolPathsSaveBar({ paths }: { paths: ToolPaths }) {
   const { busy, dirty, saved, error, save } = paths;
   return (

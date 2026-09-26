@@ -21,11 +21,6 @@ const LABELS: Record<string, { name: string; what: string }> = {
   xcode: { name: "Xcode", what: "iOS simulators · macOS only" },
 };
 
-/**
- * What the app runs on: the live toolchain check (same as the first-launch
- * setup popup) and the adb / Maestro path overrides. Physical-iPhone tooling
- * lives on its own page.
- */
 export function ToolchainSettings() {
   const checks = useEnvStore((s) => s.checks);
   const checking = useEnvStore((s) => s.checking);

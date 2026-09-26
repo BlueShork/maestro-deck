@@ -21,12 +21,6 @@ const NEVER_COLLECTED = [
   "Your name, email or Maestro Deck Cloud account",
 ];
 
-/**
- * Asked once, on first launch (and once for existing users after the update
- * that introduced it), before the guided tour. Closing the dialog without
- * answering counts as "no": nothing is sent until the user explicitly opts in,
- * and the choice can be changed at any time from Settings → Privacy.
- */
 export function TelemetryConsentDialog() {
   const consent = useTelemetryStore((s) => s.consent);
   const setConsent = useTelemetryStore((s) => s.setConsent);
@@ -41,7 +35,6 @@ export function TelemetryConsentDialog() {
     <Dialog open={consent === null} onOpenChange={(next) => !next && decline()}>
       <DialogContent
         className="max-w-lg"
-        // No default focus: neither answer should be pre-selected.
         onOpenAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
       >

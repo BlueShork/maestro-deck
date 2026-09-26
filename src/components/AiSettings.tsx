@@ -26,7 +26,6 @@ const PROVIDER_TABS: { id: ProviderId; label: string }[] = [
 
 const REGIONS = ["us-east5", "us-central1", "europe-west1", "europe-west4", "asia-southeast1"];
 
-/** The "Provider" card of Settings → Billy AI: hosted Billy or your own key. */
 export function AiSettings() {
   // Open on the provider the chat is using, so its settings are what shows.
   const [provider, setProvider] = useState<ProviderId>(
