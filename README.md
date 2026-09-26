@@ -29,7 +29,7 @@
 **Maestro Deck** mirrors your device, lets you click on an element to get a selector, and runs the flow with each step lit up as it executes. You write tests by using your app instead of guessing at selectors.
 
 - **Android, iOS and Web** — USB phones, emulators, iOS simulators and Chromium, from the same window.
-- **Local first.** Everything runs on your machine. No telemetry, and no account needed.
+- **Local first.** Everything runs on your machine, and no account is needed. Anonymous usage statistics are strictly opt-in — see [Privacy and usage statistics](#privacy-and-usage-statistics).
 - **Zero setup.** On first launch the app installs Java, the Maestro CLI (2.10.0) and ADB in its own folder.
 - **Native and light.** Built on Tauri 2 (Rust + system webview), not Electron.
 - **Source-available** under BUSL-1.1. It becomes Apache-2.0 on 2030-05-15.
@@ -157,13 +157,27 @@ BUSL-1.1 is a *source-available* license (not OSI-approved), like the ones used 
 
 ---
 
+## Privacy and usage statistics
+
+On first launch, Maestro Deck asks whether you want to share **anonymous usage statistics**. Nothing is sent unless you say yes, and you can change your mind at any time in **Settings → Privacy**.
+
+These statistics exist for one reason: Maestro Deck is built by an independent developer, and they are the only way to know how many people use it, on which platforms, and which features matter — so we can decide what to build next. They are not used to track, profile or advertise to anyone, and they are never sold or shared.
+
+- **Collected:** app version, operating system, a random install ID (not tied to your machine or account), and usage — screens opened, device platform connected, runs finished (passed / failed / stopped), inspector opened, Billy message sent, cloud run started, screenshot bank check.
+- **Never collected:** flow contents, file paths, selectors, app IDs, screenshots, device names or serials, prompts or anything you type, your name, email or Maestro Deck Cloud account.
+- **Where:** [PostHog](https://posthog.com) EU Cloud (servers in the European Union), the same analytics used on [maestrodeck.cloud](https://www.maestrodeck.cloud). No person profiles are created, and development builds never report.
+
+Every event the app can send is listed in [`src/lib/telemetry.ts`](src/lib/telemetry.ts). Details are in the [privacy policy](https://www.maestrodeck.cloud/legal/confidentialite).
+
+---
+
 ## Trademark and legal notice
 
 **Maestro Deck™** is a trademark of Ethan Morisset, filed with the French INPI on 2026-05-19 (application n°5259782, Nice classes 9 and 42, under examination).
 
 Maestro Deck is an independent project. It is **not affiliated with, endorsed by, or sponsored by mobile.dev Inc.**, the maintainers of [Maestro](https://maestro.dev). "Maestro" is used only to describe interoperability, and related marks belong to their owners.
 
-Maestro Deck is published by **Ethan Morisset**, entrepreneur individuel registered in France. The desktop app runs locally and collects no telemetry. Signing in to Maestro Deck Cloud is optional and covered by the policies below.
+Maestro Deck is published by **Ethan Morisset**, entrepreneur individuel registered in France. The desktop app runs locally. Anonymous usage statistics and signing in to Maestro Deck Cloud are both optional and covered by the policies below.
 
 [Mentions légales](https://www.maestrodeck.cloud/legal/mentions-legales) ·
 [Terms of use (CGU)](https://www.maestrodeck.cloud/legal/cgu) ·

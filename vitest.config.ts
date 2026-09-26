@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 const dir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify("test"),
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],

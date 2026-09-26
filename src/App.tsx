@@ -13,6 +13,7 @@ import { OnboardingOverlay } from "@/components/OnboardingOverlay";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { SetupPopup } from "@/components/SetupPopup";
+import { TelemetryConsentDialog } from "@/components/TelemetryConsentDialog";
 import { TourOverlay } from "@/components/TourOverlay";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { Toaster } from "@/components/ui/Toast";
@@ -20,6 +21,7 @@ import { summarizeBankReport } from "@/lib/bankReport";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
+import { screenName, setScreen, track } from "@/lib/telemetry";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { startCloudAuthListener, useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useCloudInviteStore } from "@/stores/cloudInviteStore";
@@ -32,6 +34,7 @@ import { usePanelsStore } from "@/stores/panelsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
+import { useTelemetryStore } from "@/stores/telemetryStore";
 import { toast, useToastStore } from "@/stores/toastStore";
 import { shouldAutoStartWalkthrough, useOnboardingStore } from "@/stores/onboardingStore";
 import { useEnvStore } from "@/stores/envStore";
@@ -74,13 +77,28 @@ export default function App() {
     if (last) void openFlowFile(last, { silent: true });
   }, []);
 
-  // First launch: start the onboarding tour once. `hasSeenTour` hydrates
-  // synchronously from localStorage, so it's correct on the first tick.
+  // Anonymous usage statistics, only if the user opted in (a no-op
+  // otherwise). The screen is recorded even without consent so events sent
+  // after a later opt-in still carry it. Declared before app_opened so that
+  // event already knows the screen.
   useEffect(() => {
-    if (!useTourStore.getState().hasSeenTour) {
+    setScreen(screenName(location.pathname));
+  }, [location.pathname]);
+
+  // A fresh opt-in sends its own app_opened from the dialog.
+  useEffect(() => {
+    track("app_opened", {});
+  }, []);
+
+  // First launch: start the onboarding tour once — after the telemetry
+  // question is answered, so the two overlays never stack. `hasSeenTour` and
+  // the consent hydrate synchronously from localStorage.
+  const telemetryAnswered = useTelemetryStore((s) => s.consent !== null);
+  useEffect(() => {
+    if (telemetryAnswered && !useTourStore.getState().hasSeenTour) {
       useTourStore.getState().start();
     }
-  }, []);
+  }, [telemetryAnswered]);
 
   // Everyone should meet the hands-on walkthrough once, including the users
   // who went through the tour before it existed — their tour ended long ago
@@ -90,6 +108,7 @@ export default function App() {
   const walkthroughDone = useOnboardingStore((s) => s.done);
   useEffect(() => {
     if (
+      telemetryAnswered &&
       shouldAutoStartWalkthrough({
         hasSeenTour: useTourStore.getState().hasSeenTour,
         walkthroughDone,
@@ -98,7 +117,7 @@ export default function App() {
     ) {
       useOnboardingStore.getState().start();
     }
-  }, [toolsReady, walkthroughDone]);
+  }, [telemetryAnswered, toolsReady, walkthroughDone]);
 
   // Optional Maestro Deck Cloud sign-in: Firebase persists the session
   // itself, this just keeps cloudAuthStore in sync with it.
@@ -182,6 +201,13 @@ export default function App() {
           wasStopped ? "[runner stopped by user]" : `[runner exited with code ${code}]`,
         );
         setStopped(code);
+        const ranOn = useDeviceStore.getState().current;
+        track("flow_run_finished", {
+          platform: ranOn?.platform ?? "unknown",
+          physical: ranOn?.physical ?? false,
+          scope: useRunStore.getState().runTarget?.kind ?? "unknown",
+          outcome: wasStopped ? "stopped" : code === 0 ? "passed" : "failed",
+        });
         if (wasStopped) toast.success("Flow stopped");
         else if (code === 0) toast.success("Flow completed");
         else toast.error("Flow failed", `exit code ${code}`);
@@ -217,6 +243,7 @@ export default function App() {
               platform: device.platform,
               ignoreStatusBar: useVisualRegressionStore.getState().ignoreStatusBar,
             };
+            track("screenshot_bank_checked", { scope: target.kind });
             const compare =
               target.kind === "all"
                 ? ipc.compareScreenshotsAll(common)
@@ -366,6 +393,7 @@ export default function App() {
         {/* MainView already covers "/"; redirect any other unknown path there. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <TelemetryConsentDialog />
       <UpdateDialog />
       <CloudInviteDialog />
       <QuitConfirmDialog />

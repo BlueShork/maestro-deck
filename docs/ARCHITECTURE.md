@@ -78,6 +78,15 @@ returns a YAML fragment that the editor inserts at the cursor.
 frontend as `runner:stdout` / `runner:stderr` events, and emits a
 `runner:exit` when the child terminates.
 
+**Usage statistics.** Opt-in only. `TelemetryConsentDialog` asks once on
+first launch (before the guided tour) and stores the answer in
+`telemetryStore`. `src/lib/telemetry.ts` is the only module that sends
+anything: `track()` is a no-op unless consent is `"granted"` and the build is
+not a dev build, and it batches events to PostHog's EU capture API over
+`fetch` — no SDK, no autocapture, no remotely loaded script. Events carry a
+random install ID and never include flow contents, paths, device identifiers
+or user input; the `TelemetryEvents` type is the full list of what can be sent.
+
 ## IPC contract
 
 Names and signatures are intentionally frozen — the frontend and backend
