@@ -1,7 +1,25 @@
-# Unreleased
+# What's New in v0.9.7
 
 ## Privacy
 - **Optional, anonymous usage statistics.** On first launch the app now asks whether you want to share anonymous usage statistics, so we can see how many people use Maestro Deck and which features to build next. Nothing is sent unless you opt in, and no flows, files, device names or personal data are ever included. Change your choice any time in Settings → Privacy.
+
+## Settings
+- **Reorganised settings page.** Pages are grouped (App, Workspace, Devices, Features), and each one explains what it is for, with a description next to every setting.
+- New **Privacy**, **Editor & Flows**, **Physical iPhone** and **Toolchain** pages; the two AI pages are merged into a single **Billy AI** page.
+
+## Editor
+- **Right-click a step** to run the flow from it or, when signed in with the Maestro Deck provider, to ask Billy about it: the step's YAML lands in the chat, ready for your question.
+- **Performance is now a tab of the run console**, instead of a separate panel.
+
+## macOS
+- **Native menu bar** with the app's actions: open a folder, save, run, stop, show or hide panels, settings, account, check for updates and docs.
+
+## Account
+- **Redesigned account page**, with a banner, an avatar, the runs left on your account and a ring showing today's usage.
+- **Billy for iPhone**: the account page links to the new iPhone app, with a QR code to scan.
+
+## Interface
+- New app icon and logo.
 
 ---
 
