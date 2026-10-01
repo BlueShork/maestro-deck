@@ -14,6 +14,7 @@ pub mod device;
 mod env_check;
 mod env_shim;
 pub mod error;
+pub mod farm;
 pub mod hierarchy;
 pub mod input;
 #[cfg(target_os = "macos")]
@@ -86,6 +87,9 @@ pub fn run() {
             app_version,
             list_devices,
             connect_device,
+            farm::commands::connect_farm_device,
+            farm::commands::farm_reconnect,
+            farm::commands::farm_install_apk,
             disconnect_device,
             confirm_quit,
             check_device_health,

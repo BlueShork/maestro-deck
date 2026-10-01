@@ -21,6 +21,7 @@ import { DottedGrid } from "@/components/effects/DottedGrid";
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { Logo } from "@/components/Logo";
 import LatticeLoader from "@/components/ui/LatticeLoader";
+import { FarmSessionBar } from "@/components/FarmSessionBar";
 import { H264Decoder } from "@/lib/decoder";
 import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
@@ -774,92 +775,97 @@ export function DeviceView() {
   );
 
   return (
-    <div
-      ref={containerRef}
-      className="relative flex h-full w-full items-center justify-center"
-      onPointerMove={onPointerMove}
-      onPointerLeave={() => setHovered(null)}
-      onPointerDown={(e) => void onClick(e)}
-      onContextMenu={(e) => void onContextMenu(e)}
-      onWheel={onWheel}
-    >
-      {hasFrame ? null : (
-        <EmptyState
-          connected={!!current}
-          streamEnabled={streamEnabled}
-          iosPhysical={current?.platform === "ios" && current?.physical === true}
-        />
-      )}
-
-      <canvas
-        ref={canvasRef}
-        className={cn(
-          "pointer-events-none rounded-lg bg-black shadow-2xl",
-          !hasFrame && "hidden",
-          inspectEnabled && "cursor-crosshair",
+    // The farm session bar sits above the canvas container, outside its
+    // pointer handlers, so its buttons never turn into taps on the phone.
+    <div className="flex h-full w-full flex-col">
+      <FarmSessionBar />
+      <div
+        ref={containerRef}
+        className="relative flex min-h-0 w-full flex-1 items-center justify-center"
+        onPointerMove={onPointerMove}
+        onPointerLeave={() => setHovered(null)}
+        onPointerDown={(e) => void onClick(e)}
+        onContextMenu={(e) => void onContextMenu(e)}
+        onWheel={onWheel}
+      >
+        {hasFrame ? null : (
+          <EmptyState
+            connected={!!current}
+            streamEnabled={streamEnabled}
+            iosPhysical={current?.platform === "ios" && current?.physical === true}
+          />
         )}
-        style={canvasStyle}
-      />
 
-      <InspectorOverlay
-        enabled={inspectEnabled}
-        canvasRect={canvasRect}
-        displayW={displayW}
-        displayH={displayH}
-        overlayScaleX={overlayScaleX}
-        overlayScaleY={overlayScaleY}
-        scale={scale}
-      />
-
-      {hasFrame ? (
-        <div className="absolute right-3 top-3 z-10 flex gap-2">
-          {isIos ? (
-            <button
-              type="button"
-              onClick={() => void pressHome()}
-              disabled={pressingHome || !connectedSerial}
-              title="Press Home (return to home screen)"
-              aria-label="Press Home button"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <House className="h-4 w-4" />
-            </button>
-          ) : null}
-          {!noDarkMode ? (
-            <button
-              type="button"
-              onClick={() => void toggleDarkMode()}
-              disabled={togglingDark || !connectedSerial}
-              title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
-              aria-label="Toggle device dark mode"
-              aria-pressed={darkMode ?? false}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void takeScreenshot()}
-            disabled={capturing}
-            title="Screenshot · ⌘⇧S"
-            aria-label="Take screenshot"
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Camera className="h-4 w-4" />
-          </button>
-        </div>
-      ) : null}
-
-      {actionMenu ? (
-        <InspectActionMenu
-          x={actionMenu.x}
-          y={actionMenu.y}
-          node={actionMenu.node}
-          selectors={actionMenu.selectors}
-          onClose={() => setActionMenu(null)}
+        <canvas
+          ref={canvasRef}
+          className={cn(
+            "pointer-events-none rounded-lg bg-black shadow-2xl",
+            !hasFrame && "hidden",
+            inspectEnabled && "cursor-crosshair",
+          )}
+          style={canvasStyle}
         />
-      ) : null}
+
+        <InspectorOverlay
+          enabled={inspectEnabled}
+          canvasRect={canvasRect}
+          displayW={displayW}
+          displayH={displayH}
+          overlayScaleX={overlayScaleX}
+          overlayScaleY={overlayScaleY}
+          scale={scale}
+        />
+
+        {hasFrame ? (
+          <div className="absolute right-3 top-3 z-10 flex gap-2">
+            {isIos ? (
+              <button
+                type="button"
+                onClick={() => void pressHome()}
+                disabled={pressingHome || !connectedSerial}
+                title="Press Home (return to home screen)"
+                aria-label="Press Home button"
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <House className="h-4 w-4" />
+              </button>
+            ) : null}
+            {!noDarkMode ? (
+              <button
+                type="button"
+                onClick={() => void toggleDarkMode()}
+                disabled={togglingDark || !connectedSerial}
+                title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
+                aria-label="Toggle device dark mode"
+                aria-pressed={darkMode ?? false}
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void takeScreenshot()}
+              disabled={capturing}
+              title="Screenshot · ⌘⇧S"
+              aria-label="Take screenshot"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Camera className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+
+        {actionMenu ? (
+          <InspectActionMenu
+            x={actionMenu.x}
+            y={actionMenu.y}
+            node={actionMenu.node}
+            selectors={actionMenu.selectors}
+            onClose={() => setActionMenu(null)}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

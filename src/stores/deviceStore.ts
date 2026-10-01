@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { ipc } from "@/lib/ipc";
 import { track } from "@/lib/telemetry";
 import { flowUrl } from "@/lib/utils";
+import { useFarmStore } from "@/stores/farmStore";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -43,6 +44,8 @@ interface DeviceState {
   connect: (serial: string) => Promise<void>;
   disconnect: () => Promise<void>;
   markDisconnected: () => void;
+  setCurrent: (device: Device) => void;
+  clearCurrent: () => void;
 }
 
 export const useDeviceStore = create<DeviceState>((set, get) => ({
@@ -86,6 +89,9 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
     }
   },
   connect: async (serial) => {
+    // A farm phone keeps billing and owns the native session: end it first.
+    const farm = useFarmStore.getState();
+    if (farm.session) await farm.release();
     const device = get().devices.find((d) => d.serial === serial);
     const streamEnabled = useSettingsStore.getState().streamEnabled;
     // Web targets start from the open flow's `url:` header (if any).
@@ -142,7 +148,23 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
     } finally {
       set({ current: null, pendingSerial: null, pendingAction: null });
       useStreamStore.getState().reset();
+      useFarmStore.getState().forget();
     }
+  },
+  setCurrent: (device) => {
+    // Picking a farm phone is also "run here now".
+    useCloudTargetStore.getState().clear();
+    set({
+      current: device,
+      connecting: false,
+      pendingSerial: null,
+      pendingAction: null,
+      error: null,
+    });
+  },
+  clearCurrent: () => {
+    set({ current: null });
+    useStreamStore.getState().reset();
   },
   markDisconnected: () => {
     set({ current: null });

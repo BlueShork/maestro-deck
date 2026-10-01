@@ -80,6 +80,12 @@ pub async fn connect_device(
     state: State<'_, AppState>,
 ) -> AppResult<Device> {
     use crate::device::Platform;
+    // Picking a local device ends any farm session first (it bills, and its
+    // branches would otherwise take over the local device's commands).
+    if let Some(session) = state.farm_session.lock().await.take() {
+        session.release().await;
+        *state.control_tx.lock().await = None;
+    }
     // A previous disconnect may have left a simulator keeper warm for fast
     // reconnect. If we're now connecting something that isn't an iOS device,
     // retire it — it still holds :22087 and a JVM. (iOS→iOS reuse or
@@ -285,6 +291,9 @@ pub async fn upgrade_ios_preview(
 /// toggle to enable mirroring without forcing a full reconnect.
 #[tauri::command]
 pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    if crate::farm::active(state.inner()).await.is_some() {
+        return Ok(());
+    }
     let device = state
         .connected_device
         .read()
@@ -325,6 +334,9 @@ pub async fn start_stream(app: AppHandle, state: State<'_, AppState>) -> AppResu
 /// working since they don't depend on the stream.
 #[tauri::command]
 pub async fn stop_stream(state: State<'_, AppState>) -> AppResult<()> {
+    if crate::farm::active(state.inner()).await.is_some() {
+        return Ok(());
+    }
     // Snapshot platform + serial under one guard (dropped before any await), so
     // a concurrent disconnect can't make the two reads disagree.
     let (platform, serial) = {
@@ -407,6 +419,16 @@ pub async fn disconnect_device(state: State<'_, AppState>) -> AppResult<()> {
 /// fast Cmd+Q doesn't leave orphaned maestro / chromedriver / Chrome / iproxy
 /// processes behind.
 pub async fn teardown_all_sessions(state: &AppState, keep_ios_sim_warm: bool) {
+    // A farm phone has no local adb/scrcpy/keeper to tear down: release the
+    // session (the gateway bills up to now) and drop its input channel.
+    if let Some(session) = state.farm_session.lock().await.take() {
+        session.release().await;
+        *state.control_tx.lock().await = None;
+        *state.connected_device.write() = None;
+        *state.last_hierarchy.write() = None;
+        *state.spatial_index.write() = None;
+        return;
+    }
     let (serial, platform) = {
         let g = state.connected_device.read();
         (
@@ -581,6 +603,12 @@ pub async fn enter_inspect_mode(
         .read()
         .clone()
         .ok_or(AppError::NoDevice)?;
+    if let Some(session) = crate::farm::active(state.inner()).await {
+        let xml = session.hierarchy().await?;
+        let mut tree = crate::hierarchy::parse_xml(&xml)?;
+        tree.xml_raw = xml;
+        return finalize_hierarchy(tree, state.inner()).await;
+    }
     if device.platform == crate::device::Platform::Ios {
         // Hold the bridge for the dump: pause the physical screenshot mirror so
         // its /screenshot flood doesn't starve /status + /hierarchy on the
@@ -872,6 +900,9 @@ pub async fn ios_press_home(state: State<'_, AppState>) -> AppResult<()> {
 
 #[tauri::command]
 pub async fn set_dark_mode(enabled: bool, state: State<'_, AppState>) -> AppResult<()> {
+    if crate::farm::active(state.inner()).await.is_some() {
+        return Err(AppError::Other("not available on farm phones yet".into()));
+    }
     let serial = state
         .connected_device
         .read()
@@ -892,6 +923,9 @@ pub async fn set_dark_mode(enabled: bool, state: State<'_, AppState>) -> AppResu
 
 #[tauri::command]
 pub async fn get_dark_mode(state: State<'_, AppState>) -> AppResult<bool> {
+    if crate::farm::active(state.inner()).await.is_some() {
+        return Err(AppError::Other("not available on farm phones yet".into()));
+    }
     let serial = state
         .connected_device
         .read()
@@ -1021,6 +1055,7 @@ pub async fn install_ios_device_bridge() -> AppResult<String> {
 pub async fn run_flow(
     file_path: String,
     app_id: Option<String>,
+    workspace_root: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<u32> {
@@ -1029,6 +1064,34 @@ pub async fn run_flow(
         .read()
         .clone()
         .ok_or(AppError::NoDevice)?;
+    if let Some(session) = crate::farm::active(state.inner()).await {
+        let target = std::path::Path::new(&file_path);
+        let bundle = crate::farm::bundle::collect(
+            target,
+            workspace_root.as_deref().map(std::path::Path::new),
+        )?;
+        let mut env = std::collections::BTreeMap::new();
+        if let Some(id) = app_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            env.insert("APP_ID".to_string(), id.to_string());
+        }
+        let flow_dir = if target.is_dir() {
+            target.to_path_buf()
+        } else {
+            target.parent().map(|p| p.to_path_buf()).unwrap_or_default()
+        };
+        let (pid, kill_rx) = runner::register_remote_runner().await;
+        if let Err(e) = session.run(bundle, env, flow_dir, pid).await {
+            runner::unregister_runner(pid).await;
+            return Err(e);
+        }
+        let stopper = session.clone();
+        tokio::spawn(async move {
+            if kill_rx.await.is_ok() {
+                stopper.stop_run(pid).await;
+            }
+        });
+        return Ok(pid);
+    }
 
     // Configured global APP_ID, forwarded to maestro as `-e APP_ID=…` so flows
     // referencing `${APP_ID}` (the CI placeholder) run locally unchanged.
@@ -1153,6 +1216,9 @@ pub fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
 
 #[tauri::command]
 pub async fn start_metrics(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    if crate::farm::active(state.inner()).await.is_some() {
+        return Err(AppError::Other("not available on farm phones yet".into()));
+    }
     let device = state
         .connected_device
         .read()

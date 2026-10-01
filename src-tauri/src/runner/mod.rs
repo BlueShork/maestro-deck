@@ -679,6 +679,31 @@ pub async fn kill_runner(pid: u32) -> AppResult<()> {
     }
 }
 
+/// Farm runs have no local child: they get a synthetic pid (a range no real
+/// process uses here) registered like a child, so `stop_flow` reaches them.
+static NEXT_REMOTE_PID: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0x7000_0000);
+
+pub async fn register_remote_runner() -> (u32, oneshot::Receiver<()>) {
+    let pid = NEXT_REMOTE_PID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let (tx, rx) = oneshot::channel();
+    RUNNERS.lock().await.insert(pid, tx);
+    (pid, rx)
+}
+
+pub async fn unregister_runner(pid: u32) {
+    RUNNERS.lock().await.remove(&pid);
+}
+
+/// Same events as a local run, so the console and step tracking are unchanged.
+pub fn emit_stdout(app: &AppHandle, line: &str) {
+    let _ = app.emit(EVT_STDOUT, line);
+}
+
+pub fn emit_exit(app: &AppHandle, pid: u32, code: Option<i32>) {
+    let _ = app.emit(EVT_EXIT, RunnerExit { pid, code });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -783,5 +808,16 @@ mod tests {
         assert!(app_id_env_args(None).is_empty());
         assert!(app_id_env_args(Some("")).is_empty());
         assert!(app_id_env_args(Some("   ")).is_empty());
+    }
+
+    #[tokio::test]
+    async fn remote_runners_get_synthetic_pids_and_stop_like_children() {
+        let (pid, rx) = register_remote_runner().await;
+        let (pid2, _rx2) = register_remote_runner().await;
+        assert!(pid >= 0x7000_0000 && pid2 > pid);
+        kill_runner(pid).await.unwrap();
+        assert!(rx.await.is_ok(), "stop_flow reaches the remote run");
+        unregister_runner(pid2).await;
+        assert!(kill_runner(pid2).await.is_err());
     }
 }

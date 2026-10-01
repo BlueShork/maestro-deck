@@ -29,6 +29,31 @@ export class IpcError extends Error {
   }
 }
 
+export interface FarmApkResult {
+  ok: boolean;
+  packages: string[];
+  message: string;
+}
+
+export interface FarmHello {
+  deviceId: string;
+  model: string | null;
+  androidRelease: string | null;
+  videoWidth: number | null;
+  videoHeight: number | null;
+  minutesRemaining: number;
+  maxEndsAt: number;
+}
+
+export type FarmSessionEvent =
+  | { type: "hello"; hello: FarmHello }
+  | { type: "idle_warning"; closes_at: number }
+  | { type: "minutes_warning"; closes_at: number; reason: string }
+  | { type: "reconnecting" }
+  | { type: "reconnected" }
+  | { type: "closing"; reason: string }
+  | { type: "error"; code: string; message: string };
+
 export interface MetricsSamplePayload {
   package: string;
   cpu_pct: number;
@@ -70,6 +95,13 @@ export const ipc = {
   connectDevice: (serial: string, streamEnabled: boolean, platform: Platform, url?: string) =>
     call<Device>("connect_device", { serial, streamEnabled, platform, url: url ?? null }),
   disconnectDevice: () => call<void>("disconnect_device"),
+  connectFarmDevice: (gatewayUrl: string, token: string) =>
+    call<Device>("connect_farm_device", { gatewayUrl, token }),
+  farmReconnect: (gatewayUrl: string, token: string) =>
+    call<void>("farm_reconnect", { gatewayUrl, token }),
+  farmInstallApk: (path: string) => call<FarmApkResult>("farm_install_apk", { path }),
+  onFarmSession: (cb: (event: FarmSessionEvent) => void) =>
+    listen<FarmSessionEvent>("farm://session", (e) => cb(e.payload)),
   // Tear down all sessions and exit. Called once the user confirms the quit
   // dialog (or has opted out of it). The app process exits, so this never
   // resolves on success.
@@ -86,8 +118,12 @@ export const ipc = {
   getDarkMode: () => call<boolean>("get_dark_mode"),
   // iOS-only: press the Home button to return to the home screen.
   iosPressHome: () => call<void>("ios_press_home"),
-  runFlow: (filePath: string, appId?: string) =>
-    call<number>("run_flow", { filePath, appId: appId?.trim() || null }),
+  runFlow: (filePath: string, appId?: string, workspaceRoot?: string | null) =>
+    call<number>("run_flow", {
+      filePath,
+      appId: appId?.trim() || null,
+      workspaceRoot: workspaceRoot ?? null,
+    }),
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
   launchAppOnDevice: (appId: string) => call<void>("launch_app", { appId }),
   stopAppOnDevice: (appId: string) => call<void>("stop_app", { appId }),

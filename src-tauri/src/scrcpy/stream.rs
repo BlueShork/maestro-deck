@@ -186,6 +186,24 @@ where
     }
 }
 
+/// Video from an already-open byte stream (farm sessions relay it over a
+/// WebSocket): device name + codec meta, then packets. Unlike a local
+/// session there is no dummy byte and no control socket to open.
+pub async fn run_reader_session<R, S>(
+    mut reader: R,
+    sink: S,
+    abort: oneshot::Receiver<()>,
+) -> AppResult<()>
+where
+    R: AsyncReadExt + Unpin,
+    S: FrameSink,
+{
+    let device_name = read_device_name(&mut reader).await?;
+    let (codec_id, width, height) = read_codec_meta(&mut reader).await?;
+    info!(%device_name, codec_id, width, height, "remote video stream started");
+    read_frame_loop(reader, sink, abort).await
+}
+
 /// Returns Ok(None) on clean EOF before the next packet.
 async fn read_frame_header<R: AsyncReadExt + Unpin>(r: &mut R) -> AppResult<Option<(u64, u32)>> {
     let mut pts_bytes = [0u8; 8];
@@ -413,5 +431,28 @@ mod tests {
         });
         abort_tx.send(()).expect("send abort");
         task.await.expect("task joined");
+    }
+
+    #[tokio::test]
+    async fn reader_session_reads_the_header_then_frames() {
+        let (mut tx, rx) = duplex(64 * 1024);
+        let sink = CollectingSink::default();
+        let frames = sink.frames.clone();
+        let (_abort_tx, abort_rx) = oneshot::channel();
+        let task = tokio::spawn(run_reader_session(rx, sink, abort_rx));
+        let mut header = b"SM-S928B".to_vec();
+        header.resize(64, 0);
+        header.extend_from_slice(&0x6832_3634u32.to_be_bytes());
+        header.extend_from_slice(&472u32.to_be_bytes());
+        header.extend_from_slice(&1024u32.to_be_bytes());
+        tx.write_all(&header).await.unwrap();
+        tx.write_all(&frame_packet(PTS_FLAG_KEY | 5, &[1, 2, 3]))
+            .await
+            .unwrap();
+        drop(tx);
+        task.await.unwrap().unwrap();
+        let got = frames.lock().unwrap();
+        assert_eq!(got.len(), 1);
+        assert!(got[0].is_key);
     }
 }

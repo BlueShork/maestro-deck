@@ -16,6 +16,7 @@ import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } fr
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
 import { CloudDevicesSection } from "@/components/CloudDevicesSection";
+import { FarmDevicesSection } from "@/components/FarmDevicesSection";
 import { CloudPromoCard } from "@/components/CloudPromoCard";
 import { LogoCloud } from "@/components/Logo";
 
@@ -335,6 +336,7 @@ export function DeviceSelector() {
             <LogoCloud className="mb-2 h-auto w-full max-w-40 self-center text-muted-foreground" />
             {/* Signed in you get the fleet; signed out the card does the asking,
                 since there is nothing to run on until there is an account. */}
+            {cloudUser ? <FarmDevicesSection /> : null}
             {cloudUser ? <CloudDevicesSection /> : null}
           </div>
         </div>
