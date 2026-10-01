@@ -1,3 +1,11 @@
+# What's New in v1.0.0
+
+## Device farm
+- **Control a real phone from the device farm, right from the app.** Farm devices now appear in the device list; start a remote session and the phone's screen streams live in the device view, with a session bar to follow and end it.
+- **Run flows on the farm phone** the same way you would on a local device: the flow bundle is sent to the phone and results come back in the run console.
+
+---
+
 # What's New in v0.9.7
 
 ## Privacy
