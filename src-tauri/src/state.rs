@@ -48,6 +48,8 @@ pub struct AppState {
     pub ios_preview_session: AsyncMutex<Option<crate::ios_session::PreviewHandle>>,
 
     pub web_driver: AsyncMutex<Option<Arc<crate::web_session::WebDriverKeeper>>>,
+    /// The device-farm session when the connected device is a farm phone.
+    pub farm_session: AsyncMutex<Option<Arc<crate::farm::session::FarmSession>>>,
     pub web_screenshot_abort: AsyncMutex<Option<oneshot::Sender<()>>>,
     /// True while a `maestro -p web test` run is in flight. The web keeper's
     /// browser and the test's own browser can't coexist, so `run_flow` stops the

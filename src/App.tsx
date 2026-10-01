@@ -21,6 +21,7 @@ import { summarizeBankReport } from "@/lib/bankReport";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
+import { useFarmStore } from "@/stores/farmStore";
 import { screenName, setScreen, track } from "@/lib/telemetry";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { startCloudAuthListener, useCloudAuthStore } from "@/stores/cloudAuthStore";
@@ -59,6 +60,11 @@ export default function App() {
   const settingsOpen = location.pathname.startsWith("/settings");
   const imageBankOpen = location.pathname.startsWith("/image-bank");
   const accountOpen = location.pathname.startsWith("/account");
+  // Farm session events (warnings, reconnect, endings) arrive from the native side.
+  useEffect(() => {
+    void useFarmStore.getState().start();
+  }, []);
+
   useEffect(() => {
     setShortcutsSuppressed(settingsOpen || imageBankOpen || accountOpen);
     return () => setShortcutsSuppressed(false);

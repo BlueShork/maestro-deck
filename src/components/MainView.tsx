@@ -102,7 +102,11 @@ export function MainView() {
         await startCloudRun(cloudTarget, [path]);
         return;
       }
-      const pid = await ipc.runFlow(path, useSettingsStore.getState().appId);
+      const pid = await ipc.runFlow(
+        path,
+        useSettingsStore.getState().appId,
+        useWorkspaceStore.getState().folderPath,
+      );
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · ${path}]`);
     } catch (err) {
@@ -134,7 +138,11 @@ export function MainView() {
         kind: "all",
         expectedFlow: flowDisplayName(c2, fp2),
       });
-      const pid = await ipc.runFlow(folder, useSettingsStore.getState().appId);
+      const pid = await ipc.runFlow(
+        folder,
+        useSettingsStore.getState().appId,
+        useWorkspaceStore.getState().folderPath,
+      );
       setRunning(pid);
       appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
     } catch (err) {
@@ -163,7 +171,11 @@ export function MainView() {
         resetSteps();
         initSteps(remappedSteps);
         useRunStore.getState().setRunTarget({ path: tempPath, kind: "flow" });
-        const pid = await ipc.runFlow(tempPath, useSettingsStore.getState().appId);
+        const pid = await ipc.runFlow(
+          tempPath,
+          useSettingsStore.getState().appId,
+          useWorkspaceStore.getState().folderPath,
+        );
         setRunning(pid);
         appendLog(
           "system",

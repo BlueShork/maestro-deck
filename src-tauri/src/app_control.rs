@@ -146,11 +146,17 @@ async fn run(device: Device, app_id: &str, action: Action) -> AppResult<()> {
 
 #[tauri::command]
 pub async fn launch_app(app_id: String, state: State<'_, AppState>) -> AppResult<()> {
+    if crate::farm::active(state.inner()).await.is_some() {
+        return Err(AppError::Other("not available on farm phones yet".into()));
+    }
     run(current_device(&state)?, &app_id, Action::Launch).await
 }
 
 #[tauri::command]
 pub async fn stop_app(app_id: String, state: State<'_, AppState>) -> AppResult<()> {
+    if crate::farm::active(state.inner()).await.is_some() {
+        return Err(AppError::Other("not available on farm phones yet".into()));
+    }
     run(current_device(&state)?, &app_id, Action::Stop).await
 }
 

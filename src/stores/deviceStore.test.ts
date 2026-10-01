@@ -60,3 +60,32 @@ describe("connect", () => {
     expect(useDeviceStore.getState().error).toBe("device offline");
   });
 });
+
+describe("connect while a farm phone is connected", () => {
+  it("releases the farm session before connecting the local device", async () => {
+    const { useFarmStore } = await import("./farmStore");
+    const order: string[] = [];
+    useFarmStore.setState({
+      session: {
+        sessionId: "s1",
+        deviceId: "nuc1-S1",
+        label: "x",
+        gatewayUrl: "wss://g",
+        startedAt: 0,
+        minutesRemaining: 3,
+        maxEndsAt: 0,
+        status: "active",
+      },
+      release: vi.fn(async () => {
+        order.push("release");
+        useFarmStore.setState({ session: null });
+      }),
+    });
+    connectDevice.mockImplementation(async () => {
+      order.push("connect");
+      return PIXEL;
+    });
+    await useDeviceStore.getState().connect("emulator-5554");
+    expect(order).toEqual(["release", "connect"]);
+  });
+});
