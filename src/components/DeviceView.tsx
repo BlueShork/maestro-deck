@@ -22,7 +22,6 @@ import { connectingHint, useConnectingEntry } from "@/components/devices/useCata
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { Logo } from "@/components/Logo";
 import LatticeLoader from "@/components/ui/LatticeLoader";
-import { FarmSessionBar } from "@/components/FarmSessionBar";
 import { H264Decoder } from "@/lib/decoder";
 import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
@@ -776,10 +775,7 @@ export function DeviceView() {
   );
 
   return (
-    // The farm session bar sits above the canvas container, outside its
-    // pointer handlers, so its buttons never turn into taps on the phone.
     <div className="flex h-full w-full flex-col">
-      <FarmSessionBar />
       <div
         ref={containerRef}
         className="relative flex min-h-0 w-full flex-1 items-center justify-center"

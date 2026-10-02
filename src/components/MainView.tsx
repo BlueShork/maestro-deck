@@ -8,6 +8,7 @@ import { useCallback, useMemo } from "react";
 import { CloudLivePreview } from "@/components/CloudLivePreview";
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
+import { FarmSessionBar } from "@/components/FarmSessionBar";
 import { FlowEditor } from "@/components/FlowEditor";
 import { PanelHeader } from "@/components/PanelHeader";
 import { useConnectingEntry } from "@/components/devices/useCatalog";
@@ -297,6 +298,10 @@ export function MainView() {
                         >
                           <PanelShell id="device">
                             <DevicePanelHeader />
+                            {/* Outside the canvas container and its pointer
+                                handlers, so these buttons never turn into
+                                taps on the phone. */}
+                            <FarmSessionBar />
                             <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center p-4">
                               <DeviceView />
                               {cloudLive ? (
