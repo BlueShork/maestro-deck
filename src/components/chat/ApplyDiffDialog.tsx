@@ -93,11 +93,13 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] w-full max-w-3xl flex-col p-0">
-        <DialogHeader className="border-b border-border px-5 py-4">
+        <DialogHeader className="border-b border-border px-5 pb-4 pt-6">
           <DialogTitle>Apply changes to {filePath ?? "current file"}?</DialogTitle>
-          <DialogDescription className="flex items-center gap-3 text-xs">
-            <span className="text-green-500">+{stats.added}</span>
-            <span className="text-destructive">−{stats.removed}</span>
+          <DialogDescription className="flex items-center gap-3 font-mono text-[11px] uppercase">
+            <span className="bg-success/15 px-1.5 py-0.5 text-success">+{stats.added}</span>
+            <span className="bg-destructive/15 px-1.5 py-0.5 text-destructive">
+              −{stats.removed}
+            </span>
             <span className="text-muted-foreground">
               The current YAML will be replaced with Billy's proposal.
             </span>
@@ -133,7 +135,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
         </div>
 
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={apply} className="gap-1.5">

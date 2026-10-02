@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BarChart3, Check, X } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/Dialog";
@@ -38,7 +38,7 @@ export function TelemetryConsentDialog() {
         onOpenAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <span className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand ring-1 ring-brand/25">
+        <span className="mb-3 inline-flex h-10 w-10 items-center justify-center bg-brand text-brand-foreground">
           <BarChart3 className="h-5 w-5" />
         </span>
 
@@ -50,24 +50,24 @@ export function TelemetryConsentDialog() {
           track, profile or advertise to you, and are never sold or shared.
         </DialogDescription>
 
-        <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2">
-          <div className="rounded-md border border-border bg-muted/30 p-3">
-            <div className="mb-1.5 font-medium text-foreground">What we collect</div>
+        <div className="mt-4 grid border-l border-t border-border text-xs sm:grid-cols-2">
+          <div className="border-b border-r border-border p-3">
+            <div className="mono-label mb-2 text-foreground">What we collect</div>
             <ul className="flex flex-col gap-1.5 text-muted-foreground">
               {COLLECTED.map((item) => (
-                <li key={item} className="flex gap-1.5">
-                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-green-500" />
+                <li key={item} className="flex gap-2">
+                  <span aria-hidden className="step-pip step-pip-done mt-0.5" />
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
           </div>
-          <div className="rounded-md border border-border bg-muted/30 p-3">
-            <div className="mb-1.5 font-medium text-foreground">What we never collect</div>
+          <div className="border-b border-r border-border p-3">
+            <div className="mono-label mb-2 text-foreground">What we never collect</div>
             <ul className="flex flex-col gap-1.5 text-muted-foreground">
               {NEVER_COLLECTED.map((item) => (
-                <li key={item} className="flex gap-1.5">
-                  <X className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
+                <li key={item} className="flex gap-2">
+                  <span aria-hidden className="step-pip step-pip-failed mt-0.5" />
                   <span>{item}</span>
                 </li>
               ))}
@@ -81,7 +81,7 @@ export function TelemetryConsentDialog() {
           <button
             type="button"
             onClick={() => void openUrl(PRIVACY_URL)}
-            className="underline hover:text-foreground"
+            className="text-foreground underline decoration-brand underline-offset-[3px] hover:text-brand"
           >
             privacy policy
           </button>{" "}
@@ -89,7 +89,7 @@ export function TelemetryConsentDialog() {
           <button
             type="button"
             onClick={() => void openUrl(COOKIES_URL)}
-            className="underline hover:text-foreground"
+            className="text-foreground underline decoration-brand underline-offset-[3px] hover:text-brand"
           >
             cookie policy
           </button>
@@ -97,7 +97,7 @@ export function TelemetryConsentDialog() {
         </p>
 
         <div className="mt-5 flex items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={decline}>
+          <Button variant="secondary" size="sm" onClick={decline}>
             No thanks
           </Button>
           <Button size="sm" onClick={accept}>

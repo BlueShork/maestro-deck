@@ -60,7 +60,7 @@ function IgnoredBand({ edge, pct }: { edge: "top" | "bottom" | "right"; pct: num
     >
       {/* The scrollbar band is too thin for a legible label. */}
       {!vertical && (
-        <span className="rounded-full bg-black/55 px-1.5 py-0.5 text-[8px] font-mono font-normal uppercase tracking-[0.02em] text-white/85">
+        <span className="bg-black/70 px-1.5 py-0.5 text-[8px] font-mono font-normal uppercase tracking-[0.02em] text-white/85">
           ignored
         </span>
       )}
@@ -123,7 +123,7 @@ function PanelLabel({
     <div className="flex items-center justify-between gap-2">
       <div className="flex items-center gap-2">
         <span className={cn("h-2 w-2", dot)} />
-        <span className="text-xs font-medium">{title}</span>
+        <span className="mono-label text-foreground">{title}</span>
         <span className="text-[11px] text-muted-foreground">{hint}</span>
       </div>
       {trailing}
@@ -192,16 +192,16 @@ export function ScreenshotReview() {
       }}
     >
       <DialogContent className="flex max-h-[92vh] w-[92vw] max-w-5xl flex-col gap-0 p-0">
-        <DialogHeader className="space-y-2 border-b border-border px-5 py-4">
+        <DialogHeader className="space-y-2 border-b border-border px-5 pb-4 pt-6">
           <div className="flex items-center justify-between gap-3 pr-6">
-            <DialogTitle className="flex items-center gap-2 text-base">
+            <DialogTitle className="flex items-center gap-2">
               Visual regression
               {comp.flow && (
-                <span className="rounded bg-green-500/10 px-1.5 py-0.5 font-mono text-[11px] font-normal text-green-600 dark:text-green-400">
+                <span className="bg-surface px-1.5 py-0.5 font-mono text-[11px] font-normal tracking-normal text-foreground">
                   {comp.flow}
                 </span>
               )}
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-normal">
+              <code className="bg-surface px-1.5 py-0.5 font-mono text-xs font-normal tracking-normal">
                 {name}
               </code>
             </DialogTitle>
@@ -211,12 +211,12 @@ export function ScreenshotReview() {
           </div>
           <DialogDescription className="flex flex-wrap items-center gap-2">
             {isDimMismatch ? (
-              <span className="inline-flex items-center gap-1.5 rounded bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+              <span className="inline-flex items-center gap-1.5 bg-destructive/10 px-2 py-0.5 font-mono text-[11px] uppercase text-destructive">
                 <TriangleAlert className="h-3.5 w-3.5" />
                 Dimensions differ from the baseline
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+              <span className="inline-flex items-center gap-1.5 bg-warning/10 px-2 py-0.5 font-mono text-[11px] uppercase text-warning">
                 <TriangleAlert className="h-3.5 w-3.5" />
                 {changedPct}% of pixels changed
               </span>
@@ -257,7 +257,7 @@ export function ScreenshotReview() {
                   <button
                     type="button"
                     onClick={() => setShowDiff((v) => !v)}
-                    className="inline-flex items-center gap-1.5 rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {showDiff ? (
                       <>
@@ -290,7 +290,7 @@ export function ScreenshotReview() {
           </p>
           <div className="flex shrink-0 gap-2">
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               disabled={pending}
               onClick={() => void decide("keep")}

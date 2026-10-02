@@ -1,17 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import {
-  ChevronLeft,
-  ChevronRight,
-  Globe,
-  Loader2,
-  Play,
-  Plug,
-  PlugZap,
-  RefreshCw,
-  Stethoscope,
-} from "lucide-react";
+import { Globe, Loader2, Play, Plug, PlugZap, RefreshCw, Stethoscope } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
@@ -23,6 +13,7 @@ import { LogoCloud } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
 import { HealthcheckModal } from "@/components/HealthcheckModal";
 import { ipc } from "@/lib/ipc";
+import { PixelChevron } from "@/components/brand/Pixel";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useDeviceStore } from "@/stores/deviceStore";
@@ -277,9 +268,7 @@ export function DeviceSelector() {
   return (
     <div className="flex h-full min-h-0 flex-col border-b border-border">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
-        <div className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
-          Devices
-        </div>
+        <div className="mono-label">Devices</div>
         <Button
           size="icon"
           variant="ghost"
@@ -379,7 +368,7 @@ function SimulatorGroupEntry({
         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate text-xs font-medium">{label}</span>
         <span className="font-mono text-[10px] text-muted-foreground">{count}</span>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />
+        <PixelChevron className="text-muted-foreground opacity-60 transition-[opacity,transform] duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px] group-hover:opacity-100" />
       </button>
     </li>
   );
@@ -453,7 +442,7 @@ function SimulatorsSection({
         onClick={() => setView("root")}
         className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
       >
-        <ChevronLeft className="h-3.5 w-3.5" />
+        <PixelChevron direction="left" size={10} />
         {isIos ? "iOS Simulators" : "Android Simulators"}
       </button>
       <ul className="flex flex-col gap-1.5">{(isIos ? iosSims : androidAvds).map(row)}</ul>

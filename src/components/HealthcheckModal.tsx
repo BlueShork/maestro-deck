@@ -56,7 +56,7 @@ export function HealthcheckModal({ open, onOpenChange, serial, report }: Props) 
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Stethoscope className="h-4 w-4" />
+            <Stethoscope className="h-5 w-5 text-brand" />
             Maestro residue detected
           </DialogTitle>
           <DialogDescription>
@@ -66,27 +66,27 @@ export function HealthcheckModal({ open, onOpenChange, serial, report }: Props) 
           </DialogDescription>
         </DialogHeader>
 
-        <ul className="flex flex-col gap-1 text-sm">
+        <ul className="square-list flex flex-col gap-2 border border-border p-3 text-sm">
           {report.driver_running !== null && (
             <li>
-              · Driver app <span className="font-mono">dev.mobile.maestro</span> running (pid{" "}
+              Driver app <span className="font-mono">dev.mobile.maestro</span> running (pid{" "}
               {report.driver_running})
             </li>
           )}
           {report.port_forwarded !== null && (
             <li>
-              · Port forwarding active: <span className="font-mono">{report.port_forwarded}</span>
+              Port forwarding active: <span className="font-mono">{report.port_forwarded}</span>
             </li>
           )}
           {report.orphan_processes.map((p) => (
             <li key={p.pid}>
-              · Orphan process <span className="font-mono">{p.name}</span> (pid {p.pid})
+              Orphan process <span className="font-mono">{p.name}</span> (pid {p.pid})
             </li>
           ))}
         </ul>
 
         {result && (
-          <div className="rounded border border-border bg-muted/30 p-2 text-xs">
+          <div className="mt-3 border border-success/35 bg-success/10 p-3 font-mono text-[11px] leading-relaxed">
             <div>Driver killed: {String(result.driver_killed)}</div>
             <div>Port released: {String(result.port_unforwarded)}</div>
             <div>Orphans killed: {result.orphans_killed.join(", ") || "—"}</div>
@@ -106,10 +106,10 @@ export function HealthcheckModal({ open, onOpenChange, serial, report }: Props) 
             <Button onClick={() => onOpenChange(false)}>OK</Button>
           ) : (
             <>
-              <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={killing}>
+              <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={killing}>
                 Cancel
               </Button>
-              <Button onClick={onKill} disabled={killing}>
+              <Button variant="destructive" onClick={onKill} disabled={killing}>
                 {killing ? (
                   <>
                     <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Killing…

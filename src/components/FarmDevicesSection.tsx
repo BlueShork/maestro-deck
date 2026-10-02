@@ -35,9 +35,7 @@ export function FarmDevicesSection() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
-        Device Farm
-      </div>
+      <div className="mono-label">Device Farm</div>
       {error ? <div className="text-[11px] text-muted-foreground">{error}</div> : null}
       {devices.length === 0 && !error ? (
         <div className="text-[11px] text-muted-foreground">No farm phone online right now.</div>
@@ -53,23 +51,33 @@ export function FarmDevicesSection() {
                 disabled={busy && !active}
                 onClick={() => !busy && void connect(d)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60",
-                  active && "bg-muted",
+                  // Same row as a local device: orange rule + wash when live.
+                  "flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                  active
+                    ? "border-brand/40 bg-brand/10 shadow-[inset_2px_0_0_hsl(var(--brand))]"
+                    : "border-transparent hover:border-border hover:bg-accent/40",
                 )}
               >
-                <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                <Smartphone
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    active ? "text-brand" : "text-muted-foreground",
+                  )}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{farmDeviceLabel(d)}</span>
-                  <span className="block text-[10px] text-muted-foreground">
+                  <span className="block font-mono text-[10px] text-muted-foreground">
                     Android {d.androidRelease ?? "?"}
                   </span>
                 </span>
                 {active ? (
-                  <span className="text-[10px] text-brand">
+                  <span className="font-mono text-[10px] uppercase text-brand">
                     {session?.status === "connecting" ? "Connecting…" : "Connected"}
                   </span>
                 ) : STATE_LABEL[d.state] ? (
-                  <span className="text-[10px] text-muted-foreground">{STATE_LABEL[d.state]}</span>
+                  <span className="font-mono text-[10px] uppercase text-muted-foreground">
+                    {STATE_LABEL[d.state]}
+                  </span>
                 ) : null}
               </button>
             </li>

@@ -277,3 +277,20 @@
     }
   }
 }
+
+@layer components {
+  /* Landing plan lists: an orange 6px square in front of each line. */
+  .square-list > li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.625rem;
+  }
+  .square-list > li::before {
+    content: "";
+    flex-shrink: 0;
+    width: 0.375rem;
+    height: 0.375rem;
+    background: hsl(var(--brand));
+    transform: translateY(-0.1rem);
+  }
+}

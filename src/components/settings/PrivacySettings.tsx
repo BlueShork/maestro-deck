@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink } from "lucide-react";
 
 import {
   SettingsRow,
@@ -10,6 +9,7 @@ import {
   SettingsSubgroup,
   ToggleRow,
 } from "@/components/settings/SettingsPrimitives";
+import { PixelExternal } from "@/components/brand/Pixel";
 import { Button } from "@/components/ui/Button";
 import { COOKIES_URL, PRIVACY_URL } from "@/lib/telemetry";
 import { useTelemetryStore } from "@/stores/telemetryStore";
@@ -35,7 +35,7 @@ export function PrivacySettings() {
         />
         <div className="grid gap-4 text-xs sm:grid-cols-2">
           <div className="flex flex-col gap-1">
-            <span className="font-medium">Collected</span>
+            <span className="mono-label text-foreground">Collected</span>
             <span className="leading-relaxed text-muted-foreground">
               App version, operating system, a random install ID, screens opened, and feature usage:
               device platform, runs (passed / failed / stopped), inspector, Billy, cloud runs,
@@ -43,7 +43,7 @@ export function PrivacySettings() {
             </span>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="font-medium">Never collected</span>
+            <span className="mono-label text-foreground">Never collected</span>
             <span className="leading-relaxed text-muted-foreground">
               Flow contents, file paths, selectors, app IDs, screenshots, device names or serials,
               prompts or anything you type, your name, email or account.
@@ -55,12 +55,12 @@ export function PrivacySettings() {
       <SettingsSubgroup title="Policies">
         <SettingsRow label="Privacy policy" description="What is processed, why, and your rights.">
           <Button size="sm" variant="outline" onClick={() => void openUrl(PRIVACY_URL)}>
-            Open <ExternalLink className="h-3 w-3" />
+            Open <PixelExternal />
           </Button>
         </SettingsRow>
         <SettingsRow label="Cookie policy" description="Analytics on maestrodeck.cloud.">
           <Button size="sm" variant="outline" onClick={() => void openUrl(COOKIES_URL)}>
-            Open <ExternalLink className="h-3 w-3" />
+            Open <PixelExternal />
           </Button>
         </SettingsRow>
       </SettingsSubgroup>

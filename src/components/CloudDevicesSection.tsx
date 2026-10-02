@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { ChevronLeft, ChevronRight, Cloud, Package, Smartphone } from "lucide-react";
+import { Cloud, Package, Smartphone } from "lucide-react";
 import { useState, type ComponentType, type SVGProps } from "react";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
 import { CLOUD_ARTIFACTS, CLOUD_TARGET_LABELS } from "@/lib/cloudRunner";
 import type { CloudJobPlatform } from "@/lib/cloudJobs";
+import { PixelChevron } from "@/components/brand/Pixel";
 import { cn } from "@/lib/utils";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
 import { toast } from "@/stores/toastStore";
@@ -79,7 +80,7 @@ export function CloudDevicesSection() {
               >
                 <p.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate text-xs font-medium">{p.label}</span>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />
+                <PixelChevron className="text-muted-foreground opacity-60 transition-[opacity,transform] duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px] group-hover:opacity-100" />
               </button>
             </li>
           ))}
@@ -101,13 +102,13 @@ export function CloudDevicesSection() {
         onClick={() => setView(null)}
         className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
       >
-        <ChevronLeft className="h-3.5 w-3.5" />
+        <PixelChevron direction="left" size={10} />
         {platform.label}
       </button>
       {WIRED.includes(platform.id) ? (
         <CloudTargetTab platform={platform.id as CloudJobPlatform} />
       ) : (
-        <div className="rounded border border-dashed border-border p-2 text-[11px] leading-snug text-muted-foreground">
+        <div className="border border-border bg-surface p-2 text-[11px] leading-snug text-muted-foreground">
           {platform.blurb} Not connected yet — this tab is the UI shell.
         </div>
       )}
@@ -164,16 +165,20 @@ function CloudTargetTab({ platform }: { platform: CloudJobPlatform }) {
             className={cn(
               "flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors",
               selected
-                ? "border-foreground/30 bg-accent/60"
+                ? "border-brand/40 bg-brand/10 shadow-[inset_2px_0_0_hsl(var(--brand))]"
                 : "border-transparent hover:border-border hover:bg-accent/40",
             )}
           >
-            <Cloud className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <Cloud
+              className={cn("h-4 w-4 shrink-0", selected ? "text-brand" : "text-muted-foreground")}
+            />
             <span className="min-w-0 flex-1 truncate text-xs font-medium">
               {CLOUD_TARGET_LABELS[platform]}
             </span>
             {selected ? (
-              <span className="text-[10px] text-muted-foreground">Run target</span>
+              <span className="bg-brand px-1 py-0.5 font-mono text-[9px] uppercase leading-none text-brand-foreground">
+                Run target
+              </span>
             ) : null}
           </button>
         </li>
@@ -182,7 +187,7 @@ function CloudTargetTab({ platform }: { platform: CloudJobPlatform }) {
       <button
         type="button"
         onClick={() => void pickApp()}
-        className="flex w-full items-center gap-2 rounded-md border border-dashed border-border px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-accent/40"
+        className="flex w-full items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-left text-[11px] transition-colors hover:border-foreground/20"
       >
         <Package className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">

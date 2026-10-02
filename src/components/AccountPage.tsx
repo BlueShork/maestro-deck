@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { CLOUD_BILLING_URL, logout, tierLabel, type CloudBillingInfo } from "@/lib/cloudAuth";
 import { LoginCard } from "@/components/LoginCard";
 import { PageHeader } from "@/components/PageHeader";
+import { PixelChevron, PixelMosaic } from "@/components/brand/Pixel";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 
@@ -38,12 +39,12 @@ export function AccountPage() {
             a wide window crops the empty top/bottom instead of turning it
             into a wall; the artwork's content sits in the middle. */}
         {user ? (
-          <img
-            src="/promo/community-banner.webp"
-            alt=""
-            aria-hidden
-            className="block h-[clamp(120px,14vw,220px)] w-full border-b border-border object-cover"
-            draggable={false}
+          <PixelMosaic
+            cols={40}
+            rows={5}
+            palette="orange"
+            seed={11}
+            className="h-[clamp(120px,14vw,220px)] w-full border-b border-border"
           />
         ) : null}
         <div className="mx-auto max-w-3xl px-6 py-10">
@@ -73,7 +74,7 @@ function ProfileView({ email }: { email: string | null }) {
         <div className="flex min-w-0 items-end gap-4">
           <div
             aria-hidden
-            className="flex h-24 w-24 shrink-0 select-none items-center justify-center rounded-lg bg-brand font-display text-4xl font-medium text-brand-foreground"
+            className="flex h-24 w-24 shrink-0 select-none items-center justify-center border border-border bg-background font-display text-5xl font-medium tracking-[-0.04em] text-foreground"
           >
             {(email?.trim()[0] ?? "?").toUpperCase()}
           </div>
@@ -81,11 +82,11 @@ function ProfileView({ email }: { email: string | null }) {
             <span className="truncate font-display text-2xl font-medium leading-tight tracking-[-0.03em]">
               {email ?? "unknown"}
             </span>
-            <span className="text-xs text-muted-foreground">Signed in to Maestro Deck Cloud</span>
+            <span className="mono-label mt-1">Signed in to Maestro Deck Cloud</span>
           </div>
         </div>
         <Button
-          variant="ghost"
+          variant="secondary"
           size="sm"
           disabled={signingOut}
           onClick={() => {
@@ -123,10 +124,10 @@ function BillingCard({
   onRetry: () => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-5 py-3">
+    <div className="warm-bands overflow-hidden rounded-lg border border-border bg-background">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 pb-3 pt-4">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Plan</span>
+          <span className="mono-label">Plan</span>
           <span className="bg-brand px-2 py-0.5 font-mono text-[10px] uppercase text-brand-foreground">
             {loading ? "…" : billing ? tierLabel(billing.tier) : "—"}
           </span>
@@ -136,9 +137,9 @@ function BillingCard({
             </span>
           ) : null}
         </div>
-        <Button size="sm" onClick={() => void openUrl(CLOUD_BILLING_URL)} className="gap-1.5">
-          <ShoppingCart className="h-3.5 w-3.5" />
+        <Button size="sm" onClick={() => void openUrl(CLOUD_BILLING_URL)} className="group gap-2">
           Buy more runs
+          <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />
         </Button>
       </div>
 
@@ -150,7 +151,7 @@ function BillingCard({
               Your runs couldn't be loaded ({error}). Buying more still works.
             </span>
           </div>
-          <Button variant="outline" size="sm" onClick={onRetry} className="gap-1.5">
+          <Button variant="secondary" size="sm" onClick={onRetry} className="gap-1.5">
             <RefreshCw className="h-3.5 w-3.5" />
             Retry
           </Button>
@@ -158,8 +159,8 @@ function BillingCard({
       ) : (
         <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
           <div className="flex flex-col justify-center p-6">
-            <div className="text-xs text-muted-foreground">Runs remaining</div>
-            <div className="mt-2 text-5xl font-semibold tabular-nums leading-none tracking-tight">
+            <div className="mono-label">Runs remaining</div>
+            <div className="mt-3 font-display text-6xl font-medium tabular-nums leading-none tracking-[-0.045em]">
               {loading ? "…" : (billing?.runsRemaining ?? "—")}
             </div>
             <div className="mt-2 text-xs text-muted-foreground">
@@ -173,7 +174,7 @@ function BillingCard({
               label={loading ? "…" : billing ? `${billing.runsToday}/${billing.dailyCap}` : "—"}
             />
             <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground">Used today</span>
+              <span className="mono-label">Used today</span>
               <span className="mt-1 text-sm font-medium">
                 {loading || !billing
                   ? "—"
@@ -189,35 +190,26 @@ function BillingCard({
   );
 }
 
-/** Today's usage as a ring that fills toward the daily cap; amber once full. */
+/** Today's usage as the landing's CI bar: one square cell per run of the
+ *  daily cap, orange as they are spent, amber once the cap is reached. */
 function UsageRing({ used, cap, label }: { used: number; cap: number; label: string }) {
-  const r = 34;
-  const circumference = 2 * Math.PI * r;
-  const ratio = cap > 0 ? Math.min(1, used / cap) : 0;
+  const full = cap > 0 && used >= cap;
   return (
-    <div className="relative h-20 w-20 shrink-0">
-      <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90" aria-hidden>
-        <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7" className="stroke-muted" />
-        <circle
-          cx="40"
-          cy="40"
-          r={r}
-          fill="none"
-          strokeWidth="7"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - ratio)}
-          className={cn(
-            "transition-[stroke-dashoffset] duration-700 ease-out",
-            ratio >= 1 ? "stroke-amber-500" : "stroke-primary",
-          )}
-          // A zero-length round cap still draws a dot; hide the arc at 0.
-          opacity={ratio > 0 ? 1 : 0}
-        />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold tabular-nums">
+    <div className="flex w-28 shrink-0 flex-col gap-2">
+      <span className="font-display text-2xl font-medium leading-none tracking-[-0.03em] tabular-nums">
         {label}
       </span>
+      <div className="flex gap-0.5" aria-hidden>
+        {Array.from({ length: Math.max(cap, 1) }).map((_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-2 flex-1",
+              i < used ? (full ? "bg-warning" : "bg-brand") : "bg-surface",
+            )}
+          />
+        ))}
+      </div>
     </div>
   );
 }

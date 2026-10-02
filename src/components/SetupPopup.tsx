@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { CheckCircle2, ChevronDown, Copy, Loader2, XCircle } from "lucide-react";
+import { ChevronDown, Copy, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { events, type EnvCheckResult } from "@/lib/ipc";
@@ -27,8 +27,13 @@ const MANUAL_COMMANDS: Record<string, string> = {
 const BLOCKING = new Set(["maestro", "java"]);
 
 function StatusIcon({ status }: { status: EnvCheckResult["status"] }) {
-  if (status === "ok") return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
-  return <XCircle className="h-3.5 w-3.5 text-red-500" />;
+  // Landing CI-demo pips (see `.step-pip` in globals.css).
+  return (
+    <span
+      aria-hidden
+      className={status === "ok" ? "step-pip step-pip-done" : "step-pip step-pip-failed"}
+    />
+  );
 }
 
 function CheckRow({
@@ -57,7 +62,7 @@ function CheckRow({
           {LABELS[check.id] ?? check.id}
           {check.version ? <span className="text-muted-foreground"> — {check.version}</span> : null}
           {check.status === "wrong-version" && check.detail ? (
-            <span className="text-amber-500"> ({check.detail})</span>
+            <span className="text-warning"> ({check.detail})</span>
           ) : null}
         </span>
         {failing && !installing && installable && (
@@ -65,7 +70,7 @@ function CheckRow({
             type="button"
             onClick={() => void install(check.id as "maestro" | "java")}
             disabled={installingId !== null}
-            className="rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-md bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Install
           </button>
@@ -83,10 +88,10 @@ function CheckRow({
         )}
       </div>
       {installing && lastLine && (
-        <div className="truncate pl-5 text-[10px] text-muted-foreground">{lastLine}</div>
+        <div className="truncate pl-5 font-mono text-[10px] text-muted-foreground">{lastLine}</div>
       )}
       {!installing && installError && installingId === null && failing && isBlocking && (
-        <div className="truncate pl-5 text-[10px] text-red-500" title={installError}>
+        <div className="truncate pl-5 text-[10px] text-destructive" title={installError}>
           Install failed — {installError}
         </div>
       )}
@@ -173,9 +178,9 @@ export function SetupPopup() {
         type="button"
         data-setup-popup
         onClick={() => setCollapsed(false)}
-        className="fixed bottom-4 right-4 z-[70] flex items-center gap-2 rounded-md border border-amber-500/40 bg-popover px-3 py-1.5 text-xs shadow-[0_20px_40px_-16px_rgba(0,0,0,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="fixed bottom-4 right-4 z-[70] flex items-center gap-2 rounded-md border border-warning/40 bg-popover px-3 py-1.5 text-xs shadow-[0_20px_40px_-16px_rgba(0,0,0,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className="text-amber-500">⚠</span>
+        <span className="h-1.5 w-1.5 animate-pulse bg-warning" aria-hidden />
         Setup incomplete ({okCount}/{blockingChecks.length})
       </button>
     );
@@ -184,16 +189,18 @@ export function SetupPopup() {
   return (
     <div
       data-setup-popup
-      className="fixed bottom-4 right-4 z-[70] w-80 rounded-lg border border-border bg-card p-3 shadow-xl"
+      className="warm-bands fixed bottom-4 right-4 z-[70] w-80 overflow-hidden rounded-lg border border-border bg-background p-4 pt-5 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)]"
     >
       {showReady ? (
-        <div className="flex items-center gap-2 text-sm text-green-500">
-          <CheckCircle2 className="h-4 w-4" /> Environment ready
+        <div className="flex items-center gap-2 text-sm text-success">
+          <span aria-hidden className="step-pip step-pip-done" /> Environment ready
         </div>
       ) : (
         <>
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-semibold">Setup required</div>
+            <div className="font-display text-lg font-medium tracking-[-0.02em]">
+              Setup required
+            </div>
             <button
               type="button"
               aria-label="Collapse"

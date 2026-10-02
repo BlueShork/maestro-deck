@@ -42,32 +42,41 @@ export function FarmSessionBar() {
   return (
     <div className="flex flex-col gap-1 border-b border-border px-3 py-2 text-xs">
       <div className="flex items-center gap-3">
-        <span className="font-medium">Farm · {session.label}</span>
-        <span className="text-muted-foreground">{mmss(now - session.startedAt)}</span>
-        <span className="text-muted-foreground">{minutesLeft} min left</span>
+        <span className="h-1.5 w-1.5 shrink-0 animate-pulse bg-brand" aria-hidden />
+        <span className="mono-label text-foreground">Farm · {session.label}</span>
+        <span className="bg-surface px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+          {mmss(now - session.startedAt)}
+        </span>
+        <span className="font-mono text-[10px] uppercase text-muted-foreground">
+          {minutesLeft} min left
+        </span>
         <span className="flex-1" />
         <Button
           size="sm"
-          variant="ghost"
+          variant="secondary"
           disabled={installing || session.status !== "active"}
           onClick={() => void pickApk()}
         >
           {installing ? "Installing…" : "Install APK"}
         </Button>
-        <Button size="sm" variant="outline" onClick={() => void release()}>
+        <Button size="sm" variant="destructive" onClick={() => void release()}>
           Release
         </Button>
       </div>
       {session.status === "reconnecting" ? (
-        <div className="text-amber-500">Reconnecting to the farm phone…</div>
+        <div className="border-l-2 border-warning pl-2 text-warning">
+          Reconnecting to the farm phone…
+        </div>
       ) : null}
       {warnings.idle && warnings.idle > now ? (
-        <div className="text-amber-500">
+        <div className="border-l-2 border-warning pl-2 text-warning">
           The session closes soon without activity ({mmss(warnings.idle - now)}).
         </div>
       ) : null}
       {warnings.minutes && warnings.minutes > now ? (
-        <div className="text-amber-500">The session ends in {mmss(warnings.minutes - now)}.</div>
+        <div className="border-l-2 border-warning pl-2 text-warning">
+          The session ends in {mmss(warnings.minutes - now)}.
+        </div>
       ) : null}
     </div>
   );

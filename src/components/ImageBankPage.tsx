@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import {
-  ChevronLeft,
-  ChevronRight,
   FolderOpen,
   Globe,
   ImageIcon,
@@ -20,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
 import { FlowScrollGrid } from "@/components/effects/FlowScrollGrid";
 import { PageHeader } from "@/components/PageHeader";
+import { PixelChevron } from "@/components/brand/Pixel";
 import { Button } from "@/components/ui/Button";
 import { filterGroups, filterImages } from "@/lib/bankFilter";
 import { ipc } from "@/lib/ipc";
@@ -108,7 +107,7 @@ function Thumb({
 
   return (
     <div
-      className="group animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both relative flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-lg"
+      className="group animate-in fade-in-0 fill-mode-both relative flex flex-col overflow-hidden rounded-lg border border-border bg-background transition-colors duration-150 hover:border-foreground/25"
       style={{ animationDelay: `${Math.min(index, 14) * 35}ms` }}
     >
       {/* Screen mat */}
@@ -117,13 +116,13 @@ function Thumb({
         onClick={onOpen}
         aria-label={`Open ${image.name}`}
         style={{ aspectRatio: aspect }}
-        className="relative flex items-center justify-center overflow-hidden bg-[radial-gradient(120%_120%_at_50%_0%,hsl(var(--muted))_0%,hsl(var(--background))_100%)] p-2"
+        className="relative flex items-center justify-center overflow-hidden bg-surface p-2"
       >
         {src ? (
           <img
             src={src}
             alt={image.name}
-            className="max-h-full max-w-full rounded-md object-contain shadow-md ring-1 ring-black/10 transition-transform duration-300 group-hover:scale-[1.02]"
+            className="max-h-full max-w-full rounded-md object-contain"
           />
         ) : (
           <div className="h-full w-full animate-pulse rounded-md bg-muted/60" />
@@ -145,10 +144,10 @@ function Thumb({
           }
         }}
         className={cn(
-          "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium backdrop-blur transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[10px] uppercase transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           confirming
-            ? "bg-red-500/90 text-white opacity-100"
-            : "bg-background/70 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
+            ? "bg-destructive text-white opacity-100"
+            : "border border-border bg-background text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
         )}
       >
         {confirming ? "Delete?" : <Trash2 className="h-3.5 w-3.5" />}
@@ -156,7 +155,7 @@ function Thumb({
 
       {/* Caption */}
       <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-        <span className="truncate text-xs font-medium">{image.name}</span>
+        <span className="truncate font-mono text-[11px]">{image.name}</span>
         <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
           {image.width}×{image.height}
         </span>
@@ -219,11 +218,13 @@ function Lightbox({
   }, [prev, next]);
 
   return (
-    <div className="animate-in fade-in-0 fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-md duration-200">
+    <div className="animate-in fade-in-0 fixed inset-0 z-50 flex flex-col bg-[#101013]/95 duration-200">
       {/* Top metadata bar */}
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 px-4 py-2.5 text-white">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{image.name}</div>
+          <div className="truncate font-display text-lg font-medium tracking-[-0.02em]">
+            {image.name}
+          </div>
           <div className="truncate font-mono text-[11px] text-white/50">
             {image.width}×{image.height} · {formatBytes(image.size_bytes)} ·{" "}
             {formatDate(image.modified_ms)}
@@ -267,7 +268,7 @@ function Lightbox({
             aria-label="Previous"
             className="absolute left-3 z-10 rounded-md bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <PixelChevron direction="left" size={16} />
           </button>
         )}
 
@@ -300,7 +301,7 @@ function Lightbox({
             aria-label="Next"
             className="absolute right-3 z-10 rounded-md bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
-            <ChevronRight className="h-5 w-5" />
+            <PixelChevron size={16} />
           </button>
         )}
       </div>
@@ -332,7 +333,7 @@ function EmptyState({
 }) {
   return (
     <div className="animate-in fade-in-0 zoom-in-95 flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center duration-300">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/40 text-muted-foreground">
+      <div className="flex h-16 w-16 items-center justify-center bg-brand text-brand-foreground">
         {icon}
       </div>
       <div className="max-w-sm space-y-1.5">
@@ -346,10 +347,10 @@ function EmptyState({
 function ThumbSkeleton({ index }: { index: number }) {
   return (
     <div
-      className="animate-in fade-in-0 fill-mode-both overflow-hidden rounded-xl border border-border bg-card"
+      className="animate-in fade-in-0 fill-mode-both overflow-hidden rounded-lg border border-border bg-background"
       style={{ animationDelay: `${Math.min(index, 10) * 40}ms` }}
     >
-      <div className="aspect-[3/4] animate-pulse bg-muted/50" />
+      <div className="aspect-[3/4] animate-pulse bg-surface" />
       <div className="flex items-center justify-between border-t border-border px-3 py-2">
         <div className="h-2.5 w-16 animate-pulse rounded bg-muted/60" />
         <div className="h-2.5 w-10 animate-pulse rounded bg-muted/40" />
@@ -454,7 +455,7 @@ export function ImageBankPage() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search screenshots…"
                 aria-label="Search screenshots by name"
-                className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-7 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
+                className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-7 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-brand focus:ring-1 focus:ring-brand"
               />
               {filtering && (
                 <button
@@ -496,7 +497,7 @@ export function ImageBankPage() {
       ) : groups.length === 0 ? (
         <EmptyState icon={<ImageIcon className="h-7 w-7" />} title="No baselines yet">
           Run a flow with a{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+          <code className="bg-surface px-1.5 py-0.5 font-mono text-xs text-foreground">
             takeScreenshot
           </code>{" "}
           command to seed the bank. Captures are compared against these on every run.
@@ -504,10 +505,8 @@ export function ImageBankPage() {
       ) : (
         <div className="flex min-h-0 flex-1">
           {/* Device sidebar */}
-          <nav className="w-64 shrink-0 space-y-1 overflow-y-auto border-r border-border p-2.5">
-            <div className="px-2 pb-1.5 pt-1 text-[10px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
-              Devices
-            </div>
+          <nav className="w-64 shrink-0 overflow-y-auto border-r border-border py-2.5">
+            <div className="mono-label px-4 pb-1.5 pt-1 text-[10px]">Devices</div>
             {visibleGroups.map((g) => {
               const meta = parseDeviceKey(g.device_key);
               const active = selected === g.device_key;
@@ -521,15 +520,15 @@ export function ImageBankPage() {
                   }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "group relative flex w-full items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "group relative flex w-full items-center gap-2.5 overflow-hidden px-4 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                     active ? "bg-accent" : "hover:bg-accent/50",
                   )}
                 >
                   {active && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand" />}
                   <span
                     className={cn(
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50",
-                      active ? "text-foreground" : "text-muted-foreground",
+                      "flex h-8 w-8 shrink-0 items-center justify-center border border-border",
+                      active ? "text-brand" : "text-muted-foreground",
                     )}
                   >
                     <DeviceGlyph kind={meta.kind} className="h-4 w-4" />
@@ -544,8 +543,8 @@ export function ImageBankPage() {
                     className={cn(
                       "shrink-0 px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
                       active
-                        ? "bg-foreground/10 text-foreground"
-                        : "bg-muted text-muted-foreground",
+                        ? "bg-brand text-brand-foreground"
+                        : "bg-surface text-muted-foreground",
                     )}
                   >
                     {filtering ? filterImages(g.images, query).length : g.images.length}
@@ -561,7 +560,7 @@ export function ImageBankPage() {
               <div className="p-5">
                 <div className="mb-4 flex items-end justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-muted/50 text-foreground">
+                    <span className="flex h-11 w-11 items-center justify-center bg-brand text-brand-foreground">
                       <DeviceGlyph kind={activeMeta.kind} className="h-5 w-5" />
                     </span>
                     <div>
