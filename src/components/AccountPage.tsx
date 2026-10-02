@@ -8,10 +8,17 @@ import { useNavigate } from "react-router-dom";
 
 import { BillyAppPromo } from "@/components/BillyAppPromo";
 import { Button } from "@/components/ui/Button";
-import { CLOUD_BILLING_URL, logout, tierLabel, type CloudBillingInfo } from "@/lib/cloudAuth";
+import {
+  CLOUD_BILLING_URL,
+  liveMinutes,
+  logout,
+  tierLabel,
+  type CloudBillingInfo,
+} from "@/lib/cloudAuth";
 import { LoginCard } from "@/components/LoginCard";
 import { PageHeader } from "@/components/PageHeader";
 import { PixelChevron, PixelMosaic } from "@/components/brand/Pixel";
+import { DeviceArt } from "@/components/devices/DeviceArt";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 
@@ -186,26 +193,93 @@ function BillingCard({
           </div>
         </div>
       )}
+      {!error && billing ? <LiveMinutesRow billing={billing} /> : null}
     </div>
   );
 }
 
-/** Today's usage as the landing's CI bar: one square cell per run of the
- *  daily cap, orange as they are spent, amber once the cap is reached. */
+/** Below this share of the grant the minutes turn amber. */
+const LOW_MINUTES_SHARE = 0.1;
+const MINUTE_CELLS = 24;
+
+/**
+ * Live device-farm minutes, for plans that include them: the balance in
+ * Inter Tight next to a farm phone, and a stepped gauge of what is left.
+ */
+function LiveMinutesRow({ billing }: { billing: CloudBillingInfo }) {
+  const minutes = liveMinutes(billing);
+  if (!minutes) return null;
+  const { remaining, included } = minutes;
+  const share = included > 0 ? remaining / included : 0;
+  const low = remaining === 0 || share <= LOW_MINUTES_SHARE;
+  const lit = Math.round(share * MINUTE_CELLS);
+  return (
+    <div className="flex flex-wrap items-center gap-6 border-t border-border p-6">
+      <DeviceArt
+        platform="android"
+        kind="physical"
+        source="farm"
+        dim={remaining === 0}
+        seedKey="profile-farm"
+        className="h-20 w-auto shrink-0"
+      />
+      <div className="flex min-w-[10rem] flex-col">
+        <span className="mono-label">Live device minutes</span>
+        <span className="mt-3 flex items-baseline gap-2">
+          <span
+            className={cn(
+              "font-display text-5xl font-medium tabular-nums leading-none tracking-[-0.045em]",
+              remaining === 0 ? "text-destructive" : low ? "text-warning" : "text-foreground",
+            )}
+          >
+            {remaining.toLocaleString()}
+          </span>
+          <span className="font-mono text-[11px] uppercase text-muted-foreground">
+            / {included.toLocaleString()} min
+          </span>
+        </span>
+      </div>
+      <div className="flex min-w-[14rem] flex-1 flex-col gap-2">
+        <div className="flex gap-0.5" aria-hidden>
+          {Array.from({ length: MINUTE_CELLS }).map((_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-2 flex-1",
+                i < lit ? (low ? "bg-warning" : "bg-brand") : "bg-surface",
+              )}
+            />
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {remaining === 0
+            ? "No minutes left — top up to open live sessions on farm phones."
+            : "Live sessions on real phones in the device farm: mirror, inspect and run as if it were on your desk."}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Today's usage as the landing's CI bar: square cells (one per run up to
+ *  20, proportional beyond), orange as runs are spent, amber at the cap. */
+const USAGE_CELLS_MAX = 20;
 function UsageRing({ used, cap, label }: { used: number; cap: number; label: string }) {
   const full = cap > 0 && used >= cap;
+  const cells = Math.max(1, Math.min(cap, USAGE_CELLS_MAX));
+  const lit = cap > 0 ? Math.min(cells, Math.ceil((used / cap) * cells)) : 0;
   return (
     <div className="flex w-28 shrink-0 flex-col gap-2">
       <span className="font-display text-2xl font-medium leading-none tracking-[-0.03em] tabular-nums">
         {label}
       </span>
       <div className="flex gap-0.5" aria-hidden>
-        {Array.from({ length: Math.max(cap, 1) }).map((_, i) => (
+        {Array.from({ length: cells }).map((_, i) => (
           <span
             key={i}
             className={cn(
               "h-2 flex-1",
-              i < used ? (full ? "bg-warning" : "bg-brand") : "bg-surface",
+              i < lit ? (full ? "bg-warning" : "bg-brand") : "bg-surface",
             )}
           />
         ))}

@@ -76,10 +76,37 @@ export function tierLabel(tier: string): string {
 export interface CloudBillingInfo {
   tier: string;
   runsRemaining: number;
+  /** Live device-farm minutes left. Absent from older dashboards. */
+  sessionMinutesRemaining?: number;
   runsToday: number;
   dailyCap: number;
   currentPack: { id: string; displayName: string } | null;
   expiresAt: string | null;
+}
+
+/** Live device minutes each pack grants. Mirrors `sessionMinutesIncluded` in
+ *  maestro-nightly/dashboard/lib/billing-constants.ts. */
+const SESSION_MINUTES_INCLUDED: Record<string, number> = {
+  starter: 10,
+  indie: 60,
+  pro: 240,
+  studio: 900,
+  scale: 3000,
+};
+
+/**
+ * Live device-farm minutes for the profile, or null when the plan has none.
+ * `included` is the pack's grant, raised to the balance when top-ups or a
+ * carried-over balance exceed it, so the gauge never overflows.
+ */
+export function liveMinutes(
+  billing: CloudBillingInfo,
+): { remaining: number; included: number } | null {
+  const remaining = Math.max(0, billing.sessionMinutesRemaining ?? 0);
+  const pack = billing.currentPack?.id ?? billing.tier;
+  const grant = SESSION_MINUTES_INCLUDED[pack] ?? 0;
+  if (grant === 0 && remaining === 0) return null;
+  return { remaining, included: Math.max(grant, remaining) };
 }
 
 /** Mirrors the response shape of GET /api/billing/me (maestro-nightly/dashboard).
