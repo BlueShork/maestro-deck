@@ -10,6 +10,7 @@ import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
 import { PanelHeader } from "@/components/PanelHeader";
+import { useConnectingEntry } from "@/components/devices/useCatalog";
 import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
 import { ScreenshotReview } from "@/components/ScreenshotReview";
@@ -365,11 +366,17 @@ export function MainView() {
  *  the mirror lines up with the other panels' header row. */
 function DevicePanelHeader() {
   const current = useDeviceStore((s) => s.current);
+  const connecting = useConnectingEntry();
   return (
     <PanelHeader
       title="Device"
       meta={
-        current ? (
+        connecting && !current ? (
+          <span className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-foreground">
+            <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse bg-brand" />
+            <span className="truncate">Connecting · {connecting.name}</span>
+          </span>
+        ) : current ? (
           <span className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-foreground">
             <span aria-hidden className="h-1.5 w-1.5 shrink-0 bg-success" />
             <span className="truncate">{current.model}</span>

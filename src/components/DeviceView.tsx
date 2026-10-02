@@ -18,6 +18,7 @@ import {
 } from "react";
 
 import { PixelMosaic } from "@/components/brand/Pixel";
+import { connectingHint, useConnectingEntry } from "@/components/devices/useCatalog";
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { Logo } from "@/components/Logo";
 import LatticeLoader from "@/components/ui/LatticeLoader";
@@ -887,7 +888,37 @@ function EmptyState({
   streamEnabled: boolean;
   iosPhysical: boolean;
 }) {
+  const connecting = useConnectingEntry();
   const lightweight = connected && !streamEnabled;
+  // Something was picked but isn't connected yet (a simulator booting, a farm
+  // session opening): say so in the frame instead of the "plug in" prompt.
+  if (!connected && connecting) {
+    return (
+      <div className="pointer-events-none relative aspect-[9/19.5] h-full w-auto overflow-hidden rounded-lg border border-brand/40">
+        <PixelMosaic
+          cols={9}
+          rows={19}
+          palette="paper"
+          seed={5}
+          className="absolute inset-0 dark:hidden"
+        />
+        <PixelMosaic
+          cols={9}
+          rows={19}
+          palette="dark"
+          seed={5}
+          className="absolute inset-0 hidden dark:block"
+        />
+        <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 animate-pulse bg-brand" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
+          <PreviewLoader label={`Connecting to ${connecting.name}`} />
+          <div className="max-w-[16rem] text-xs text-muted-foreground">
+            {connectingHint(connecting)}
+          </div>
+        </div>
+      </div>
+    );
+  }
   // Physical iPhones build the on-device XCTest driver on first connect (~10 min),
   // so a generic "Waiting for frames…" looks frozen. Show progress + reassurance.
   if (iosPhysical && connected && !lightweight) {

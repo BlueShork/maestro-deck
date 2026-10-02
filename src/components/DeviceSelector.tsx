@@ -9,7 +9,12 @@ import { HealthcheckModal } from "@/components/HealthcheckModal";
 import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { PixelChevron } from "@/components/brand/Pixel";
 import { DeviceArt } from "@/components/devices/DeviceArt";
-import { actionLabel, selectEntry, useCatalog } from "@/components/devices/useCatalog";
+import {
+  actionLabel,
+  connectingHint,
+  selectEntry,
+  useCatalog,
+} from "@/components/devices/useCatalog";
 import { pickCloudArtifact, useCloudArtifactName } from "@/lib/cloudArtifact";
 import type { CatalogEntry } from "@/lib/deviceCatalog";
 import { ipc } from "@/lib/ipc";
@@ -33,9 +38,6 @@ export function DeviceSelector() {
   const loading = useDeviceStore((s) => s.loading);
   const error = useDeviceStore((s) => s.error);
   const refresh = useDeviceStore((s) => s.refresh);
-  const pendingSerial = useDeviceStore((s) => s.pendingSerial);
-  const pendingAction = useDeviceStore((s) => s.pendingAction);
-  const devices = useDeviceStore((s) => s.devices);
   const openPicker = useDevicePickerStore((s) => s.setOpen);
   const entries = useCatalog();
 
@@ -43,12 +45,11 @@ export function DeviceSelector() {
   // connected for the inspector); the run target is what Run uses.
   const target = entries.find((e) => e.state === "target") ?? null;
   const live = entries.find((e) => e.state === "connected") ?? null;
-  const active = target ?? live;
+  const connecting = entries.find((e) => e.state === "connecting") ?? null;
+  const active = target ?? connecting ?? live;
   const quick = entries
     .filter((e) => e.source === "local" && e.state === "ready")
     .slice(0, QUICK_MAX);
-  const connectingTo =
-    pendingAction === "connect" ? devices.find((d) => d.serial === pendingSerial) : undefined;
 
   const [checking, setChecking] = useState(false);
   const [report, setReport] = useState<HealthReport | null>(null);
@@ -109,9 +110,7 @@ export function DeviceSelector() {
 
         <section className="flex flex-col gap-2 p-3">
           <span className="mono-label">{target ? "Run target" : "Running on"}</span>
-          {connectingTo ? (
-            <ConnectingCard name={connectingTo.model} />
-          ) : active ? (
+          {active ? (
             <ActiveCard entry={active} checking={checking} onHealthcheck={onHealthcheck} />
           ) : (
             <EmptyCard onBrowse={() => openPicker(true)} />
@@ -152,7 +151,7 @@ export function DeviceSelector() {
       </div>
 
       {/* Outside the scroller: the balance stays put. */}
-      <div className="border-t border-border px-3 py-2.5">
+      <div className="border-t border-border">
         <CloudPromoCard />
       </div>
 
@@ -178,9 +177,13 @@ function ActiveCard({
   onHealthcheck: (serial: string) => void;
 }) {
   const isTarget = e.state === "target";
+  const isConnecting = e.state === "connecting";
   return (
     <div className="relative overflow-hidden rounded-md border border-brand/40 bg-brand/5">
-      <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-brand" />
+      <span
+        aria-hidden
+        className={cn("absolute inset-x-0 top-0 h-0.5 bg-brand", isConnecting && "animate-pulse")}
+      />
       <div className="flex gap-3 p-3">
         <DeviceArt
           platform={e.platform}
@@ -188,17 +191,25 @@ function ActiveCard({
           kind={e.kind}
           source={e.source}
           seedKey={e.id}
+          dim={isConnecting}
           className="h-24 w-auto shrink-0"
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <span
-            className={cn(
-              "w-fit px-1.5 py-0.5 font-mono text-[9px] uppercase leading-none",
-              isTarget ? "bg-brand text-brand-foreground" : "bg-success text-[#101013]",
-            )}
-          >
-            {isTarget ? "Cloud" : e.source === "farm" ? "Farm · live" : "Live"}
-          </span>
+          {isConnecting ? (
+            <span className="flex w-fit items-center gap-1.5 bg-brand px-1.5 py-0.5 font-mono text-[9px] uppercase leading-none text-brand-foreground">
+              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+              Connecting
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "w-fit px-1.5 py-0.5 font-mono text-[9px] uppercase leading-none",
+                isTarget ? "bg-brand text-brand-foreground" : "bg-success text-[#101013]",
+              )}
+            >
+              {isTarget ? "Cloud" : e.source === "farm" ? "Farm · live" : "Live"}
+            </span>
+          )}
           <span className="truncate font-display text-[15px] font-medium leading-tight tracking-[-0.02em]">
             {e.name}
           </span>
@@ -210,16 +221,22 @@ function ActiveCard({
           </span>
         </div>
       </div>
+      {isConnecting ? (
+        <p className="border-t border-brand/20 px-3 py-2 text-[10px] leading-relaxed text-muted-foreground">
+          {connectingHint(e)}
+        </p>
+      ) : null}
       {e.source === "cloud" ? <ArtifactLine platform={e.cloud} /> : null}
       <div className="flex border-t border-brand/20">
         <button
           type="button"
           onClick={() => void selectEntry(e)}
-          className="flex-1 px-3 py-2 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          disabled={isConnecting && e.source === "local"}
+          className="flex-1 disabled:pointer-events-none px-3 py-2 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           {actionLabel(e)}
         </button>
-        {e.source === "local" && e.platform === "android" ? (
+        {e.source === "local" && e.platform === "android" && !isConnecting ? (
           <button
             type="button"
             onClick={() => onHealthcheck(e.device.serial)}
@@ -257,22 +274,6 @@ function ArtifactLine({
         {name ? "Change" : "Choose"}
       </span>
     </button>
-  );
-}
-
-function ConnectingCard({ name }: { name: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-border bg-surface p-3">
-      <span aria-hidden className="step-pip step-pip-running" />
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate font-display text-[15px] font-medium tracking-[-0.02em]">
-          {name}
-        </span>
-        <span className="font-mono text-[10px] uppercase text-muted-foreground">
-          Connecting · a simulator can take a minute
-        </span>
-      </span>
-    </div>
   );
 }
 

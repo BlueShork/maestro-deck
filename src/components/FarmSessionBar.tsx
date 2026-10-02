@@ -4,6 +4,8 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 
+import { Loader2 } from "lucide-react";
+
 import { Button } from "@/components/ui/Button";
 import { useFarmStore } from "@/stores/farmStore";
 
@@ -44,12 +46,22 @@ export function FarmSessionBar() {
       <div className="flex items-center gap-3">
         <span className="h-1.5 w-1.5 shrink-0 animate-pulse bg-brand" aria-hidden />
         <span className="mono-label text-foreground">Farm · {session.label}</span>
-        <span className="bg-surface px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
-          {mmss(now - session.startedAt)}
-        </span>
-        <span className="font-mono text-[10px] uppercase text-muted-foreground">
-          {minutesLeft} min left
-        </span>
+        {session.status === "connecting" ? (
+          // No minutes or clock yet: the dashboard is still reserving the phone.
+          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-brand">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Opening session…
+          </span>
+        ) : (
+          <>
+            <span className="bg-surface px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+              {mmss(now - session.startedAt)}
+            </span>
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              {minutesLeft} min left
+            </span>
+          </>
+        )}
         <span className="flex-1" />
         <Button
           size="sm"
@@ -60,7 +72,7 @@ export function FarmSessionBar() {
           {installing ? "Installing…" : "Install APK"}
         </Button>
         <Button size="sm" variant="destructive" onClick={() => void release()}>
-          Release
+          {session.status === "connecting" ? "Cancel" : "Release"}
         </Button>
       </div>
       {session.status === "reconnecting" ? (

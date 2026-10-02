@@ -20,6 +20,10 @@ export function useCatalog(): CatalogEntry[] {
   const signedIn = useCloudAuthStore((s) => s.user !== null);
   const farmDevices = useFarmStore((s) => s.devices);
   const farmSessionDeviceId = useFarmStore((s) => s.session?.deviceId ?? null);
+  const farmSessionConnecting = useFarmStore((s) => s.session?.status === "connecting");
+  const pendingConnectSerial = useDeviceStore((s) =>
+    s.pendingAction === "connect" ? s.pendingSerial : null,
+  );
   const cloudTarget = useCloudTargetStore((s) => s.target);
 
   return useMemo(
@@ -31,6 +35,8 @@ export function useCatalog(): CatalogEntry[] {
         signedIn,
         farmDevices,
         farmSessionDeviceId,
+        farmSessionConnecting,
+        pendingConnectSerial,
         cloudTarget,
       }),
     [
@@ -40,6 +46,8 @@ export function useCatalog(): CatalogEntry[] {
       signedIn,
       farmDevices,
       farmSessionDeviceId,
+      farmSessionConnecting,
+      pendingConnectSerial,
       cloudTarget,
     ],
   );
@@ -60,6 +68,7 @@ export async function selectEntry(e: CatalogEntry): Promise<boolean> {
   switch (e.source) {
     case "local": {
       const store = useDeviceStore.getState();
+      if (e.state === "connecting") return false;
       if (e.state === "connected") {
         await store.disconnect();
         return true;
@@ -72,7 +81,8 @@ export async function selectEntry(e: CatalogEntry): Promise<boolean> {
     }
     case "farm": {
       const farm = useFarmStore.getState();
-      if (e.state === "connected") {
+      // Releasing while the session opens cancels it (farmStore handles it).
+      if (e.state === "connected" || e.state === "connecting") {
         await farm.release();
         return true;
       }
@@ -97,6 +107,8 @@ export async function selectEntry(e: CatalogEntry): Promise<boolean> {
 /** What clicking an entry does, as a short verb for its call to action. */
 export function actionLabel(e: CatalogEntry): string {
   switch (e.state) {
+    case "connecting":
+      return e.source === "farm" ? "Cancel" : "Connecting…";
     case "connected":
       return e.source === "farm" ? "Release" : "Disconnect";
     case "target":
@@ -110,4 +122,22 @@ export function actionLabel(e: CatalogEntry): string {
     case "ready":
       return e.source === "cloud" ? "Run here" : "Connect";
   }
+}
+
+/** What is happening while an entry connects, so the wait never looks frozen. */
+export function connectingHint(e: CatalogEntry): string {
+  if (e.source === "farm")
+    return "Opening a session on the device farm — this can take up to a minute.";
+  if (e.kind === "simulator") {
+    return e.platform === "ios"
+      ? "Booting the simulator and starting the driver — about a minute the first time."
+      : "Starting the emulator — a minute or two from a cold boot.";
+  }
+  if (e.platform === "ios") return "Starting the driver on your iPhone — keep it unlocked.";
+  return "Starting the mirror and the Maestro driver…";
+}
+
+/** The entry being connected right now, if any. */
+export function useConnectingEntry(): CatalogEntry | null {
+  return useCatalog().find((e) => e.state === "connecting") ?? null;
 }

@@ -19,13 +19,21 @@ export type CatalogSource = "local" | "farm" | "cloud";
 export type CatalogKind = "physical" | "simulator" | "web";
 
 /**
+ * - connecting: being connected / booted, or a farm session being opened
  * - connected: the live device right now (local or farm session)
  * - target: the cloud fleet the next Run goes to
  * - ready: can be picked straight away
  * - off: a shut-down simulator / emulator — picking it boots it
  * - in_use / offline: a farm phone someone else holds, or one that is down
  */
-export type CatalogState = "connected" | "target" | "ready" | "off" | "in_use" | "offline";
+export type CatalogState =
+  | "connecting"
+  | "connected"
+  | "target"
+  | "ready"
+  | "off"
+  | "in_use"
+  | "offline";
 
 export type CatalogEntry = {
   id: string;
@@ -55,6 +63,10 @@ export interface CatalogInput {
   signedIn: boolean;
   farmDevices: FarmDevice[];
   farmSessionDeviceId: string | null;
+  /** The farm session is still opening (no screen yet). */
+  farmSessionConnecting: boolean;
+  /** Serial of the local device a connect is in flight for. */
+  pendingConnectSerial: string | null;
   cloudTarget: CloudJobPlatform | null;
 }
 
@@ -97,6 +109,7 @@ const CLOUD_FLEETS: Array<{
 const isTabletName = (name: string) => /\b(ipad|tablet|tab)\b/i.test(name);
 
 const STATE_RANK: Record<CatalogState, number> = {
+  connecting: 0,
   connected: 0,
   target: 0,
   ready: 1,
@@ -106,7 +119,11 @@ const STATE_RANK: Record<CatalogState, number> = {
 };
 const SOURCE_RANK: Record<CatalogSource, number> = { local: 0, farm: 1, cloud: 2 };
 
-function localEntry(d: Device, currentSerial: string | null): CatalogEntry {
+function localEntry(
+  d: Device,
+  currentSerial: string | null,
+  pendingSerial: string | null,
+): CatalogEntry {
   const kind: CatalogKind = d.platform === "web" ? "web" : d.physical ? "physical" : "simulator";
   // Shut-down AVDs come back as synthetic `avd:` serials; shut-down iOS
   // simulators as booted=false. A physical iPhone also reports booted=false
@@ -129,12 +146,23 @@ function localEntry(d: Device, currentSerial: string | null): CatalogEntry {
     os,
     detail: d.serial.startsWith("avd:") ? d.serial.slice(4) : d.serial,
     tablet: isTabletName(d.model),
-    state: currentSerial === d.serial ? "connected" : off ? "off" : "ready",
+    state:
+      currentSerial === d.serial
+        ? "connected"
+        : pendingSerial === d.serial
+          ? "connecting"
+          : off
+            ? "off"
+            : "ready",
     device: d,
   };
 }
 
-function farmEntry(f: FarmDevice, sessionDeviceId: string | null): CatalogEntry {
+function farmEntry(
+  f: FarmDevice,
+  sessionDeviceId: string | null,
+  sessionConnecting: boolean,
+): CatalogEntry {
   return {
     id: `farm:${f.id}`,
     source: "farm",
@@ -146,7 +174,9 @@ function farmEntry(f: FarmDevice, sessionDeviceId: string | null): CatalogEntry 
     tablet: isTabletName(farmDeviceLabel(f)),
     state:
       sessionDeviceId === f.id
-        ? "connected"
+        ? sessionConnecting
+          ? "connecting"
+          : "connected"
         : f.state === "available"
           ? "ready"
           : f.state === "in_use"
@@ -161,11 +191,13 @@ export function buildCatalog(input: CatalogInput): CatalogEntry[] {
     .filter(
       (d) => d.platform !== "web" || input.webBrowserEnabled || input.currentSerial === d.serial,
     )
-    .map((d) => localEntry(d, input.currentSerial));
+    .map((d) => localEntry(d, input.currentSerial, input.pendingConnectSerial));
 
   const remote: CatalogEntry[] = input.signedIn
     ? [
-        ...input.farmDevices.map((f) => farmEntry(f, input.farmSessionDeviceId)),
+        ...input.farmDevices.map((f) =>
+          farmEntry(f, input.farmSessionDeviceId, input.farmSessionConnecting),
+        ),
         ...CLOUD_FLEETS.map(
           (c): CatalogEntry => ({
             ...c,

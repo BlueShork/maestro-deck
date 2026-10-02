@@ -71,7 +71,7 @@ const GROUPS: Array<{ id: string; title: string; match: (e: CatalogEntry) => boo
   {
     id: "active",
     title: "In use",
-    match: (e) => e.state === "connected" || e.state === "target",
+    match: (e) => e.state === "connected" || e.state === "target" || e.state === "connecting",
   },
   {
     id: "local-physical",
@@ -127,7 +127,8 @@ export function DevicePicker() {
   const pick = async (e: CatalogEntry) => {
     const done = await selectEntry(e);
     // Releasing keeps the picker open so another device can be chosen.
-    if (done && e.state !== "connected" && e.state !== "target") setOpen(false);
+    if (done && e.state !== "connected" && e.state !== "target" && e.state !== "connecting")
+      setOpen(false);
   };
 
   return (
@@ -226,7 +227,10 @@ export function DevicePicker() {
                   (e) =>
                     g.match(e) &&
                     // An entry in use is shown once, in the top group.
-                    (g.id === "active" || (e.state !== "connected" && e.state !== "target")),
+                    (g.id === "active" ||
+                      (e.state !== "connected" &&
+                        e.state !== "target" &&
+                        e.state !== "connecting")),
                 );
                 if (items.length === 0) return null;
                 return (
@@ -319,6 +323,7 @@ function RailItem({
 
 function StateBadge({ entry: e }: { entry: CatalogEntry }) {
   const map: Partial<Record<CatalogEntry["state"], { label: string; className: string }>> = {
+    connecting: { label: "Connecting", className: "bg-brand text-brand-foreground" },
     connected: { label: "Live", className: "bg-success text-[#101013]" },
     target: { label: "Run target", className: "bg-brand text-brand-foreground" },
     off: { label: "Shut down", className: "bg-surface text-muted-foreground" },
@@ -338,13 +343,8 @@ function StateBadge({ entry: e }: { entry: CatalogEntry }) {
 
 function DeviceTile({ entry: e, onPick }: { entry: CatalogEntry; onPick: () => void }) {
   const selectable = isSelectable(e);
-  const pendingSerial = useDeviceStore((s) => s.pendingSerial);
-  const farmConnecting = useFarmStore(
-    (s) =>
-      s.session?.status === "connecting" && e.source === "farm" && s.session.deviceId === e.farm.id,
-  );
-  const pending = (e.source === "local" && pendingSerial === e.device.serial) || farmConnecting;
-  const live = e.state === "connected" || e.state === "target";
+  const pending = e.state === "connecting";
+  const live = e.state === "connected" || e.state === "target" || pending;
 
   return (
     <div
@@ -358,7 +358,7 @@ function DeviceTile({ entry: e, onPick }: { entry: CatalogEntry; onPick: () => v
       <button
         type="button"
         onClick={onPick}
-        disabled={!selectable || pending}
+        disabled={!selectable || (pending && e.source === "local")}
         className="flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed"
       >
         <div className="flex items-start justify-between gap-2 px-4 pt-4">
@@ -409,7 +409,7 @@ function DeviceTile({ entry: e, onPick }: { entry: CatalogEntry; onPick: () => v
         >
           <span className="flex items-center gap-2">
             {pending ? <Loader2 className="h-3 w-3 animate-spin text-brand" /> : null}
-            {pending ? "Connecting…" : actionLabel(e)}
+            {actionLabel(e)}
           </span>
           {selectable && !live && !pending ? (
             <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />

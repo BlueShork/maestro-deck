@@ -174,7 +174,10 @@ function DeviceCell() {
   const entries = useCatalog();
   const setOpen = useDevicePickerStore((s) => s.setOpen);
   const active =
-    entries.find((e) => e.state === "target") ?? entries.find((e) => e.state === "connected");
+    entries.find((e) => e.state === "target") ??
+    entries.find((e) => e.state === "connecting") ??
+    entries.find((e) => e.state === "connected");
+  const connecting = active?.state === "connecting";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -196,6 +199,7 @@ function DeviceCell() {
             <span aria-hidden className="h-2 w-2 shrink-0 border border-muted-foreground" />
           )}
           <span className="min-w-0 truncate">{active ? active.name : "Choose a device"}</span>
+          {connecting ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-brand" /> : null}
           <PixelChevron direction="down" size={10} className="shrink-0 text-muted-foreground" />
         </ToolbarCell>
       </TooltipTrigger>

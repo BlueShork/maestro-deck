@@ -39,6 +39,8 @@ const base: CatalogInput = {
   signedIn: false,
   farmDevices: [],
   farmSessionDeviceId: null,
+  farmSessionConnecting: false,
+  pendingConnectSerial: null,
   cloudTarget: null,
 };
 
@@ -125,6 +127,33 @@ describe("buildCatalog", () => {
       currentSerial: "C",
     });
     expect(entries.map((e) => e.id)).toEqual(["local:C", "local:B", "local:avd:A"]);
+  });
+});
+
+describe("connecting", () => {
+  it("marks a local device being connected and a farm session being opened", () => {
+    const entries = buildCatalog({
+      ...base,
+      signedIn: true,
+      devices: [
+        dev({
+          serial: "SIM-1",
+          model: "iPhone 16",
+          platform: "ios",
+          physical: false,
+          booted: false,
+        }),
+      ],
+      pendingConnectSerial: "SIM-1",
+      farmDevices: [farm({ id: "a" })],
+      farmSessionDeviceId: "a",
+      farmSessionConnecting: true,
+    });
+    const by = (id: string) => entries.find((e) => e.id === id)!;
+    expect(by("local:SIM-1").state).toBe("connecting");
+    expect(by("farm:a").state).toBe("connecting");
+    // Something being connected sorts first, like what is in use.
+    expect(entries[0].state).toBe("connecting");
   });
 });
 

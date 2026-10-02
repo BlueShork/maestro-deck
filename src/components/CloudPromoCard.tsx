@@ -4,7 +4,8 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate } from "react-router-dom";
 
-import { PixelChevron } from "@/components/brand/Pixel";
+import { PixelChevron, PixelMosaic } from "@/components/brand/Pixel";
+import { cn } from "@/lib/utils";
 
 import {
   CLOUD_BILLING_URL,
@@ -25,12 +26,18 @@ interface Promo {
   sub: string;
   cta: string;
   aria: string;
+  /** How close the balance is to empty; drives the colour. */
+  tone: "normal" | "low" | "empty";
 }
 
+/** At or below this many runs the balance turns amber: time to top up. */
+const LOW_RUNS = 3;
+
 /**
- * The cloud balance, parked at the foot of the device sidebar. It reads as a
- * ledger line rather than an ad: the figure carries the whole card, everything
- * else is set quiet around it, and the only colour is the app's own contrast.
+ * The cloud balance, parked at the foot of the device sidebar, cut into cells
+ * like the landing: a strip of warm bands, the figure in Inter Tight beside a
+ * small block mosaic, and the call to action as a light full-width cell. The
+ * mosaic and the figure warm up (amber, then red) as the balance runs out.
  *
  * It still follows the funnel — strangers get the free grant, signed-in users
  * get their balance — because signing in is optional everywhere else, so this
@@ -46,27 +53,51 @@ export function CloudPromoCard() {
   // create one. Once signed in, the money lives on the dashboard.
   const onClick = user ? () => void openUrl(CLOUD_BILLING_URL) : () => navigate("/account");
 
-  // Landing pricing card: warm bands on top, the figure set in Inter Tight,
-  // a Space Mono caption and the light call to action.
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={promo.aria}
-      className="warm-bands group w-full overflow-hidden rounded-lg border border-border bg-surface p-3 pt-4 text-left transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      className="group flex w-full flex-col text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
     >
-      <span className="flex flex-wrap items-baseline gap-x-2">
-        {promo.count ? (
-          <span className="font-display text-[32px] font-medium leading-none tracking-[-0.04em] tabular-nums text-foreground">
-            {promo.count}
-          </span>
-        ) : null}
-        <span className="font-mono text-[10px] uppercase text-muted-foreground">{promo.label}</span>
+      {/* Three warm bands, the landing footer in miniature. */}
+      <span aria-hidden className="flex flex-col">
+        <span className="h-0.5 bg-warm-amber" />
+        <span className="h-0.5 bg-warm-orange" />
+        <span className="h-0.5 bg-warm-red" />
       </span>
 
-      <span className="mt-2 block text-[11px] leading-snug text-muted-foreground">{promo.sub}</span>
+      <span className="flex items-stretch">
+        <span className="flex min-w-0 flex-1 flex-col gap-1.5 px-3 py-3">
+          <span className="flex items-baseline gap-2">
+            {promo.count ? (
+              <span
+                className={cn(
+                  "font-display text-[34px] font-medium leading-none tracking-[-0.045em] tabular-nums",
+                  promo.tone === "empty"
+                    ? "text-destructive"
+                    : promo.tone === "low"
+                      ? "text-warning"
+                      : "text-foreground",
+                )}
+              >
+                {promo.count}
+              </span>
+            ) : null}
+            <span className="mono-label text-[10px]">{promo.label}</span>
+          </span>
+          <span className="text-[11px] leading-snug text-muted-foreground">{promo.sub}</span>
+        </span>
+        <PixelMosaic
+          cols={3}
+          rows={4}
+          seed={7}
+          palette={promo.tone === "empty" ? "red" : promo.tone === "low" ? "yellow" : "orange"}
+          className="w-14 shrink-0 border-l border-border"
+        />
+      </span>
 
-      <span className="mt-3 flex h-8 items-center justify-center gap-2 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90 dark:group-hover:bg-white">
+      <span className="flex h-10 items-center justify-between border-t border-border bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90 dark:group-hover:bg-white">
         {promo.cta}
         <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />
       </span>
@@ -81,6 +112,7 @@ function resolvePromo(user: CloudUser | null, billing: CloudBillingInfo | null):
       label: "free runs",
       sub: "Run your flows on hosted devices. No card needed.",
       cta: "Create account",
+      tone: "normal",
       aria: `Create a free Maestro Deck Cloud account and get ${FREE_GRANT_RUNS} free runs`,
     };
   }
@@ -94,6 +126,7 @@ function resolvePromo(user: CloudUser | null, billing: CloudBillingInfo | null):
       sub: "Checking your balance",
       cta: "Buy runs",
       aria: "Buy more Maestro Deck Cloud runs",
+      tone: "normal",
     };
   }
 
@@ -107,7 +140,8 @@ function resolvePromo(user: CloudUser | null, billing: CloudBillingInfo | null):
         : billing.currentPack
           ? `${billing.currentPack.displayName} pack`
           : tierLabel(billing.tier),
-    cta: "Buy runs",
+    cta: runs <= LOW_RUNS ? "Top up runs" : "Buy runs",
     aria: "Buy more Maestro Deck Cloud runs",
+    tone: runs === 0 ? "empty" : runs <= LOW_RUNS ? "low" : "normal",
   };
 }
