@@ -1,8 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { ChevronDown } from "lucide-react";
-
+import { PixelChevron } from "@/components/brand/Pixel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,10 +45,10 @@ export function ModelPicker() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          className="inline-flex min-w-0 items-center gap-1.5 bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
         >
           {label}
-          <ChevronDown className="h-3 w-3" />
+          <PixelChevron direction="down" size={8} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

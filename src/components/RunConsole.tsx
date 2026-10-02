@@ -4,8 +4,7 @@
 import { Activity, Eraser, List, Terminal } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 
-import { Button } from "@/components/ui/Button";
-import { Segmented } from "@/components/ui/Segmented";
+import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { RunStatus } from "@/components/RunStatus";
 import { MetricsBody } from "@/components/MetricsPanel";
 import { renderAnsi } from "@/lib/ansi";
@@ -69,47 +68,46 @@ export function RunConsole() {
   }, [logs]);
 
   return (
-    <section className="flex h-full min-h-0 flex-col border-t border-border bg-background">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
-            Console
-          </span>
-          {running ? (
+    <section className="flex h-full min-h-0 flex-col bg-background">
+      <PanelHeader
+        title="Console"
+        meta={
+          running ? (
             <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-brand">
               <span className="h-1.5 w-1.5 animate-pulse bg-brand" />
               running
             </span>
           ) : exitCode !== null ? (
             <RunStatusBadge exitCode={exitCode} stopped={stopRequested} />
-          ) : null}
+          ) : null
+        }
+      >
+        {/* View tabs are header cells, lit like the landing's active nav item. */}
+        <div role="group" aria-label="Console view" className="flex items-stretch">
+          {CONSOLE_TABS.map(({ id, label, icon: Icon }) => (
+            <PanelAction
+              key={id}
+              wide
+              active={consoleMode === id}
+              aria-pressed={consoleMode === id}
+              onClick={() => setConsoleMode(id)}
+            >
+              <Icon className="h-3 w-3" />
+              {label}
+            </PanelAction>
+          ))}
         </div>
-        <div className="flex items-center gap-1">
-          <Segmented
-            aria-label="Console view"
-            size="sm"
-            items={CONSOLE_TABS.map(({ id, label, icon: Icon }) => ({
-              value: id,
-              label,
-              icon: <Icon className="h-3 w-3" />,
-            }))}
-            value={consoleMode}
-            onChange={setConsoleMode}
-            className="mr-1"
-          />
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={clearConsole}
-            // Disabled while running: clearing `steps` mid-run would wipe the
-            // live step list and incoming events can't repopulate it.
-            disabled={running || (logs.length === 0 && steps.length === 0)}
-          >
-            <Eraser className="h-3 w-3" />
-            Clear
-          </Button>
-        </div>
-      </div>
+        <PanelAction
+          wide
+          onClick={clearConsole}
+          // Disabled while running: clearing `steps` mid-run would wipe the
+          // live step list and incoming events can't repopulate it.
+          disabled={running || (logs.length === 0 && steps.length === 0)}
+        >
+          <Eraser className="h-3 w-3" />
+          Clear
+        </PanelAction>
+      </PanelHeader>
 
       <RunStatus />
 

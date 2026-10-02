@@ -9,6 +9,7 @@ import { CloudLivePreview } from "@/components/CloudLivePreview";
 import { DeviceSelector } from "@/components/DeviceSelector";
 import { DeviceView } from "@/components/DeviceView";
 import { FlowEditor } from "@/components/FlowEditor";
+import { PanelHeader } from "@/components/PanelHeader";
 import { PanelShell } from "@/components/PanelShell";
 import { RunConsole } from "@/components/RunConsole";
 import { ScreenshotReview } from "@/components/ScreenshotReview";
@@ -21,6 +22,7 @@ import { buildPartialFlow } from "@/lib/partialFlow";
 import { useAppMenu } from "@/lib/appMenu";
 import { IS_MAC, useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
+import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore } from "@/stores/panelsStore";
@@ -248,13 +250,7 @@ export function MainView() {
           <PanelGroup direction="horizontal" autoSaveId="maestro-deck.layout.outer">
             {panels.workspace ? (
               <>
-                <Panel
-                  id="workspace"
-                  order={1}
-                  defaultSize={WORKSPACE_SIZE}
-                  minSize={8}
-                  className="border-r border-border"
-                >
+                <Panel id="workspace" order={1} defaultSize={WORKSPACE_SIZE} minSize={8}>
                   <PanelShell id="workspace">
                     <WorkspaceTree />
                   </PanelShell>
@@ -265,13 +261,7 @@ export function MainView() {
 
             {panels.inspector ? (
               <>
-                <Panel
-                  id="inspector"
-                  order={2}
-                  defaultSize={INSPECTOR_SIZE}
-                  minSize={10}
-                  className="border-r border-border"
-                >
+                <Panel id="inspector" order={2} defaultSize={INSPECTOR_SIZE} minSize={10}>
                   <PanelShell id="inspector">
                     <DeviceSelector />
                   </PanelShell>
@@ -297,18 +287,18 @@ export function MainView() {
                           defaultSize={panels.editor ? 55 : 100}
                           minSize={20}
                         >
-                          <PanelShell
-                            id="device"
-                            className="items-center justify-center bg-card p-4"
-                          >
-                            <DeviceView />
-                            {cloudLive ? (
-                              <CloudLivePreview
-                                jobId={cloudLive.jobId}
-                                status={cloudLive.status}
-                                platform={cloudLive.platform}
-                              />
-                            ) : null}
+                          <PanelShell id="device">
+                            <DevicePanelHeader />
+                            <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center p-4">
+                              <DeviceView />
+                              {cloudLive ? (
+                                <CloudLivePreview
+                                  jobId={cloudLive.jobId}
+                                  status={cloudLive.status}
+                                  platform={cloudLive.platform}
+                                />
+                              ) : null}
+                            </div>
                           </PanelShell>
                         </Panel>
                         {panels.editor ? <PanelResizeHandle className={RESIZE_HANDLE_H} /> : null}
@@ -321,9 +311,6 @@ export function MainView() {
                         order={2}
                         defaultSize={streamEnabled && panels.device ? 45 : 100}
                         minSize={20}
-                        className={
-                          streamEnabled && panels.device ? "border-l border-border" : undefined
-                        }
                       >
                         <PanelShell id="editor">
                           <FlowEditor onRunFrom={onRunFrom} />
@@ -367,9 +354,34 @@ export function MainView() {
   );
 }
 
-/** Hover-only thin line between horizontally-stacked panels. */
+/** Device panel header: the connected device's name next to the label, so
+ *  the mirror lines up with the other panels' header row. */
+function DevicePanelHeader() {
+  const current = useDeviceStore((s) => s.current);
+  return (
+    <PanelHeader
+      title="Device"
+      meta={
+        current ? (
+          <span className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-foreground">
+            <span aria-hidden className="h-1.5 w-1.5 shrink-0 bg-success" />
+            <span className="truncate">{current.model}</span>
+          </span>
+        ) : (
+          <span className="font-mono text-[10px] uppercase text-muted-foreground">
+            Not connected
+          </span>
+        )
+      }
+    />
+  );
+}
+
+/** The hairline between horizontally-stacked panels is the handle itself:
+ *  1px of --border that turns orange under the cursor or while dragging,
+ *  with a wider invisible hit area so it stays easy to grab. */
 const RESIZE_HANDLE_H =
-  "w-[3px] bg-border/0 transition-colors hover:bg-primary/40 data-[resize-handle-state=drag]:bg-primary/60 data-[resize-handle-state=hover]:bg-primary/40";
-/** Same, but rotated for vertically-stacked panels. */
+  "relative w-px bg-border transition-colors after:absolute after:inset-y-0 after:-left-1 after:-right-1 after:content-[''] data-[resize-handle-state=hover]:bg-brand data-[resize-handle-state=drag]:bg-brand";
+/** Same, rotated for vertically-stacked panels. */
 const RESIZE_HANDLE_V =
-  "h-[3px] bg-border/0 transition-colors hover:bg-primary/40 data-[resize-handle-state=drag]:bg-primary/60 data-[resize-handle-state=hover]:bg-primary/40";
+  "relative h-px bg-border transition-colors after:absolute after:inset-x-0 after:-top-1 after:-bottom-1 after:content-[''] data-[resize-handle-state=hover]:bg-brand data-[resize-handle-state=drag]:bg-brand";

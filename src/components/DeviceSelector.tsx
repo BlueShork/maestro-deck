@@ -10,10 +10,10 @@ import { FarmDevicesSection } from "@/components/FarmDevicesSection";
 import { CloudPromoCard } from "@/components/CloudPromoCard";
 import { LogoCloud } from "@/components/Logo";
 
-import { Button } from "@/components/ui/Button";
 import { HealthcheckModal } from "@/components/HealthcheckModal";
 import { ipc } from "@/lib/ipc";
 import { PixelChevron } from "@/components/brand/Pixel";
+import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useDeviceStore } from "@/stores/deviceStore";
@@ -267,22 +267,19 @@ export function DeviceSelector() {
 
   return (
     <div className="flex h-full min-h-0 flex-col border-b border-border">
-      <div className="flex items-center justify-between px-3 pb-2 pt-3">
-        <div className="mono-label">Devices</div>
-        <Button
-          size="icon"
-          variant="ghost"
+      <PanelHeader title="Devices">
+        <PanelAction
           onClick={() => void refresh()}
           disabled={loading}
           aria-label="Refresh devices"
-          className="h-6 w-6"
+          title="Refresh devices"
         >
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-        </Button>
-      </div>
+        </PanelAction>
+      </PanelHeader>
 
       <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-        <div className="flex flex-col gap-2 px-3 pb-3">
+        <div className="flex flex-col gap-2 px-3 py-3">
           {error ? (
             <div className="rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
               {error}

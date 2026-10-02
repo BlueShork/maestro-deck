@@ -15,6 +15,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { ipc } from "@/lib/ipc";
+import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
@@ -265,46 +266,39 @@ export function InspectorPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="mono-label">Hierarchy</div>
-          {stats ? (
+      <PanelHeader
+        title="Hierarchy"
+        meta={
+          stats ? (
             <span
               className="shrink-0 bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
               title={`${stats.total} total nodes, ${stats.targetable} with a selector (text / id / desc / clickable)`}
             >
               {stats.targetable}/{stats.total}
             </span>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => void copyHierarchy()}
-            disabled={!tree?.xml_raw}
-            aria-label="Copy hierarchy dump to clipboard"
-            className="h-6 w-6"
-            title="Copy raw hierarchy dump to clipboard"
-          >
-            {justCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => void refresh()}
-            disabled={loading}
-            aria-label="Refresh hierarchy"
-            className="h-6 w-6"
-            title="Re-dump UI hierarchy"
-          >
-            <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
-          </Button>
-          <Button size="xs" variant="ghost" onClick={() => void toggle()}>
-            Exit
-          </Button>
-        </div>
-      </div>
+          ) : null
+        }
+      >
+        <PanelAction
+          onClick={() => void copyHierarchy()}
+          disabled={!tree?.xml_raw}
+          aria-label="Copy hierarchy dump to clipboard"
+          title="Copy raw hierarchy dump to clipboard"
+        >
+          {justCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </PanelAction>
+        <PanelAction
+          onClick={() => void refresh()}
+          disabled={loading}
+          aria-label="Refresh hierarchy"
+          title="Re-dump UI hierarchy"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+        </PanelAction>
+        <PanelAction wide onClick={() => void toggle()}>
+          Exit
+        </PanelAction>
+      </PanelHeader>
       {sparse ? (
         <div className="flex items-start gap-2 border-b border-border bg-warning/10 px-3 py-2 text-[11px] text-foreground shadow-[inset_2px_0_0_hsl(var(--warning))]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />

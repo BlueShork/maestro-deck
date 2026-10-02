@@ -294,3 +294,18 @@
     transform: translateY(-0.1rem);
   }
 }
+
+/* Toast time bar: burns down in hard steps, like the landing CI progress bar. */
+.toast-bar {
+  animation-name: toast-burn;
+  animation-timing-function: steps(12, end);
+  animation-fill-mode: forwards;
+}
+@keyframes toast-burn {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}

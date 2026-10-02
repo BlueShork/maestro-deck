@@ -22,13 +22,13 @@ interface ToastState {
   toasts: Toast[];
   push: (t: Omit<Toast, "id" | "open">) => string;
   /** Trigger the exit animation; the toast is removed from the list when
-   *  SwipeToast signals it has finished closing via `setClosed`. */
+   *  the toast card signals it has finished closing via `setClosed`. */
   dismiss: (id: string) => void;
   setClosed: (id: string) => void;
 }
 
 // Head start the outgoing toast gets to sink out before the new one rises in
-// its place (SwipeToast's full exit is ~340ms; the overlap is intentional).
+// its place (the card exit is ~180ms; the overlap is intentional).
 const SWAP_DELAY_MS = 180;
 
 // Toasts pushed but not yet inserted (waiting out SWAP_DELAY_MS), mapped to
