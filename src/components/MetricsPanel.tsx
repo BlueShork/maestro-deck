@@ -18,25 +18,26 @@ export function MetricsBody() {
 
   return (
     <div className="text-[11px]">
-      <div className="mb-2 truncate text-foreground/80">{pkg ?? "—"}</div>
+      <div className="mono-label mb-2 truncate">{pkg ?? "—"}</div>
       {!device || !layout ? (
         <div className="text-muted-foreground">Connect a device to monitor performance.</div>
       ) : layout.kind === "limited" ? (
         <div className="text-muted-foreground">{layout.message}</div>
       ) : stopped && stopped !== "unsupported" ? (
-        <div className="text-red-600 dark:text-red-400">Monitoring stopped ({stopped}).</div>
+        <div className="text-destructive">Monitoring stopped ({stopped}).</div>
       ) : samples.length === 0 ? (
         <div className="text-muted-foreground">Waiting for samples…</div>
       ) : (
         <TooltipProvider delayDuration={300}>
-          <div className="space-y-3">
+          {/* Landing tiles: cells sharing hairlines, the figure in Inter Tight. */}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] border-l border-t border-border">
             {layout.cards.map((id) => (
               <MetricCard key={id} id={id} samples={samples} last={last} />
             ))}
-            {layout.note ? (
-              <div className="pt-1 text-[10px] text-muted-foreground">{layout.note}</div>
-            ) : null}
           </div>
+          {layout.note ? (
+            <div className="pt-2 text-[10px] text-muted-foreground">{layout.note}</div>
+          ) : null}
         </TooltipProvider>
       )}
     </div>
@@ -135,16 +136,15 @@ function Card({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="cursor-help">
-          <div className="flex items-baseline justify-between">
-            <span className="text-[10px] font-mono uppercase tracking-[0.02em] text-muted-foreground">
-              {label}
-            </span>
-            <span className="font-mono tabular-nums">
-              {value} <span className="text-[10px] text-muted-foreground">{unit}</span>
-            </span>
-          </div>
-          {series ? <MetricsSparkline values={series} className="text-foreground/60" /> : null}
+        <div className="flex cursor-help flex-col gap-2 border-b border-r border-border p-3 transition-colors hover:bg-accent">
+          <span className="mono-label text-[10px]">{label}</span>
+          <span className="font-display text-2xl font-medium leading-none tracking-[-0.03em] tabular-nums">
+            {value}
+            {unit ? (
+              <span className="ml-1 font-mono text-[10px] text-muted-foreground">{unit}</span>
+            ) : null}
+          </span>
+          {series ? <MetricsSparkline values={series} className="text-brand" /> : null}
         </div>
       </TooltipTrigger>
       <TooltipContent side="left" className="max-w-[260px] text-[11px] leading-snug">

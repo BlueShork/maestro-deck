@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { ChevronRight, Eye, EyeOff, MousePointerClick, ScrollText } from "lucide-react";
+import { Eye, EyeOff, MousePointerClick, ScrollText } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -12,6 +12,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
+import { PixelChevron } from "@/components/brand/Pixel";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flowStore";
@@ -188,7 +189,7 @@ export function InspectActionMenu({ x, y, node, selectors, onClose }: InspectAct
     <div
       ref={ref}
       role="menu"
-      className="fixed z-50 w-58 rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
+      className="menu-surface fixed z-50 overflow-hidden"
       style={{ ...style, width: MENU_W }}
       // The menu floats over the device view, whose container drives the inspector
       // (hover on pointer-move, tap on pointer-down, swipe on wheel). Because this
@@ -206,8 +207,8 @@ export function InspectActionMenu({ x, y, node, selectors, onClose }: InspectAct
         e.stopPropagation();
       }}
     >
-      <div className="rounded-t-md border-b border-border px-3 py-2">
-        <div className="truncate text-[11px] font-medium">{nodeLabel(node)}</div>
+      <div className="border-b border-border px-3 py-2">
+        <div className="mono-label truncate text-foreground">{nodeLabel(node)}</div>
         <div className="truncate font-mono text-[10px] text-muted-foreground">
           {selectorPreview(best)}
         </div>
@@ -240,14 +241,14 @@ export function InspectActionMenu({ x, y, node, selectors, onClose }: InspectAct
                 }}
                 className={cn(
                   "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
-                  disabled ? "cursor-not-allowed text-muted-foreground/50" : "hover:bg-accent",
+                  disabled
+                    ? "cursor-not-allowed text-muted-foreground/50"
+                    : "hover:bg-accent hover:shadow-[inset_2px_0_0_hsl(var(--brand))] focus-visible:outline-none focus-visible:bg-accent",
                 )}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="flex-1">{item.label}</span>
-                {hasSubmenu ? (
-                  <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
-                ) : null}
+                {hasSubmenu ? <PixelChevron size={10} className="text-muted-foreground" /> : null}
               </button>
               {hasSubmenu && openKind === item.kind ? (
                 <SelectorSubmenu
@@ -292,7 +293,7 @@ function SelectorSubmenu({
     <ul
       role="menu"
       className={cn(
-        "absolute top-0 z-10 rounded-md border border-border bg-popover py-1 shadow-xl",
+        "menu-surface absolute top-0 z-10 py-1",
         flip ? "right-full mr-1" : "left-full ml-1",
       )}
       style={{ width: SUBMENU_W }}
@@ -311,13 +312,15 @@ function SelectorSubmenu({
                 onCloseSubmenu();
               }
             }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-accent"
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-accent hover:shadow-[inset_2px_0_0_hsl(var(--brand))] focus-visible:bg-accent focus-visible:outline-none"
           >
             <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
               {selectorPreview(s)}
             </span>
             {i === 0 ? (
-              <span className="shrink-0 text-[9px] text-muted-foreground">recommended</span>
+              <span className="shrink-0 bg-brand px-1 py-0.5 font-mono text-[9px] uppercase leading-none text-brand-foreground">
+                recommended
+              </span>
             ) : null}
           </button>
         </li>

@@ -11,7 +11,7 @@ import {
   ToggleRow,
 } from "@/components/settings/SettingsPrimitives";
 import { Button } from "@/components/ui/Button";
-import { cn } from "@/lib/utils";
+import { Segmented } from "@/components/ui/Segmented";
 import { useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useTourStore } from "@/stores/tourStore";
@@ -41,28 +41,16 @@ export function GeneralSettings() {
     >
       <SettingsSubgroup title="Appearance">
         <SettingsRow label="Theme" description="System follows your OS light / dark setting.">
-          <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
-            {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
-              const active = theme === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setTheme(value)}
-                  className={cn(
-                    "flex items-center justify-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  aria-pressed={active}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+          <Segmented
+            aria-label="Theme"
+            items={THEME_OPTIONS.map(({ value, label, icon: Icon }) => ({
+              value,
+              label,
+              icon: <Icon className="h-3.5 w-3.5" />,
+            }))}
+            value={theme}
+            onChange={setTheme}
+          />
         </SettingsRow>
       </SettingsSubgroup>
 

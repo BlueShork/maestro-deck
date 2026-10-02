@@ -63,8 +63,9 @@ function TreeNodeImpl({ node, depth }: TreeNodeProps) {
     <div>
       <div
         className={cn(
-          "group flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-[11px]",
-          selected && "bg-accent",
+          "group flex cursor-pointer items-center gap-1 px-1 py-0.5 text-[11px]",
+          // Landing "active line": ghost fill under an orange left rule.
+          selected && "bg-accent shadow-[inset_2px_0_0_hsl(var(--brand))]",
           !selected && hovered && "bg-accent/50",
           !selected && !hovered && "hover:bg-accent/50",
         )}
@@ -124,7 +125,7 @@ function Properties({ node }: { node: UINode }) {
     <div className="space-y-1 font-mono text-[11px]">
       {rows.map(([k, v]) => (
         <div key={k} className="flex gap-2">
-          <span className="w-20 shrink-0 text-muted-foreground">{k}</span>
+          <span className="w-24 shrink-0 uppercase text-muted-foreground">{k}</span>
           <span className="min-w-0 flex-1 break-all">{v}</span>
         </div>
       ))}
@@ -162,11 +163,11 @@ function SelectorCandidates({ node, selectors }: { node: UINode; selectors: Sele
     );
   }
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col border border-border">
       {selectors.map((sel, i) => (
         <div
           key={i}
-          className="flex items-center gap-1.5 rounded border border-border bg-muted/30 p-1.5"
+          className="flex items-center gap-1.5 px-2 py-1 transition-colors hover:bg-accent [&+&]:border-t [&+&]:border-border"
         >
           <div className="min-w-0 flex-1 truncate font-mono text-[11px]">{selectorLabel(sel)}</div>
           <Button
@@ -249,12 +250,13 @@ export function InspectorPanel() {
 
   if (!enabled) {
     return (
-      <div className="flex h-full flex-col items-start gap-2 p-3 text-[11px] text-muted-foreground">
+      <div className="flex h-full flex-col items-start gap-3 p-3 text-[11px] text-muted-foreground">
+        <div className="mono-label">Inspector</div>
         <div>
           Press <kbd className="rounded border border-border px-1">I</kbd> to inspect the current
           frame.
         </div>
-        <Button size="sm" variant="outline" onClick={() => void toggle()} disabled={loading}>
+        <Button size="sm" variant="secondary" onClick={() => void toggle()} disabled={loading}>
           {loading ? "Dumping…" : "Enter inspect mode"}
         </Button>
       </div>
@@ -265,12 +267,10 @@ export function InspectorPanel() {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <div className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
-            Hierarchy
-          </div>
+          <div className="mono-label">Hierarchy</div>
           {stats ? (
             <span
-              className="shrink-0 font-mono text-[10px] text-muted-foreground"
+              className="shrink-0 bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
               title={`${stats.total} total nodes, ${stats.targetable} with a selector (text / id / desc / clickable)`}
             >
               {stats.targetable}/{stats.total}
@@ -306,8 +306,8 @@ export function InspectorPanel() {
         </div>
       </div>
       {sparse ? (
-        <div className="flex items-start gap-2 border-b border-border bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <div className="flex items-start gap-2 border-b border-border bg-warning/10 px-3 py-2 text-[11px] text-foreground shadow-[inset_2px_0_0_hsl(var(--warning))]">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
           <div>
             Sparse hierarchy — this app likely uses Compose / React Native without exposed testTags.
             Only {stats!.targetable} node(s) are targetable. Try the 🔄 button after the screen has

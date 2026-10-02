@@ -799,7 +799,7 @@ export function DeviceView() {
         <canvas
           ref={canvasRef}
           className={cn(
-            "pointer-events-none rounded-lg bg-black shadow-2xl",
+            "pointer-events-none rounded-lg bg-black shadow-[0_30px_60px_-20px_rgba(0,0,0,0.55)]",
             !hasFrame && "hidden",
             inspectEnabled && "cursor-crosshair",
           )}
@@ -817,7 +817,7 @@ export function DeviceView() {
         />
 
         {hasFrame ? (
-          <div className="absolute right-3 top-3 z-10 flex gap-2">
+          <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border border-border bg-background">
             {isIos ? (
               <button
                 type="button"
@@ -825,7 +825,7 @@ export function DeviceView() {
                 disabled={pressingHome || !connectedSerial}
                 title="Press Home (return to home screen)"
                 aria-label="Press Home button"
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <House className="h-4 w-4" />
               </button>
@@ -838,7 +838,7 @@ export function DeviceView() {
                 title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
                 aria-label="Toggle device dark mode"
                 aria-pressed={darkMode ?? false}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </button>
@@ -849,7 +849,7 @@ export function DeviceView() {
               disabled={capturing}
               title="Screenshot · ⌘⇧S"
               aria-label="Take screenshot"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Camera className="h-4 w-4" />
             </button>
@@ -922,9 +922,9 @@ function EmptyState({
   }
   if (lightweight) {
     return (
-      <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
-        <Smartphone className="h-10 w-10 text-muted-foreground/60" />
-        <div className="text-sm font-medium">Lightweight mode</div>
+      <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
+        <Smartphone className="h-8 w-8 text-brand" />
+        <div className="font-display text-xl font-medium tracking-[-0.03em]">Lightweight mode</div>
         <div className="max-w-[16rem] text-xs text-muted-foreground">
           Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle
           in Settings to re-enable mirroring.
@@ -933,7 +933,7 @@ function EmptyState({
     );
   }
   return (
-    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
       <PreviewLoader label="Waiting for the first frame" />
       <div className="max-w-[16rem] text-xs text-muted-foreground">
         The stream will appear here once scrcpy pushes the first frame.
@@ -970,7 +970,7 @@ function IosPhysicalWaiting() {
     return () => window.clearTimeout(id);
   }, []);
   return (
-    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
       <PreviewLoader
         label={building ? "Building the test driver on your iPhone" : "Connecting to your iPhone"}
       />
