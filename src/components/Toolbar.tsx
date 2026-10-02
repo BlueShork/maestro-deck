@@ -25,6 +25,8 @@ import { useNavigate } from "react-router-dom";
 import { useShallow } from "zustand/react/shallow";
 
 import { PixelChevron, PixelIcon } from "@/components/brand/Pixel";
+import { DeviceArt } from "@/components/devices/DeviceArt";
+import { useCatalog } from "@/components/devices/useCatalog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +42,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
+import { useDevicePickerStore } from "@/stores/devicePickerStore";
 import { selectSetupChip, useEnvStore } from "@/stores/envStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore, type PanelId } from "@/stores/panelsStore";
@@ -166,6 +169,41 @@ const ToolbarCell = forwardRef<
 ));
 ToolbarCell.displayName = "ToolbarCell";
 
+/** Toolbar cell naming what Run will use, opening the device picker. */
+function DeviceCell() {
+  const entries = useCatalog();
+  const setOpen = useDevicePickerStore((s) => s.setOpen);
+  const active =
+    entries.find((e) => e.state === "target") ?? entries.find((e) => e.state === "connected");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <ToolbarCell
+          onClick={() => setOpen(true)}
+          aria-label="Choose a device"
+          className="group/dev max-w-[16rem] gap-2.5"
+        >
+          {active ? (
+            <DeviceArt
+              platform={active.platform}
+              tablet={active.tablet}
+              kind={active.kind}
+              source={active.source}
+              seedKey={active.id}
+              className="h-6 w-auto shrink-0"
+            />
+          ) : (
+            <span aria-hidden className="h-2 w-2 shrink-0 border border-muted-foreground" />
+          )}
+          <span className="min-w-0 truncate">{active ? active.name : "Choose a device"}</span>
+          <PixelChevron direction="down" size={10} className="shrink-0 text-muted-foreground" />
+        </ToolbarCell>
+      </TooltipTrigger>
+      <TooltipContent>All devices — local, farm & cloud (⇧⌘D)</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
   const navigate = useNavigate();
   const chatOpen = useChatStore((s) => s.isOpen);
@@ -233,6 +271,8 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
         <div className="ml-auto flex items-stretch">
           <FpsBadge />
+
+          <DeviceCell />
 
           {/* Beside Run, because that is where someone reaches when nothing
               happens. Clicking opens the setup panel with the detail. */}

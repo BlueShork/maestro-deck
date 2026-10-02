@@ -22,6 +22,7 @@ import { buildPartialFlow } from "@/lib/partialFlow";
 import { useAppMenu } from "@/lib/appMenu";
 import { IS_MAC, useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
+import { useDevicePickerStore } from "@/stores/devicePickerStore";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
@@ -228,6 +229,12 @@ export function MainView() {
             },
           ]),
       { key: inspectKey, handler: () => void toggleInspect() },
+      {
+        key: "d",
+        mod: true,
+        shift: true,
+        handler: () => useDevicePickerStore.getState().setOpen(true),
+      },
     ],
     [onRun, toggleInspect, inspectKey],
   );
