@@ -2,8 +2,10 @@
 
 Icons used by the Tauri bundler, all rendered from two SVG masters:
 
-- `icon.svg` — full-bleed app icon (black rounded square, white mark). Source
-  for the Windows/Linux PNGs and `icon.ico`.
+- `icon.svg` — full-bleed app icon: the landing's 16-cell pixel mark in warm
+  bands (yellow → red) on a #101013 rounded square. Source for the
+  Windows/Linux PNGs and `icon.ico`; also copied to `public/app-icon.svg`
+  (favicon) and `public/icon.svg`.
 - `icon-macos.svg` — same icon on Apple's grid (824px body centred on a
   1024 canvas), so it sits at the right size in the Dock. Source for
   `icon.icns` and `icon.png`.
