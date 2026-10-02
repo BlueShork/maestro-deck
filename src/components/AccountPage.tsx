@@ -17,7 +17,7 @@ import {
 } from "@/lib/cloudAuth";
 import { LoginCard } from "@/components/LoginCard";
 import { PageHeader } from "@/components/PageHeader";
-import { PixelChevron, PixelMosaic } from "@/components/brand/Pixel";
+import { PixelChevron, PixelIcon, PixelMosaic } from "@/components/brand/Pixel";
 import { DeviceArt } from "@/components/devices/DeviceArt";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
@@ -41,7 +41,8 @@ export function AccountPage() {
     <div className="flex h-screen flex-col bg-background text-foreground">
       <PageHeader title="Maestro Deck Cloud" />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {user ? null : <PitchView />}
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", !user && "hidden")}>
         {/* Decorative community banner, edge to edge. Its height is capped so
             a wide window crops the empty top/bottom instead of turning it
             into a wall; the artwork's content sits in the middle. */}
@@ -55,7 +56,7 @@ export function AccountPage() {
           />
         ) : null}
         <div className="mx-auto max-w-3xl px-6 py-10">
-          {user ? <ProfileView email={user.email} /> : <PitchView />}
+          {user ? <ProfileView email={user.email} /> : null}
         </div>
       </div>
     </div>
@@ -288,46 +289,69 @@ function UsageRing({ used, cap, label }: { used: number; cap: number; label: str
   );
 }
 
+/** What an account adds, shown on the sign-in page's mosaic panel. */
+const BENEFITS: Array<{ icon: typeof Gauge; title: string; description: string }> = [
+  {
+    icon: Cloud,
+    title: "Run flows in the cloud",
+    description: "Hosted emulators, simulators and real phones.",
+  },
+  {
+    icon: Smartphone,
+    title: "Live sessions on real devices",
+    description: "Mirror and drive a farm phone as if it were on your desk.",
+  },
+  {
+    icon: Gauge,
+    title: "Track runs & credits",
+    description: "Your balance, right here in the app.",
+  },
+  {
+    icon: ShoppingCart,
+    title: "Buy more in one click",
+    description: "Top up without leaving Maestro Deck.",
+  },
+];
+
+/**
+ * Signed-out page, laid out like the dashboard's /login: the form in its own
+ * column, a full-height warm mosaic beside it with the pixel mark set large,
+ * and what an account adds in a card over the mosaic.
+ */
 function PitchView() {
   return (
-    <div className="grid grid-cols-1 gap-10 md:grid-cols-2 md:items-start">
-      <div className="space-y-6">
-        <div>
-          <h1 className="font-display text-[40px] font-medium leading-none tracking-[-0.045em]">
-            Maestro Deck Cloud
-          </h1>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-            Maestro Deck runs fully offline without an account — signing in is entirely optional.
-            Connect one to run flows in the cloud and keep your runs and credits right here in the
-            app.
-          </p>
+    <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2">
+      <div className="flex min-h-0 overflow-y-auto">
+        <div className="m-auto w-full max-w-[400px] px-6 py-12">
+          <span className="mono-label mb-4 block">Maestro Deck Cloud</span>
+          <LoginCard variant="page" />
         </div>
-
-        <ul className="border border-border">
-          <Benefit
-            icon={Cloud}
-            title="Run flows in the cloud"
-            description="Kick off a flow from the app and let it run on a hosted emulator, simulator or real phone."
-          />
-          <Benefit
-            icon={Smartphone}
-            title="Preview on real devices"
-            description="Watch a flow execute on a real physical device, streamed back to the app."
-          />
-          <Benefit
-            icon={Gauge}
-            title="Track runs & credits"
-            description="See how many cloud runs you have left without switching to a browser."
-          />
-          <Benefit
-            icon={ShoppingCart}
-            title="Buy more in one click"
-            description="Out of runs? Buy more runs without leaving Maestro Deck."
-          />
-        </ul>
       </div>
 
-      <LoginCard />
+      <PixelMosaic
+        cols={10}
+        rows={12}
+        palette="orange"
+        seed={11}
+        className="hidden border-l border-border lg:block"
+      >
+        <div className="absolute right-8 top-8 w-[min(340px,70%)] border border-border bg-background shadow-[0_30px_60px_-20px_rgba(0,0,0,0.6)]">
+          <div className="border-b border-border px-4 py-3">
+            <span className="mono-label">With an account</span>
+          </div>
+          <ul>
+            {BENEFITS.map((b) => (
+              <Benefit key={b.title} {...b} />
+            ))}
+          </ul>
+        </div>
+        <PixelIcon
+          compact={false}
+          color="#101013"
+          size={176}
+          className="absolute bottom-0 left-12"
+        />
+      </PixelMosaic>
     </div>
   );
 }
