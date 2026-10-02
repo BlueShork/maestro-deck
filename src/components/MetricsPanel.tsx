@@ -137,7 +137,7 @@ function Card({
       <TooltipTrigger asChild>
         <div className="cursor-help">
           <div className="flex items-baseline justify-between">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="text-[10px] font-mono uppercase tracking-[0.02em] text-muted-foreground">
               {label}
             </span>
             <span className="font-mono tabular-nums">

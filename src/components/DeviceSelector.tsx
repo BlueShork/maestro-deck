@@ -89,13 +89,12 @@ const DeviceRow = memo(function DeviceRow({
           "group flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors",
           // Pending state overrides connected state visually — the
           // shimmer/amber tint tells the user something is happening.
-          isConnecting && "border-emerald-500/30 bg-emerald-500/5 animate-pulse",
+          isConnecting && "border-brand/30 bg-brand/5 animate-pulse",
           isDisconnecting && "border-amber-500/40 bg-amber-500/5 animate-pulse",
           !isPending && active
-            ? // Explicit green — primary is the app's theme blue and doesn't
-              // read as "connected" at a glance. Tinted background + green
-              // border + icon give the device card an unambiguous "live" look.
-              "border-emerald-500/50 bg-emerald-500/10 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.15)]"
+            ? // Landing "active line": orange left rule over an orange wash,
+              // so the live device reads at a glance.
+              "border-brand/40 bg-brand/10 shadow-[inset_2px_0_0_hsl(var(--brand))]"
             : !isPending && "border-transparent hover:border-border hover:bg-accent/40",
         )}
       >
@@ -103,9 +102,9 @@ const DeviceRow = memo(function DeviceRow({
           <DeviceIcon
             className={cn(
               "h-4 w-4",
-              isConnecting && "text-emerald-500/70",
+              isConnecting && "text-brand/70",
               isDisconnecting && "text-amber-500",
-              !isPending && active && "text-emerald-500",
+              !isPending && active && "text-brand",
               !isPending && !active && "text-muted-foreground",
             )}
           />
@@ -115,7 +114,7 @@ const DeviceRow = memo(function DeviceRow({
             className={cn(
               "truncate text-xs font-medium",
               isDisconnecting && "text-amber-700 dark:text-amber-300",
-              !isPending && active && "text-emerald-700 dark:text-emerald-300",
+              !isPending && active && "text-foreground",
             )}
           >
             {d.model}
@@ -123,10 +122,10 @@ const DeviceRow = memo(function DeviceRow({
           <div
             className={cn(
               "truncate font-mono text-[10px]",
-              isConnecting && "text-emerald-600/70 dark:text-emerald-400/70",
+              isConnecting && "text-brand/80",
               isDisconnecting && "text-amber-600/80 dark:text-amber-400/80",
               !isPending && active
-                ? "text-emerald-600/80 dark:text-emerald-400/80"
+                ? "text-muted-foreground"
                 : !isPending && "text-muted-foreground",
             )}
           >
@@ -158,12 +157,12 @@ const DeviceRow = memo(function DeviceRow({
                 e.stopPropagation();
                 onHealthcheck(d.serial);
               }}
-              className="rounded p-0.5 hover:bg-emerald-500/20"
+              className="rounded p-0.5 hover:bg-brand/20"
             >
               {checking ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-500" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
               ) : (
-                <Stethoscope className="h-3.5 w-3.5 text-emerald-500" />
+                <Stethoscope className="h-3.5 w-3.5 text-brand" />
               )}
             </span>
           )}
@@ -171,11 +170,11 @@ const DeviceRow = memo(function DeviceRow({
             <Loader2
               className={cn(
                 "h-3.5 w-3.5 animate-spin",
-                isConnecting ? "text-emerald-500" : "text-amber-500",
+                isConnecting ? "text-brand" : "text-amber-500",
               )}
             />
           ) : active ? (
-            <PlugZap className="h-3.5 w-3.5 text-emerald-500" />
+            <PlugZap className="h-3.5 w-3.5 text-brand" />
           ) : isSim ? (
             <Play className="h-3.5 w-3.5 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />
           ) : (
@@ -278,7 +277,7 @@ export function DeviceSelector() {
   return (
     <div className="flex h-full min-h-0 flex-col border-b border-border">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
           Devices
         </div>
         <Button
@@ -296,7 +295,7 @@ export function DeviceSelector() {
       <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="flex flex-col gap-2 px-3 pb-3">
           {error ? (
-            <div className="rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive-foreground">
+            <div className="rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
               {error}
             </div>
           ) : null}
@@ -326,14 +325,11 @@ export function DeviceSelector() {
           <div className="flex flex-col gap-1.5 pt-4">
             {/* Short rule fading out at both ends: marks the break from the
                 local devices above without boxing the sidebar in. */}
-            <div
-              aria-hidden
-              className="mb-4 h-px w-2/3 self-center bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent"
-            />
+            <div aria-hidden className="mb-4 h-px w-full self-center bg-border" />
             {/* The brand lockup stands in for the section title here. Muted to
                 sit at the same weight as the other headings rather than turning
                 the sidebar into a billboard. */}
-            <LogoCloud className="mb-2 h-auto w-full max-w-40 self-center text-muted-foreground" />
+            <LogoCloud className="mb-2 self-center" />
             {/* Signed in you get the fleet; signed out the card does the asking,
                 since there is nothing to run on until there is an account. */}
             {cloudUser ? <FarmDevicesSection /> : null}
@@ -421,7 +417,7 @@ function SimulatorsSection({
         key="root"
         className="flex flex-col gap-1.5 overflow-x-hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-left-4 motion-safe:duration-200"
       >
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
           Simulators
         </div>
         <ul className="flex flex-col gap-1.5">
@@ -455,7 +451,7 @@ function SimulatorsSection({
       <button
         type="button"
         onClick={() => setView("root")}
-        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
       >
         <ChevronLeft className="h-3.5 w-3.5" />
         {isIos ? "iOS Simulators" : "Android Simulators"}

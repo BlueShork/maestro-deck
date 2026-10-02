@@ -38,7 +38,7 @@ export function TelemetryConsentDialog() {
         onOpenAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <span className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/25">
+        <span className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand ring-1 ring-brand/25">
           <BarChart3 className="h-5 w-5" />
         </span>
 
@@ -56,7 +56,7 @@ export function TelemetryConsentDialog() {
             <ul className="flex flex-col gap-1.5 text-muted-foreground">
               {COLLECTED.map((item) => (
                 <li key={item} className="flex gap-1.5">
-                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" />
+                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-green-500" />
                   <span>{item}</span>
                 </li>
               ))}

@@ -92,7 +92,7 @@ export function ChatInput() {
       <div
         className={cn(
           "group relative flex flex-col rounded-2xl border border-border bg-muted/40 px-3 pt-2.5 pb-2 transition-colors",
-          "focus-within:border-primary/60 focus-within:bg-background focus-within:shadow-sm",
+          "focus-within:border-brand/60 focus-within:bg-background focus-within:shadow-sm",
         )}
       >
         <textarea
@@ -134,7 +134,7 @@ export function ChatInput() {
                 aria-label={recordingActive ? "Send voice question" : "Ask by voice"}
                 title={recordingActive ? "Send" : "Ask Billy by voice"}
                 className={cn(
-                  "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
+                  "inline-flex h-7 w-7 items-center justify-center rounded-md transition-all",
                   recordingActive
                     ? "bg-destructive text-destructive-foreground hover:opacity-80"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -155,7 +155,7 @@ export function ChatInput() {
                 type="button"
                 onClick={cancel}
                 aria-label="Stop"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-80"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
               </button>
@@ -166,7 +166,7 @@ export function ChatInput() {
                 disabled={!canSend}
                 aria-label="Send"
                 className={cn(
-                  "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
+                  "inline-flex h-7 w-7 items-center justify-center rounded-md transition-all",
                   canSend
                     ? "bg-primary text-primary-foreground hover:scale-105"
                     : "bg-muted text-muted-foreground/50 cursor-not-allowed",

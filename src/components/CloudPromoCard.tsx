@@ -4,7 +4,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate } from "react-router-dom";
 
-import TiltedCard from "@/components/ui/TiltedCard";
+import { PixelChevron } from "@/components/brand/Pixel";
 
 import {
   CLOUD_BILLING_URL,
@@ -46,35 +46,31 @@ export function CloudPromoCard() {
   // create one. Once signed in, the money lives on the dashboard.
   const onClick = user ? () => void openUrl(CLOUD_BILLING_URL) : () => navigate("/account");
 
-  // The sidebar is narrow, so the tilt stays small: a nudge of depth under the
-  // cursor, not the full showcase swing, and the figure floats a little above
-  // the card face.
+  // Landing pricing card: warm bands on top, the figure set in Inter Tight,
+  // a Space Mono caption and the light call to action.
   return (
-    <TiltedCard scaleOnHover={1.03} rotateAmplitude={10}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={promo.aria}
-        className="group w-full rounded-lg border border-border bg-card p-3 text-left transition-[border-color,box-shadow] [transform-style:preserve-3d] hover:border-foreground/20 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      >
-        <span className="flex flex-wrap items-baseline gap-x-1.5 [transform-style:preserve-3d] [transform:translateZ(20px)]">
-          {promo.count ? (
-            <span className="text-[28px] font-semibold leading-none tracking-tight tabular-nums text-foreground">
-              {promo.count}
-            </span>
-          ) : null}
-          <span className="text-xs text-muted-foreground">{promo.label}</span>
-        </span>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={promo.aria}
+      className="warm-bands group w-full overflow-hidden rounded-lg border border-border bg-surface p-3 pt-4 text-left transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      <span className="flex flex-wrap items-baseline gap-x-2">
+        {promo.count ? (
+          <span className="font-display text-[32px] font-medium leading-none tracking-[-0.04em] tabular-nums text-foreground">
+            {promo.count}
+          </span>
+        ) : null}
+        <span className="font-mono text-[10px] uppercase text-muted-foreground">{promo.label}</span>
+      </span>
 
-        <span className="mt-1.5 block text-[11px] leading-snug text-muted-foreground">
-          {promo.sub}
-        </span>
+      <span className="mt-2 block text-[11px] leading-snug text-muted-foreground">{promo.sub}</span>
 
-        <span className="mt-3 block rounded-md bg-foreground px-2.5 py-1.5 text-center text-[11px] font-medium text-background transition-opacity group-hover:opacity-85">
-          {promo.cta}
-        </span>
-      </button>
-    </TiltedCard>
+      <span className="mt-3 flex h-8 items-center justify-center gap-2 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90 dark:group-hover:bg-white">
+        {promo.cta}
+        <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />
+      </span>
+    </button>
   );
 }
 

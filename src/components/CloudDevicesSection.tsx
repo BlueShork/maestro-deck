@@ -99,7 +99,7 @@ export function CloudDevicesSection() {
       <button
         type="button"
         onClick={() => setView(null)}
-        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
       >
         <ChevronLeft className="h-3.5 w-3.5" />
         {platform.label}

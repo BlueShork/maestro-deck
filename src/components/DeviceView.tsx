@@ -17,7 +17,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 
-import { DottedGrid } from "@/components/effects/DottedGrid";
+import { PixelMosaic } from "@/components/brand/Pixel";
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { Logo } from "@/components/Logo";
 import LatticeLoader from "@/components/ui/LatticeLoader";
@@ -354,7 +354,7 @@ const InspectorOverlay = memo(function InspectorOverlay({
   if (!enabled || !bounds || scale <= 0) return null;
   return (
     <div
-      className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
+      className="pointer-events-none absolute border-2 border-brand bg-brand/15"
       style={{
         left: (canvasRect.width - displayW) / 2 + bounds.left * overlayScaleX,
         top: (canvasRect.height - displayH) / 2 + bounds.top * overlayScaleY,
@@ -895,12 +895,29 @@ function EmptyState({
   }
   if (!connected) {
     return (
-      <DottedGrid className="pointer-events-none aspect-[9/19.5] h-full w-auto rounded-2xl border border-border">
-        <Logo className="h-auto w-40 text-foreground" />
-        <div className="max-w-[16rem] text-xs text-muted-foreground">
-          Plug in an Android device with USB debugging enabled, then pick it in the sidebar.
+      <div className="pointer-events-none relative aspect-[9/19.5] h-full w-auto overflow-hidden rounded-lg border border-border">
+        {/* Landing block mosaic, in the current theme's quiet tones. */}
+        <PixelMosaic
+          cols={9}
+          rows={19}
+          palette="paper"
+          seed={3}
+          className="absolute inset-0 dark:hidden"
+        />
+        <PixelMosaic
+          cols={9}
+          rows={19}
+          palette="dark"
+          seed={3}
+          className="absolute inset-0 hidden dark:block"
+        />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <Logo className="w-44" />
+          <div className="max-w-[16rem] text-xs text-muted-foreground">
+            Plug in an Android device with USB debugging enabled, then pick it in the sidebar.
+          </div>
         </div>
-      </DottedGrid>
+      </div>
     );
   }
   if (lightweight) {

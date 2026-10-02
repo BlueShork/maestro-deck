@@ -43,7 +43,7 @@ export function BillySettings() {
           <div className="flex items-center justify-between">
             <span className="text-sm">Instructions</span>
             {isCustomized ? (
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+              <span className="bg-brand px-1.5 py-0.5 font-mono text-[10px] uppercase text-brand-foreground">
                 Customized
               </span>
             ) : (

@@ -23,7 +23,7 @@ function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: bool
     passed: {
       Icon: CheckCircle2,
       label: "Passed",
-      className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+      className: "bg-green-500/15 text-green-700 dark:text-green-300",
     },
     failed: {
       Icon: XCircle,
@@ -80,15 +80,15 @@ export function RunConsole() {
   }, [logs]);
 
   return (
-    <section className="flex h-full min-h-0 flex-col border-t border-border bg-muted/40">
+    <section className="flex h-full min-h-0 flex-col border-t border-border bg-background">
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
             Console
           </span>
           {running ? (
-            <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 dark:bg-emerald-400" />
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-brand">
+              <span className="h-1.5 w-1.5 animate-pulse bg-brand" />
               running
             </span>
           ) : exitCode !== null ? (
@@ -99,7 +99,7 @@ export function RunConsole() {
           <RubberSegment
             aria-label="Console view"
             size="sm"
-            radius={6}
+            radius={4}
             inset={2}
             items={CONSOLE_TABS.map(({ id, label, icon: Icon }) => ({
               value: id,
@@ -108,7 +108,7 @@ export function RunConsole() {
             }))}
             value={consoleMode}
             onChange={(id) => setConsoleMode(id as ConsoleMode)}
-            trackColor="hsl(var(--border))"
+            trackColor="hsl(var(--secondary))"
             thumbColor="hsl(var(--primary))"
             textColor="hsl(var(--muted-foreground))"
             activeTextColor="hsl(var(--primary-foreground))"
@@ -232,11 +232,11 @@ const stepMark: Record<StepRunState["status"], StatusMarkStatus> = {
 const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunState }) {
   const colorClass =
     step.status === "done"
-      ? "text-emerald-600 dark:text-emerald-400"
+      ? "text-green-600 dark:text-green-400"
       : step.status === "failed"
         ? "text-red-600 dark:text-red-400"
         : step.status === "running"
-          ? "text-blue-600 dark:text-blue-400"
+          ? "text-brand"
           : "text-muted-foreground";
   const label = humanLabel(step);
   const duration =
@@ -287,7 +287,7 @@ function SimpleSummary({
   }
   if (exitCode === 0 && failedAt === -1) {
     return (
-      <div className="mt-2 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+      <div className="mt-2 flex items-center gap-2 text-green-600 dark:text-green-400">
         <StatusMark status="done" size={14} doneColor="currentColor" />
         Test passed — {totalSteps} step{totalSteps === 1 ? "" : "s"} in{" "}
         {formatDuration(totalMs) || "<0.1s"}

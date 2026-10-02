@@ -98,7 +98,7 @@ function GlyphEl({ glyph }: { glyph: StatusGlyph }): ReactElement {
   if (glyph.kind === "running") {
     return (
       <span
-        className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current text-muted-foreground"
+        className="inline-block h-1.5 w-1.5 animate-pulse bg-current text-muted-foreground"
         aria-label="En cours"
       />
     );
@@ -115,7 +115,7 @@ function GlyphEl({ glyph }: { glyph: StatusGlyph }): ReactElement {
   }
   return (
     <span
-      className="text-emerald-600 motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200 dark:text-emerald-400"
+      className="text-green-600 motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200 dark:text-green-400"
       aria-label="Succès"
     >
       ✓
@@ -196,7 +196,7 @@ export function ToolCallCard({ use, result }: ToolCallCardProps): ReactElement {
       >
         <div className="overflow-hidden">
           <div className="border-t border-border px-3 py-2">
-            <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
+            <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.02em] text-muted-foreground/60">
               Input
             </div>
             <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px] text-foreground">
@@ -205,7 +205,7 @@ export function ToolCallCard({ use, result }: ToolCallCardProps): ReactElement {
 
             {result && (
               <>
-                <div className="mb-1 mt-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
+                <div className="mb-1 mt-2 font-mono text-[10px] uppercase tracking-[0.02em] text-muted-foreground/60">
                   Result
                 </div>
                 <ResultBody result={result} />

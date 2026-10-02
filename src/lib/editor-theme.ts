@@ -6,8 +6,9 @@ import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 
-// Soft-pro palette — pastels on a deep navy base for dark, warm paper tones for
-// light. Tuned for YAML where the visual signal is key/value pairs and indent.
+// Landing palette — warm keys and strings on the flat #101013 base for dark,
+// the same hues deepened for the warm-paper light theme. The running line is
+// marked like the landing's CI demo: orange left rule over an orange wash.
 
 interface Palette {
   bg: string;
@@ -32,47 +33,47 @@ interface Palette {
 }
 
 const DARK: Palette = {
-  bg: "hsl(222 15% 7%)", // == --background
-  surface: "hsl(222 14% 9%)", // == --card
-  fg: "hsl(220 14% 86%)",
-  fgMuted: "hsl(220 9% 58%)",
-  selection: "hsl(210 60% 55% / 0.25)",
-  selectionMatch: "hsl(210 60% 55% / 0.12)",
-  caret: "hsl(160 60% 55%)", // emerald caret — single accent
-  activeLine: "hsl(222 14% 10%)",
-  activeLineGutter: "hsl(222 14% 12%)",
-  border: "hsl(220 10% 18%)", // == --border
-  key: "hsl(280 40% 75%)", // desaturated vs previous 70%
-  string: "hsl(34 60% 70%)",
-  number: "hsl(150 45% 65%)",
-  bool: "hsl(15 60% 68%)",
-  punct: "hsl(220 10% 48%)",
-  comment: "hsl(220 10% 40%)",
-  activeRunBg: "hsl(210 80% 60% / 0.10)",
-  activeRunBorder: "hsl(210 80% 65%)",
-  completionSelected: "hsl(210 60% 55% / 0.20)",
+  bg: "hsl(240 9% 7%)", // == --background (#101013)
+  surface: "hsl(240 7% 11%)", // == --popover (#1a1a1e)
+  fg: "hsl(60 20% 90%)",
+  fgMuted: "hsl(240 5% 65%)", // #a1a1aa
+  selection: "hsl(17 96% 52% / 0.24)",
+  selectionMatch: "hsl(17 96% 52% / 0.12)",
+  caret: "hsl(17 96% 52%)", // #fa500f
+  activeLine: "hsl(240 6% 9.5%)",
+  activeLineGutter: "hsl(240 6% 11%)",
+  border: "hsl(240 5% 16%)", // == --border (#27272b)
+  key: "hsl(24 100% 64%)",
+  string: "hsl(42 100% 72%)",
+  number: "hsl(41 100% 50%)", // #ffaf00
+  bool: "hsl(6 100% 66%)",
+  punct: "hsl(240 4% 46%)",
+  comment: "hsl(240 5% 34%)",
+  activeRunBg: "hsl(17 96% 52% / 0.12)",
+  activeRunBorder: "hsl(17 96% 52%)",
+  completionSelected: "hsl(17 96% 52% / 0.20)",
 };
 
 const LIGHT: Palette = {
-  bg: "hsl(40 30% 99%)",
+  bg: "hsl(48 30% 97%)", // == --background
   surface: "hsl(0 0% 100%)",
-  fg: "hsl(222 30% 20%)",
-  fgMuted: "hsl(222 15% 45%)",
-  selection: "hsl(210 80% 55% / 0.18)",
-  selectionMatch: "hsl(210 80% 55% / 0.10)",
-  caret: "hsl(222 80% 45%)",
-  activeLine: "hsl(220 40% 96%)",
-  activeLineGutter: "hsl(220 35% 93%)",
-  border: "hsl(220 20% 88%)",
-  key: "hsl(282 55% 42%)",
-  string: "hsl(20 70% 42%)",
-  number: "hsl(160 55% 32%)",
-  bool: "hsl(15 75% 48%)",
-  punct: "hsl(222 15% 45%)",
-  comment: "hsl(222 12% 55%)",
-  activeRunBg: "hsl(210 100% 50% / 0.10)",
-  activeRunBorder: "hsl(210 90% 50%)",
-  completionSelected: "hsl(210 80% 55% / 0.15)",
+  fg: "hsl(240 9% 7%)",
+  fgMuted: "hsl(240 4% 40%)",
+  selection: "hsl(17 96% 52% / 0.18)",
+  selectionMatch: "hsl(17 96% 52% / 0.10)",
+  caret: "hsl(17 96% 48%)",
+  activeLine: "hsl(45 22% 93%)",
+  activeLineGutter: "hsl(45 22% 90%)",
+  border: "hsl(40 9% 85%)",
+  key: "hsl(17 90% 40%)",
+  string: "hsl(32 90% 30%)",
+  number: "hsl(1 80% 42%)",
+  bool: "hsl(345 75% 40%)",
+  punct: "hsl(240 4% 46%)",
+  comment: "hsl(240 4% 58%)",
+  activeRunBg: "hsl(17 96% 52% / 0.10)",
+  activeRunBorder: "hsl(17 96% 48%)",
+  completionSelected: "hsl(17 96% 52% / 0.14)",
 };
 
 function buildTheme(c: Palette, dark: boolean): Extension {
@@ -83,7 +84,7 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         color: c.fg,
         backgroundColor: c.bg,
         fontSize: "13px",
-        fontFamily: '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace',
+        fontFamily: '"Space Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace',
         fontVariantLigatures: "common-ligatures contextual",
       },
       ".cm-scroller": {
@@ -138,35 +139,35 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         boxShadow: `inset 2px 0 0 ${c.activeRunBorder}`,
       },
       ".cm-gutterElement.cm-step-line-done": {
-        backgroundColor: dark ? "rgba(52,211,153,0.16)" : "rgba(16,185,129,0.22)",
-        color: dark ? "rgb(110 231 183)" : "rgb(6 95 70)",
+        backgroundColor: dark ? "rgba(34,197,94,0.16)" : "rgba(34,197,94,0.22)",
+        color: dark ? "rgb(74 222 128)" : "rgb(21 101 52)",
         fontWeight: "600",
       },
       ".cm-gutterElement.cm-step-line-failed": {
-        backgroundColor: dark ? "rgba(248,113,113,0.16)" : "rgba(239,68,68,0.22)",
-        color: dark ? "rgb(252 165 165)" : "rgb(127 29 29)",
+        backgroundColor: dark ? "rgba(225,5,0,0.2)" : "rgba(225,5,0,0.16)",
+        color: dark ? "rgb(255 120 110)" : "rgb(160 10 0)",
         fontWeight: "600",
       },
       ".cm-gutterElement.cm-step-line-skipped": {
-        backgroundColor: dark ? "rgba(148,163,184,0.16)" : "rgba(100,116,139,0.14)",
-        color: dark ? "rgb(148 163 184)" : "rgb(71 85 105)",
+        backgroundColor: dark ? "rgba(161,161,170,0.14)" : "rgba(113,113,122,0.14)",
+        color: dark ? "rgb(161 161 170)" : "rgb(82 82 91)",
         fontWeight: "600",
       },
       ".cm-gutterElement.cm-step-line-running": {
-        backgroundColor: dark ? "rgba(96,165,250,0.16)" : "rgba(59,130,246,0.22)",
-        color: dark ? "rgb(147 197 253)" : "rgb(30 64 175)",
+        backgroundColor: dark ? "rgba(250,80,15,0.16)" : "rgba(250,80,15,0.2)",
+        color: dark ? "rgb(255 138 76)" : "rgb(170 50 5)",
         fontWeight: "600",
         animation: "cm-step-pulse 1.2s ease-in-out infinite",
       },
       "@keyframes cm-step-pulse": {
-        "0%, 100%": { backgroundColor: dark ? "rgba(96,165,250,0.12)" : "rgba(59,130,246,0.18)" },
-        "50%": { backgroundColor: dark ? "rgba(96,165,250,0.28)" : "rgba(59,130,246,0.36)" },
+        "0%, 100%": { backgroundColor: dark ? "rgba(250,80,15,0.12)" : "rgba(250,80,15,0.16)" },
+        "50%": { backgroundColor: dark ? "rgba(250,80,15,0.3)" : "rgba(250,80,15,0.34)" },
       },
       ".cm-tooltip": {
         backgroundColor: c.surface,
         color: c.fg,
         border: `1px solid ${c.border}`,
-        borderRadius: "8px",
+        borderRadius: "6px",
         boxShadow: dark ? "0 8px 24px -8px rgba(0,0,0,0.4)" : "0 8px 24px -8px rgba(0,0,0,0.15)",
       },
       ".cm-tooltip.cm-tooltip-autocomplete": {
@@ -220,9 +221,9 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         color: c.fg,
         backgroundColor: c.surface,
         border: `1px solid ${c.border}`,
-        borderRadius: "10px",
+        borderRadius: "6px",
         boxShadow: dark
-          ? "0 10px 30px -12px rgba(0,0,0,0.5), 0 0 0 1px hsl(220 25% 18%)"
+          ? "0 10px 30px -12px rgba(0,0,0,0.5), 0 0 0 1px hsl(240 5% 16%)"
           : "0 10px 30px -12px rgba(15,23,42,0.18)",
       },
       ".cm-panel.cm-search br": {
@@ -237,7 +238,7 @@ function buildTheme(c: Palette, dark: boolean): Extension {
           backgroundColor: c.bg,
           color: c.fg,
           border: `1px solid ${c.border}`,
-          borderRadius: "7px",
+          borderRadius: "4px",
           padding: "5px 10px",
           minWidth: "160px",
           fontFamily: "inherit",
@@ -279,13 +280,13 @@ function buildTheme(c: Palette, dark: boolean): Extension {
       ".cm-panel.cm-search button[name=next]": {
         backgroundColor: c.caret,
         borderColor: c.caret,
-        color: dark ? "hsl(224 35% 6%)" : "hsl(0 0% 100%)",
+        color: dark ? "hsl(240 9% 7%)" : "hsl(0 0% 100%)",
         fontWeight: "600",
       },
       ".cm-panel.cm-search button[name=next]:hover": {
         backgroundColor: c.caret,
         borderColor: c.caret,
-        color: dark ? "hsl(224 35% 6%)" : "hsl(0 0% 100%)",
+        color: dark ? "hsl(240 9% 7%)" : "hsl(0 0% 100%)",
         filter: "brightness(1.1)",
       },
       ".cm-panel.cm-search button[name=close]": {

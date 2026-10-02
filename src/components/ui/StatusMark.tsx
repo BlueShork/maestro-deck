@@ -55,7 +55,7 @@ const StatusMark: React.FC<StatusMarkProps> = ({
   label,
   color = "currentColor",
   doneColor = "#22c55e",
-  errorColor = "#ef4444",
+  errorColor = "#e10500",
   size = 20,
   strokeWidth = 2,
   dashes = 8,

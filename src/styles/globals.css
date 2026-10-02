@@ -3,56 +3,62 @@
 @tailwind utilities;
 
 @layer base {
+  /* Landing design (maestrodeck.cloud): flat dark cells split by hairlines,
+     warm orange accent, Inter / Inter Tight / Space Mono. The light theme is
+     the same system on warm paper. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --background: 48 30% 97%; /* #fbfaf5 */
+    --foreground: 240 9% 7%; /* #101013 */
+    --card: 48 30% 97%;
+    --card-foreground: 240 9% 7%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 47.4% 11.2%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 47.4% 11.2%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 72% 45%; /* was 0 100% 50% — pure red is harsh */
-    --destructive-foreground: 210 40% 98%;
-    --ring: 160 55% 38%; /* emerald focus ring, matches dark */
-    --radius: 0.5rem;
+    --popover-foreground: 240 9% 7%;
+    --surface: 45 22% 93%; /* aside cells, like the landing's --surface */
+    --muted: 45 18% 92%;
+    --muted-foreground: 240 4% 40%;
+    --border: 40 9% 85%;
+    --input: 40 9% 82%;
+    --primary: 240 9% 7%;
+    --primary-foreground: 60 46% 97%;
+    --secondary: 45 18% 91%;
+    --secondary-foreground: 240 9% 7%;
+    --accent: 45 18% 91%;
+    --accent-foreground: 240 9% 7%;
+    --destructive: 1 100% 44%; /* #e10500 */
+    --destructive-foreground: 0 0% 100%;
+    --ring: 17 96% 52%;
+    --brand: 17 96% 52%; /* #fa500f */
+    --brand-foreground: 0 0% 100%;
+    --success: 142 71% 36%;
+    --warning: 35 100% 42%;
+    --radius: 0.375rem;
   }
 
   .dark {
-    /* Surface ladder — elevation by lightening, never pure black. */
-    --background: 222 15% 7%; /* app base ≈ #0e1014 */
-    --card: 222 14% 9%; /* raised panels */
-    --card-foreground: 220 14% 90%;
-    --popover: 222 14% 11%; /* floating layers */
-    --popover-foreground: 220 14% 90%;
-    --muted: 222 12% 13%; /* inset/quiet areas */
-    --muted-foreground: 220 9% 64%; /* AA on background & card */
-    /* Text — ~90% white, never pure. */
-    --foreground: 220 14% 90%;
-    /* Hairlines between surfaces. */
-    --border: 220 10% 18%;
-    --input: 220 10% 20%;
-    /* Primary action = soft near-white; keeps buttons quiet, accent stays emerald. */
-    --primary: 216 18% 92%;
-    --primary-foreground: 222 15% 10%;
-    --secondary: 222 12% 14%;
-    --secondary-foreground: 220 14% 88%;
-    /* Hover/selected surface. */
-    --accent: 221 12% 16%;
-    --accent-foreground: 220 14% 92%;
-    /* Desaturated for dark — saturated red vibrates on dark ground. */
-    --destructive: 0 55% 51%;
-    --destructive-foreground: 0 0% 98%;
-    /* Focus ring = the brand emerald, clearly visible on all surfaces. */
-    --ring: 160 60% 45%;
+    --background: 240 9% 7%; /* #101013 */
+    --foreground: 60 46% 97%; /* #fafaf4 */
+    --card: 240 9% 7%;
+    --card-foreground: 60 46% 97%;
+    --popover: 240 7% 11%; /* #1a1a1e */
+    --popover-foreground: 60 46% 97%;
+    --surface: 240 7% 11%; /* #1a1a1e */
+    --muted: 240 6% 11%;
+    --muted-foreground: 240 5% 65%; /* #a1a1aa */
+    --border: 240 5% 16%; /* #27272b */
+    --input: 240 5% 20%;
+    --primary: 240 9% 95%; /* #f1f1f3, the landing's light button */
+    --primary-foreground: 240 9% 7%;
+    --secondary: 240 6% 12%; /* ghost button */
+    --secondary-foreground: 60 46% 97%;
+    --accent: 240 5% 14%; /* ghost hover */
+    --accent-foreground: 60 46% 97%;
+    --destructive: 1 100% 44%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 17 96% 52%;
+    --brand: 17 96% 52%;
+    --brand-foreground: 0 0% 100%;
+    --success: 142 71% 45%; /* #22c55e */
+    --warning: 41 100% 50%; /* #ffaf00 */
   }
 
   * {
@@ -73,7 +79,7 @@
     height: 100vh;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
@@ -113,5 +119,96 @@
   }
   50% {
     opacity: 0.25;
+  }
+}
+
+/* Hairline, square scrollbars: the landing has no rounded chrome. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@layer components {
+  /* Space Mono uppercase label, the landing's `.mono_label`. */
+  .mono-label {
+    font-family: theme("fontFamily.mono");
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Three warm bands across the top edge (landing cookie card, Pro plan). */
+  .warm-bands {
+    position: relative;
+  }
+  .warm-bands::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 0.375rem;
+    background: linear-gradient(to bottom, #ffaf00 0 33%, #fa500f 33% 66%, #e10500 66% 100%);
+    pointer-events: none;
+  }
+
+  /* Square pixel checkbox from the landing cookie settings. */
+  .pixel-check {
+    appearance: none;
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    border: 1px solid hsl(var(--muted-foreground) / 0.6);
+    background: transparent;
+    cursor: pointer;
+  }
+  .pixel-check:checked {
+    border-color: hsl(var(--brand));
+    background-color: hsl(var(--brand));
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath fill='%23ffffff' d='M1 4h1v1H1zM2 5h1v1H2zM3 6h1v1H3zM4 5h1v1H4zM5 4h1v1H5zM6 3h1v1H6zM7 2h1v1H7z'/%3E%3C/svg%3E");
+    background-size: 100%;
+  }
+  .pixel-check:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+/* Mosaic tiles that slowly swap colour (landing `.mosaic_flicker`). */
+.pixel-flicker {
+  animation-name: pixel-flicker;
+  animation-iteration-count: infinite;
+  animation-timing-function: steps(1, end);
+}
+@keyframes pixel-flicker {
+  0%,
+  100% {
+    fill: var(--a);
+  }
+  50% {
+    fill: var(--b);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pixel-flicker {
+    animation: none;
   }
 }

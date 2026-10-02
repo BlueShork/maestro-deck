@@ -96,7 +96,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>Apply changes to {filePath ?? "current file"}?</DialogTitle>
           <DialogDescription className="flex items-center gap-3 text-xs">
-            <span className="text-emerald-500">+{stats.added}</span>
+            <span className="text-green-500">+{stats.added}</span>
             <span className="text-destructive">−{stats.removed}</span>
             <span className="text-muted-foreground">
               The current YAML will be replaced with Billy's proposal.
@@ -111,7 +111,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
                 <tr
                   key={idx}
                   className={cn(
-                    line.op === "add" && "bg-emerald-500/10",
+                    line.op === "add" && "bg-green-500/10",
                     line.op === "del" && "bg-destructive/10",
                   )}
                 >
@@ -122,7 +122,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
                     {line.newNo ?? ""}
                   </td>
                   <td className="select-none border-r border-border/40 px-1 text-center align-top w-6">
-                    {line.op === "add" && <Plus className="inline h-3 w-3 text-emerald-500" />}
+                    {line.op === "add" && <Plus className="inline h-3 w-3 text-green-500" />}
                     {line.op === "del" && <Minus className="inline h-3 w-3 text-destructive" />}
                   </td>
                   <td className="whitespace-pre px-2 py-0.5 align-top">{line.text || " "}</td>

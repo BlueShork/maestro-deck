@@ -2,13 +2,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import {
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   FolderOpen,
   Globe,
   ImageIcon,
-  Layers,
   RefreshCw,
   Search,
   Trash2,
@@ -21,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 
 import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
 import { FlowScrollGrid } from "@/components/effects/FlowScrollGrid";
+import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { filterGroups, filterImages } from "@/lib/bankFilter";
 import { ipc } from "@/lib/ipc";
@@ -266,7 +265,7 @@ function Lightbox({
               prev();
             }}
             aria-label="Previous"
-            className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white/80 backdrop-blur transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="absolute left-3 z-10 rounded-md bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -299,7 +298,7 @@ function Lightbox({
               next();
             }}
             aria-label="Next"
-            className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white/80 backdrop-blur transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="absolute right-3 z-10 rounded-md bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
@@ -337,7 +336,7 @@ function EmptyState({
         {icon}
       </div>
       <div className="max-w-sm space-y-1.5">
-        <div className="text-base font-semibold">{title}</div>
+        <div className="font-display text-xl font-medium tracking-[-0.03em]">{title}</div>
         <div className="text-sm text-muted-foreground">{children}</div>
       </div>
     </div>
@@ -440,60 +439,47 @@ export function ImageBankPage() {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => navigate("/")}
-          aria-label="Back to workspace"
-          title="Back to workspace (Esc)"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-foreground ring-1 ring-border">
-          <Layers className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-tight">Image Bank</div>
-          <div className="truncate font-mono text-[11px] text-muted-foreground">
+      <PageHeader title="Image Bank">
+        <div className="flex min-w-0 flex-1 items-center gap-3 px-4">
+          <div className="min-w-0 flex-1 truncate font-mono text-[11px] uppercase text-muted-foreground">
             {folderPath
               ? `${groups.length} device${groups.length === 1 ? "" : "s"} · ${totalImages} baseline${totalImages === 1 ? "" : "s"}`
               : "no workspace"}
           </div>
+          {folderPath && groups.length > 0 && (
+            <div className="relative w-56">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search screenshots…"
+                aria-label="Search screenshots by name"
+                className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-7 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
+              />
+              {filtering && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear search"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => void refresh()}
+            disabled={loading || !folderPath}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
         </div>
-        {folderPath && groups.length > 0 && (
-          <div className="relative w-56">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search screenshots…"
-              aria-label="Search screenshots by name"
-              className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-7 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
-            />
-            {filtering && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        )}
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => void refresh()}
-          disabled={loading || !folderPath}
-          aria-label="Refresh"
-          title="Refresh"
-        >
-          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-        </Button>
-      </header>
+      </PageHeader>
 
       {!folderPath ? (
         <EmptyState icon={<FolderOpen className="h-7 w-7" />} title="No workspace open">
@@ -519,7 +505,7 @@ export function ImageBankPage() {
         <div className="flex min-h-0 flex-1">
           {/* Device sidebar */}
           <nav className="w-64 shrink-0 space-y-1 overflow-y-auto border-r border-border p-2.5">
-            <div className="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="px-2 pb-1.5 pt-1 text-[10px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
               Devices
             </div>
             {visibleGroups.map((g) => {
@@ -539,9 +525,7 @@ export function ImageBankPage() {
                     active ? "bg-accent" : "hover:bg-accent/50",
                   )}
                 >
-                  {active && (
-                    <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground/40" />
-                  )}
+                  {active && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand" />}
                   <span
                     className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50",
@@ -558,7 +542,7 @@ export function ImageBankPage() {
                   </span>
                   <span
                     className={cn(
-                      "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+                      "shrink-0 px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
                       active
                         ? "bg-foreground/10 text-foreground"
                         : "bg-muted text-muted-foreground",
@@ -581,7 +565,9 @@ export function ImageBankPage() {
                       <DeviceGlyph kind={activeMeta.kind} className="h-5 w-5" />
                     </span>
                     <div>
-                      <h1 className="text-lg font-semibold leading-tight">{activeMeta.name}</h1>
+                      <h1 className="font-display text-2xl font-medium leading-tight tracking-[-0.03em]">
+                        {activeMeta.name}
+                      </h1>
                       <div className="font-mono text-[11px] text-muted-foreground">
                         {activeMeta.resolution} ·{" "}
                         {filtering

@@ -5,12 +5,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import App from "./App";
-// Manrope, the MaestroDeck brand typeface — bundled locally (offline app).
-import "@fontsource/manrope/400.css";
-import "@fontsource/manrope/500.css";
-import "@fontsource/manrope/600.css";
-import "@fontsource/manrope/700.css";
-import "@fontsource/manrope/800.css";
+// Landing typefaces, bundled locally (offline app): Inter for text, Inter
+// Tight for display headings, Space Mono for uppercase labels and code.
+import "@fontsource-variable/inter";
+import "@fontsource/inter-tight/400.css";
+import "@fontsource/inter-tight/500.css";
+import "@fontsource/inter-tight/600.css";
+import "@fontsource/space-mono/400.css";
+import "@fontsource/space-mono/700.css";
 import "./styles/globals.css";
 
 // Native context menu = "Inspect Element" entrypoint in WKWebView. Block it

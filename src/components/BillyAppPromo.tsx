@@ -42,12 +42,12 @@ export function BillyAppPromo() {
       >
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto]">
           <div className="flex flex-col gap-4 p-6">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-white/50">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-white/50">
               <Sparkles className="h-3 w-3" />
               Billy for iPhone
             </span>
             <div>
-              <h2 className="text-2xl font-bold leading-tight tracking-tight">
+              <h2 className="font-display text-2xl font-medium leading-tight tracking-[-0.03em]">
                 Meet <span className="rounded-md bg-white px-1.5 text-[#0B0B0B]">Billy</span>, your
                 Maestro expert
               </h2>

@@ -133,7 +133,7 @@ export function WorkspaceTree() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
           Workspace
         </div>
         <div className="flex items-center gap-0.5">
@@ -195,7 +195,7 @@ export function WorkspaceTree() {
       {!folderPath ? (
         <EmptyState onOpenFolder={() => void pickWorkspaceFolder()} />
       ) : error ? (
-        <div className="m-3 rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive-foreground">
+        <div className="m-3 rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
           {error}
         </div>
       ) : tree && tree.kind === "dir" ? (
@@ -207,7 +207,7 @@ export function WorkspaceTree() {
             <span className="truncate">{tree.name || folderPath}</span>
             {hasConfig ? (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-sans text-[9px] font-medium uppercase tracking-wide text-primary"
+                className="inline-flex shrink-0 items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-[9px] font-mono font-normal uppercase tracking-[0.02em] text-brand"
                 title="config.yaml found — Maestro will follow its flows order"
               >
                 <FileText className="h-2.5 w-2.5" />
@@ -496,9 +496,7 @@ function TreeItem({
             )}
             onContextMenu={(e) => e.stopPropagation()}
           >
-            {isActive && (
-              <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground/40" />
-            )}
+            {isActive && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand" />}
             <button
               type="button"
               onClick={() => void openFlowFile(node.path)}
@@ -612,7 +610,7 @@ function NewItemInput({
         onKeyDown={onKeyDown}
         onBlur={() => (value.trim() ? commit(value) : cancel())}
         placeholder={placeholder}
-        className="my-0.5 w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary/70"
+        className="my-0.5 w-full rounded border border-brand/40 bg-background px-1.5 py-0.5 text-xs outline-none focus:border-brand/70"
       />
     </div>
   );

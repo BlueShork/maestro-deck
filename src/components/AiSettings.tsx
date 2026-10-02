@@ -260,7 +260,7 @@ export function AiSettings() {
           className={cn(
             "text-xs",
             status.kind === "ok"
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              ? "bg-green-500/10 text-green-600 dark:text-green-400"
               : "bg-destructive/10 text-destructive",
           )}
         >
@@ -272,9 +272,7 @@ export function AiSettings() {
 }
 
 function SavedTag() {
-  return (
-    <span className="ml-1 text-xs font-normal text-emerald-600 dark:text-emerald-400">saved</span>
-  );
+  return <span className="ml-1 text-xs font-normal text-green-600 dark:text-green-400">saved</span>;
 }
 
 /** Billy hosted by Maestro Deck: nothing to configure, only an account. */

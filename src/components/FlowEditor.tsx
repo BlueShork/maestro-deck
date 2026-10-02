@@ -383,7 +383,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
             {filePath ? filePath.split(/[\\/]/).pop() : "Untitled.yaml"}
           </span>
           {dirty ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_hsl(45_100%_60%/0.5)]" />
+            <span className="h-1.5 w-1.5 bg-amber-400 shadow-[0_0_8px_hsl(45_100%_60%/0.5)]" />
           ) : null}
         </div>
         <div className="flex items-center gap-1">

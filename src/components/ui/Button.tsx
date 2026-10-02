@@ -12,11 +12,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        // Landing buttons: light, ghost (5% white fill) and the orange accent.
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 dark:hover:bg-white",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border border-border bg-transparent hover:bg-accent hover:text-accent-foreground",
+        outline: "bg-secondary text-secondary-foreground hover:bg-accent",
         ghost: "hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-accent",
+        brand: "bg-brand text-brand-foreground hover:bg-brand/90",
       },
       size: {
         default: "h-8 px-3",

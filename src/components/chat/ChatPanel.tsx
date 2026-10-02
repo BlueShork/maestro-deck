@@ -18,8 +18,8 @@ export function ChatPanel() {
   return (
     <div className="flex h-full flex-col border-l border-border bg-background">
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
-        <Sparkles className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">AI assistant</span>
+        <Sparkles className="h-3.5 w-3.5 text-brand" />
+        <span className="mono-label">AI assistant</span>
         <div className="ml-2 flex-1">
           <ModelPicker />
         </div>

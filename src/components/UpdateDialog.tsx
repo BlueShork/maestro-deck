@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowDown } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { PixelChevron, PixelMosaic, PixelWordmark } from "@/components/brand/Pixel";
+import { Button } from "@/components/ui/Button";
 import { ScrollArea } from "@/components/ui/ScrollArea";
-import TearTicket from "@/components/ui/TearTicket";
 import { useUpdateStore } from "@/stores/updateStore";
-
-import "./UpdateDialog.css";
 
 // Hoisted out of the component so the element factories aren't recreated on
 // every render (and each isn't flagged as a nested component definition).
@@ -24,16 +22,16 @@ const NOTES_MARKDOWN_COMPONENTS: Components = {
   h3: ({ children }) => <h3 className="mb-1 mt-2.5 text-xs font-medium first:mt-0">{children}</h3>,
   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
   ul: ({ children }) => (
-    <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0 marker:text-white/40">{children}</ul>
+    <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0 marker:text-brand">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0 marker:text-white/40">{children}</ol>
+    <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0 marker:text-brand">{children}</ol>
   ),
   li: ({ children }) => <li className="pl-0.5">{children}</li>,
-  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+  strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
   code: ({ children }) => (
-    <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[0.85em] text-white">
+    <code className="bg-surface px-1 py-0.5 font-mono text-[0.85em] text-foreground">
       {children}
     </code>
   ),
@@ -42,17 +40,13 @@ const NOTES_MARKDOWN_COMPONENTS: Components = {
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className="font-medium text-white underline-offset-2 hover:underline"
+      className="font-medium text-foreground underline decoration-brand underline-offset-2 hover:text-brand"
     >
       {children}
     </a>
   ),
-  hr: () => <hr className="my-3 border-white/15" />,
+  hr: () => <hr className="my-3 border-border" />,
 };
-
-const TICKET_WIDTH = 380;
-const TICKET_HEIGHT = 580;
-const STUB_SIZE = 120;
 
 export function UpdateDialog() {
   const phase = useUpdateStore((s) => s.phase);
@@ -79,109 +73,97 @@ export function UpdateDialog() {
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="update-ticket-overlay fixed inset-0 z-[100] bg-black/45 backdrop-blur-xl" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[100] bg-black/70 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+        {/* Landing product panel: a warm block mosaic carrying the version,
+            then the notes and the light call to action. */}
         <DialogPrimitive.Content
           aria-describedby={undefined}
-          className="update-ticket-dialog fixed inset-0 z-[101] flex flex-col items-center justify-center gap-5 p-4 outline-none"
+          className="fixed left-1/2 top-1/2 z-[101] flex max-h-[min(640px,calc(100vh-2rem))] w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-background shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)] outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
           onPointerDownOutside={(e) => {
             if (busy) e.preventDefault();
           }}
         >
-          <TearTicket
-            className="update-ticket"
-            orientation="vertical"
-            width={TICKET_WIDTH}
-            height={TICKET_HEIGHT}
-            stubSize={STUB_SIZE}
-            radius={18}
-            holes={16}
-            roughness={0.8}
-            rotate={-2}
-            image="/logo-horizontal-white.svg"
-            imageAlt="Maestro Deck"
-            scrim={false}
-            imageRadius={12}
-            background="#161618"
-            borderColor="rgb(255 255 255 / 0.14)"
-            color="#fafafa"
-            torn={phase !== "available"}
-            onTear={() => void downloadAndInstall()}
-            ariaLabel="Tear off the stub to install the update"
-            stub={<TicketStub version={available?.version} />}
+          <PixelMosaic
+            cols={14}
+            rows={5}
+            palette={phase === "error" ? "red" : "orange"}
+            seed={7}
+            className="h-40 shrink-0 border-b border-border"
           >
-            <div className="update-ticket__body">
-              <DialogPrimitive.Title asChild>
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-white/45">
-                    {phase === "error" ? "Update failed" : "New version"}
-                  </p>
-                  <p className="mt-1 text-3xl font-bold tracking-tight">
-                    {available ? `v${available.version}` : "Update"}
-                  </p>
-                </div>
-              </DialogPrimitive.Title>
-
-              <div className="update-ticket__rule" />
-
-              {phase === "error" ? (
-                <p className="text-xs leading-relaxed text-red-300">{error}</p>
-              ) : busy ? (
-                <div className="flex flex-1 flex-col justify-center gap-3">
-                  <p className="text-sm text-white/80">
-                    {phase === "downloading"
-                      ? "Downloading the new version…"
-                      : "Installing — Maestro Deck will restart in a moment."}
-                  </p>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className="h-full bg-white transition-[width] duration-150"
-                      style={{ width: `${phase === "downloading" ? downloadPercent : 100}%` }}
-                    />
-                  </div>
-                  <p className="font-mono text-[11px] tabular-nums text-white/45">
-                    {phase === "downloading" ? `${downloadPercent.toFixed(0)}%` : "Restarting…"}
-                  </p>
-                </div>
-              ) : available?.notes ? (
-                <ScrollArea className="update-ticket__notes min-h-0 flex-1">
-                  <div className="pr-3 text-xs leading-relaxed text-white/85">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={NOTES_MARKDOWN_COMPONENTS}
-                    >
-                      {available.notes}
-                    </ReactMarkdown>
-                  </div>
-                </ScrollArea>
-              ) : (
-                <p className="text-sm text-white/70">
-                  A new version of Maestro Deck is ready to install.
-                </p>
-              )}
+            <div className="absolute bottom-0 left-0 flex items-center bg-background px-4 py-3">
+              <PixelWordmark className="w-36" />
             </div>
-          </TearTicket>
+          </PixelMosaic>
 
-          {phase === "available" || phase === "error" ? (
-            <DialogPrimitive.Close className="rounded-full px-4 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40">
-              {phase === "error" ? "Dismiss" : "Later"}
-            </DialogPrimitive.Close>
-          ) : null}
+          <div className="flex min-h-0 flex-1 flex-col gap-4 p-5">
+            <DialogPrimitive.Title asChild>
+              <div>
+                <p className="mono-label">{phase === "error" ? "Update failed" : "New version"}</p>
+                <p className="mt-1.5 font-display text-4xl font-medium leading-none tracking-[-0.045em]">
+                  {available ? `v${available.version}` : "Update"}
+                </p>
+              </div>
+            </DialogPrimitive.Title>
+
+            {phase === "error" ? (
+              <p className="text-xs leading-relaxed text-destructive">{error}</p>
+            ) : busy ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-foreground">
+                  {phase === "downloading"
+                    ? "Downloading the new version…"
+                    : "Installing — Maestro Deck will restart in a moment."}
+                </p>
+                {/* Landing CI bar: stepped orange fill, green once done. */}
+                <div className="h-1.5 bg-surface">
+                  <div
+                    className={
+                      phase === "downloading"
+                        ? "h-full bg-brand transition-[width] duration-150 [transition-timing-function:steps(4,end)]"
+                        : "h-full bg-success"
+                    }
+                    style={{ width: `${phase === "downloading" ? downloadPercent : 100}%` }}
+                  />
+                </div>
+                <p className="font-mono text-[11px] uppercase tabular-nums text-muted-foreground">
+                  {phase === "downloading" ? `${downloadPercent.toFixed(0)}%` : "Restarting…"}
+                </p>
+              </div>
+            ) : available?.notes ? (
+              <ScrollArea className="min-h-0 flex-1 border-t border-border pt-3">
+                <div className="max-h-64 pr-3 text-xs leading-relaxed text-muted-foreground">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={NOTES_MARKDOWN_COMPONENTS}>
+                    {available.notes}
+                  </ReactMarkdown>
+                </div>
+              </ScrollArea>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                A new version of Maestro Deck is ready to install.
+              </p>
+            )}
+
+            {phase === "available" || phase === "error" ? (
+              <div className="flex justify-end gap-2">
+                <DialogPrimitive.Close asChild>
+                  <Button variant="secondary" className="h-9 px-4">
+                    {phase === "error" ? "Dismiss" : "Later"}
+                  </Button>
+                </DialogPrimitive.Close>
+                {phase === "available" ? (
+                  <Button
+                    className="group h-9 gap-2.5 px-4"
+                    onClick={() => void downloadAndInstall()}
+                  >
+                    Install update
+                    <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
-  );
-}
-
-function TicketStub({ version }: { version?: string }) {
-  return (
-    <div className="update-ticket__stub">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <ArrowDown className="h-4 w-4" />
-        Tear to install
-      </div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-white/40">
-        Admit one{version ? ` · No. ${version}` : ""}
-      </p>
-    </div>
   );
 }

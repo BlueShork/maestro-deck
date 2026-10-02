@@ -42,7 +42,7 @@ export function RecordingMeter() {
       aria-label={`Billy is listening, ${time}`}
       className="flex min-w-0 flex-1 items-center gap-2"
     >
-      <span className="h-2 w-2 shrink-0 rounded-full bg-destructive motion-safe:animate-pulse" />
+      <span className="h-2 w-2 shrink-0 bg-destructive motion-safe:animate-pulse" />
       <div className="flex h-4 min-w-0 flex-1 items-center gap-[2px] overflow-hidden">
         {levels.map((level, i) => (
           <span

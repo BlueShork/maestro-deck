@@ -51,7 +51,7 @@ export function ToolchainSettings() {
                 label={
                   <span className="flex items-center gap-2">
                     {ok ? (
-                      <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                     ) : (
                       <X className="h-3.5 w-3.5 text-destructive" />
                     )}

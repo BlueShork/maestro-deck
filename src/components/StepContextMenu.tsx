@@ -84,7 +84,7 @@ export function StepContextMenu({ x, y, step, snippet, onRunFrom, onClose }: Ste
               }}
               className="gap-2 text-xs"
             >
-              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand" />
               Ask Billy about this step
             </DropdownMenuItem>
           ) : null}

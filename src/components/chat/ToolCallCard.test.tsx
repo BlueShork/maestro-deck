@@ -59,7 +59,7 @@ describe("ToolCallCard", () => {
       <ToolCallCard use={use("get_screen")} result={result("{}")} />,
     );
     expect(okHtml).toMatch(/✓/);
-    expect(okHtml).toMatch(/text-emerald-/);
+    expect(okHtml).toMatch(/text-green-/);
     expect(okHtml).not.toMatch(/animate-pulse/);
   });
 

@@ -27,7 +27,7 @@ const MANUAL_COMMANDS: Record<string, string> = {
 const BLOCKING = new Set(["maestro", "java"]);
 
 function StatusIcon({ status }: { status: EnvCheckResult["status"] }) {
-  if (status === "ok") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+  if (status === "ok") return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
   return <XCircle className="h-3.5 w-3.5 text-red-500" />;
 }
 
@@ -49,7 +49,7 @@ function CheckRow({
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-2 text-xs">
         {installing ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
         ) : (
           <StatusIcon status={check.status} />
         )}
@@ -173,7 +173,7 @@ export function SetupPopup() {
         type="button"
         data-setup-popup
         onClick={() => setCollapsed(false)}
-        className="fixed bottom-4 right-4 z-[70] flex items-center gap-2 rounded-full border border-amber-500/40 bg-card px-3 py-1.5 text-xs shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="fixed bottom-4 right-4 z-[70] flex items-center gap-2 rounded-md border border-amber-500/40 bg-popover px-3 py-1.5 text-xs shadow-[0_20px_40px_-16px_rgba(0,0,0,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="text-amber-500">⚠</span>
         Setup incomplete ({okCount}/{blockingChecks.length})
@@ -187,7 +187,7 @@ export function SetupPopup() {
       className="fixed bottom-4 right-4 z-[70] w-80 rounded-lg border border-border bg-card p-3 shadow-xl"
     >
       {showReady ? (
-        <div className="flex items-center gap-2 text-sm text-emerald-500">
+        <div className="flex items-center gap-2 text-sm text-green-500">
           <CheckCircle2 className="h-4 w-4" /> Environment ready
         </div>
       ) : (
@@ -210,7 +210,7 @@ export function SetupPopup() {
           </div>
           {warningChecks.length > 0 && (
             <>
-              <div className="mb-1.5 mt-2 border-t border-border pt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1.5 mt-2 border-t border-border pt-1.5 text-[10px] font-mono uppercase tracking-[0.02em] text-muted-foreground">
                 Platforms (optional)
               </div>
               <div className="flex flex-col gap-1.5">

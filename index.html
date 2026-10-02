@@ -29,19 +29,21 @@
       body {
         margin: 0;
         font-family:
-          "Manrope",
+          "Inter Variable",
+          Inter,
           ui-sans-serif,
           -apple-system,
           "Segoe UI",
           sans-serif;
       }
+      /* Mirrors the --background tokens in globals.css. */
       html {
-        background: hsl(40 30% 99%);
-        color: hsl(222 30% 20%);
+        background: #fbfaf5;
+        color: #101013;
       }
       html.dark {
-        background: hsl(224 71% 4%);
-        color: hsl(213 31% 91%);
+        background: #101013;
+        color: #fafaf4;
       }
       #splash {
         position: fixed;
@@ -50,93 +52,47 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: hsl(40 30% 99%);
+        background: #fbfaf5;
         opacity: 1;
         transition: opacity 200ms ease;
       }
       html.dark #splash {
-        background: hsl(224 71% 4%);
+        background: #101013;
       }
       #splash.fade-out {
         opacity: 0;
         pointer-events: none;
       }
-      #splash .reveal {
-        position: relative;
-        overflow: hidden;
-        color: hsl(222 30% 20%);
-      }
-      html.dark #splash .reveal {
-        color: #ffffff;
-      }
+      /* The pixel icon builds up band by band, top to bottom, in hard steps. */
       #splash svg {
-        width: 260px;
-        height: 65px;
+        width: 96px;
+        height: 96px;
         display: block;
+        clip-path: inset(0 0 100% 0);
+        animation: pixel-build 640ms steps(8, end) 80ms forwards;
       }
-      #splash .reveal::after {
-        content: "";
-        position: absolute;
-        inset: -10% -20%;
-        background: hsl(222 30% 20%);
-        transform: translateX(-120%);
-        animation: reveal-sweep 850ms cubic-bezier(0.4, 0, 0.2, 1) 120ms both;
-      }
-      html.dark #splash .reveal::after {
-        background: #ffffff;
-      }
-      @keyframes reveal-sweep {
-        0% {
-          transform: translateX(-120%);
-        }
-        45%,
-        55% {
-          transform: translateX(0%);
-        }
-        100% {
-          transform: translateX(120%);
+      @keyframes pixel-build {
+        to {
+          clip-path: inset(0 0 0 0);
         }
       }
       @media (prefers-reduced-motion: reduce) {
-        #splash .reveal::after {
+        #splash svg {
           animation: none;
-          display: none;
+          clip-path: none;
         }
       }
     </style>
   </head>
   <body class="bg-background text-foreground antialiased">
     <div id="splash">
-      <div class="reveal">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 1600 400"
-          role="img"
-          aria-label="Maestro Deck"
-          font-family="Inter, -apple-system, Helvetica, Arial, sans-serif"
-        >
-          <g transform="translate(40, 40) scale(0.3125)">
-            <path
-              fill-rule="evenodd"
-              clip-rule="evenodd"
-              fill="currentColor"
-              d="M256 64C150.02 64 64 150.02 64 256V768C64 873.98 150.02 960 256 960H768C873.98 960 960 873.98 960 768V256C960 150.02 873.98 64 768 64H256ZM320 256C284.654 256 256 284.654 256 320V704C256 739.346 284.654 768 320 768H704C739.346 768 768 739.346 768 704V320C768 284.654 739.346 256 704 256H320Z"
-            />
-            <rect x="336" y="336" width="352" height="352" rx="24" ry="24" fill="currentColor" />
-          </g>
-          <text
-            x="420"
-            y="200"
-            dominant-baseline="central"
-            font-size="180"
-            font-weight="700"
-            fill="currentColor"
-            letter-spacing="-4"
-          >
-            Maestro Deck
-          </text>
+        <svg viewBox="0 0 16 16" shape-rendering="crispEdges" role="img" aria-label="Maestro Deck">
+          <path fill="#FFD800" d="M2 0h1v1h-1zM3 0h1v1h-1zM4 0h1v1h-1zM5 0h1v1h-1zM6 0h1v1h-1zM7 0h1v1h-1zM8 0h1v1h-1zM9 0h1v1h-1zM10 0h1v1h-1zM11 0h1v1h-1zM12 0h1v1h-1zM13 0h1v1h-1zM1 1h1v1h-1zM2 1h1v1h-1zM3 1h1v1h-1zM4 1h1v1h-1zM5 1h1v1h-1zM6 1h1v1h-1zM7 1h1v1h-1zM8 1h1v1h-1zM9 1h1v1h-1zM10 1h1v1h-1zM11 1h1v1h-1zM12 1h1v1h-1zM13 1h1v1h-1zM14 1h1v1h-1zM0 2h1v1h-1zM1 2h1v1h-1zM2 2h1v1h-1zM3 2h1v1h-1zM4 2h1v1h-1zM5 2h1v1h-1zM6 2h1v1h-1zM7 2h1v1h-1zM8 2h1v1h-1zM9 2h1v1h-1zM10 2h1v1h-1zM11 2h1v1h-1zM12 2h1v1h-1zM13 2h1v1h-1zM14 2h1v1h-1zM15 2h1v1h-1zM0 3h1v1h-1zM1 3h1v1h-1zM2 3h1v1h-1zM13 3h1v1h-1zM14 3h1v1h-1zM15 3h1v1h-1z" />
+          <path fill="#FFAF00" d="M0 4h1v1h-1zM1 4h1v1h-1zM2 4h1v1h-1zM13 4h1v1h-1zM14 4h1v1h-1zM15 4h1v1h-1zM0 5h1v1h-1zM1 5h1v1h-1zM2 5h1v1h-1zM5 5h1v1h-1zM6 5h1v1h-1zM7 5h1v1h-1zM8 5h1v1h-1zM9 5h1v1h-1zM10 5h1v1h-1zM13 5h1v1h-1zM14 5h1v1h-1zM15 5h1v1h-1zM0 6h1v1h-1zM1 6h1v1h-1zM2 6h1v1h-1zM5 6h1v1h-1zM6 6h1v1h-1zM7 6h1v1h-1zM8 6h1v1h-1zM9 6h1v1h-1zM10 6h1v1h-1zM13 6h1v1h-1zM14 6h1v1h-1zM15 6h1v1h-1z" />
+          <path fill="#FF8205" d="M0 7h1v1h-1zM1 7h1v1h-1zM2 7h1v1h-1zM5 7h1v1h-1zM6 7h1v1h-1zM7 7h1v1h-1zM8 7h1v1h-1zM9 7h1v1h-1zM10 7h1v1h-1zM13 7h1v1h-1zM14 7h1v1h-1zM15 7h1v1h-1zM0 8h1v1h-1zM1 8h1v1h-1zM2 8h1v1h-1zM5 8h1v1h-1zM6 8h1v1h-1zM7 8h1v1h-1zM8 8h1v1h-1zM9 8h1v1h-1zM10 8h1v1h-1zM13 8h1v1h-1zM14 8h1v1h-1zM15 8h1v1h-1zM0 9h1v1h-1zM1 9h1v1h-1zM2 9h1v1h-1zM5 9h1v1h-1zM6 9h1v1h-1zM7 9h1v1h-1zM8 9h1v1h-1zM9 9h1v1h-1zM10 9h1v1h-1zM13 9h1v1h-1zM14 9h1v1h-1zM15 9h1v1h-1z" />
+          <path fill="#FA500F" d="M0 10h1v1h-1zM1 10h1v1h-1zM2 10h1v1h-1zM5 10h1v1h-1zM6 10h1v1h-1zM7 10h1v1h-1zM8 10h1v1h-1zM9 10h1v1h-1zM10 10h1v1h-1zM13 10h1v1h-1zM14 10h1v1h-1zM15 10h1v1h-1zM0 11h1v1h-1zM1 11h1v1h-1zM2 11h1v1h-1zM13 11h1v1h-1zM14 11h1v1h-1zM15 11h1v1h-1zM0 12h1v1h-1zM1 12h1v1h-1zM2 12h1v1h-1zM13 12h1v1h-1zM14 12h1v1h-1zM15 12h1v1h-1z" />
+          <path fill="#E10500" d="M0 13h1v1h-1zM1 13h1v1h-1zM2 13h1v1h-1zM3 13h1v1h-1zM4 13h1v1h-1zM5 13h1v1h-1zM6 13h1v1h-1zM7 13h1v1h-1zM8 13h1v1h-1zM9 13h1v1h-1zM10 13h1v1h-1zM11 13h1v1h-1zM12 13h1v1h-1zM13 13h1v1h-1zM14 13h1v1h-1zM15 13h1v1h-1zM1 14h1v1h-1zM2 14h1v1h-1zM3 14h1v1h-1zM4 14h1v1h-1zM5 14h1v1h-1zM6 14h1v1h-1zM7 14h1v1h-1zM8 14h1v1h-1zM9 14h1v1h-1zM10 14h1v1h-1zM11 14h1v1h-1zM12 14h1v1h-1zM13 14h1v1h-1zM14 14h1v1h-1zM2 15h1v1h-1zM3 15h1v1h-1zM4 15h1v1h-1zM5 15h1v1h-1zM6 15h1v1h-1zM7 15h1v1h-1zM8 15h1v1h-1zM9 15h1v1h-1zM10 15h1v1h-1zM11 15h1v1h-1zM12 15h1v1h-1zM13 15h1v1h-1z" />
         </svg>
-      </div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

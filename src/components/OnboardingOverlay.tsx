@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { LoginCard } from "@/components/LoginCard";
 import { Button } from "@/components/ui/Button";
 import { ipc } from "@/lib/ipc";
+import { PixelChevron } from "@/components/brand/Pixel";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
@@ -45,7 +46,7 @@ export function OnboardingOverlay() {
       className={cn(
         "fixed inset-0 z-50 flex",
         blocking
-          ? "items-center justify-center bg-background/70 backdrop-blur-sm"
+          ? "items-center justify-center bg-black/70"
           : // No backdrop and no hit area: the step is asking for something in
             // the app behind it, so every click has to reach through.
             "pointer-events-none items-end justify-center p-4",
@@ -53,8 +54,7 @@ export function OnboardingOverlay() {
     >
       <div
         className={cn(
-          "pointer-events-auto relative w-[min(560px,calc(100vw-48px))] rounded-xl border border-border bg-card p-5",
-          blocking ? "shadow-2xl" : "shadow-xl",
+          "warm-bands pointer-events-auto relative w-[min(560px,calc(100vw-48px))] overflow-hidden rounded-lg border border-border bg-background p-6 pt-7 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)]",
         )}
       >
         {/* Quitting is available at every step, as promised on the way in. */}
@@ -62,7 +62,7 @@ export function OnboardingOverlay() {
           type="button"
           aria-label="Leave the walkthrough"
           onClick={() => useOnboardingStore.getState().quit()}
-          className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          className="absolute right-3 top-4 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
           <X className="h-4 w-4" />
         </button>
@@ -80,7 +80,9 @@ export function OnboardingOverlay() {
 function Title({ children, sub }: { children: string; sub: string }) {
   return (
     <div className="mb-4 pr-6">
-      <h2 className="text-base font-semibold tracking-tight">{children}</h2>
+      <h2 className="font-display text-2xl font-medium leading-tight tracking-[-0.03em]">
+        {children}
+      </h2>
       <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{sub}</p>
     </div>
   );
@@ -95,14 +97,18 @@ function ChooseTarget() {
         Where should your first test run?
       </Title>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      {/* Landing tiles: cells sharing hairlines, lit on hover. */}
+      <div className="grid border-l border-t border-border sm:grid-cols-2">
         <button
           type="button"
           onClick={() => useOnboardingStore.getState().chooseTarget("device")}
-          className="rounded-lg border border-border p-3 text-left transition-colors hover:border-foreground/30 hover:bg-accent/40"
+          className="group flex flex-col border-b border-r border-border p-4 text-left transition-colors hover:bg-accent"
         >
-          <Smartphone className="mb-2 h-4 w-4 text-muted-foreground" />
-          <div className="text-xs font-semibold">On your phone</div>
+          <Smartphone className="mb-6 h-5 w-5 text-brand" />
+          <div className="flex items-center justify-between font-display text-lg font-medium tracking-[-0.02em]">
+            On your phone
+            <PixelChevron className="text-muted-foreground transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px] group-hover:text-foreground" />
+          </div>
           <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
             Plug it in with USB debugging on. You watch it happen in the mirror, and it costs
             nothing.
@@ -112,10 +118,13 @@ function ChooseTarget() {
         <button
           type="button"
           onClick={() => useOnboardingStore.getState().chooseTarget("cloud", { signedIn })}
-          className="rounded-lg border border-border p-3 text-left transition-colors hover:border-foreground/30 hover:bg-accent/40"
+          className="group flex flex-col border-b border-r border-border p-4 text-left transition-colors hover:bg-accent"
         >
-          <Cloud className="mb-2 h-4 w-4 text-muted-foreground" />
-          <div className="text-xs font-semibold">In the cloud</div>
+          <Cloud className="mb-6 h-5 w-5 text-brand" />
+          <div className="flex items-center justify-between font-display text-lg font-medium tracking-[-0.02em]">
+            In the cloud
+            <PixelChevron className="text-muted-foreground transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px] group-hover:text-foreground" />
+          </div>
           {/* Said here, not discovered later: a slow live view, and it is billed. */}
           <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
             No phone needed. You watch the emulator about once a second, it needs an account, and it
@@ -303,7 +312,7 @@ function RunStep() {
       <Title sub={subs[state]}>{titles[state]}</Title>
 
       {armError ? (
-        <p className="mb-2 text-[11px] text-destructive-foreground">
+        <p className="mb-2 text-[11px] text-destructive">
           The sample app could not be prepared for the cloud: {armError}
         </p>
       ) : null}

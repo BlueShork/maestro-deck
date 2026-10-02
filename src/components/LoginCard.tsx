@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Rocket } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -40,11 +39,10 @@ export function LoginCard() {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="warm-bands overflow-hidden rounded-lg border border-border bg-surface p-5 pt-6">
       <div className="mb-4">
         <div className="flex items-center gap-2">
-          <Rocket className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Sign in</span>
+          <span className="font-display text-2xl font-medium tracking-[-0.03em]">Sign in</span>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           {mode === "create" ? "Create your free Maestro Deck Cloud account." : "Welcome back."}
@@ -59,7 +57,7 @@ export function LoginCard() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-8 w-full rounded border border-border bg-background px-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-xs outline-none transition-colors focus-visible:border-brand focus-visible:ring-1 focus-visible:ring-brand"
             placeholder="you@example.com"
           />
         </Field>
@@ -71,7 +69,7 @@ export function LoginCard() {
             autoComplete={mode === "create" ? "new-password" : "current-password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="h-8 w-full rounded border border-border bg-background px-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-xs outline-none transition-colors focus-visible:border-brand focus-visible:ring-1 focus-visible:ring-brand"
             placeholder="At least 6 characters"
           />
         </Field>
@@ -82,7 +80,7 @@ export function LoginCard() {
           </p>
         ) : null}
 
-        <Button type="submit" size="sm" disabled={loading} className="w-full">
+        <Button type="submit" disabled={loading} className="h-9 w-full">
           {loading ? "Signing in…" : mode === "create" ? "Create account" : "Continue with email"}
         </Button>
         <button
@@ -104,7 +102,7 @@ export function LoginCard() {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="mono-label">{label}</span>
       {children}
     </label>
   );

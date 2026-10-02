@@ -60,7 +60,7 @@ function IgnoredBand({ edge, pct }: { edge: "top" | "bottom" | "right"; pct: num
     >
       {/* The scrollbar band is too thin for a legible label. */}
       {!vertical && (
-        <span className="rounded-full bg-black/55 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-white/85">
+        <span className="rounded-full bg-black/55 px-1.5 py-0.5 text-[8px] font-mono font-normal uppercase tracking-[0.02em] text-white/85">
           ignored
         </span>
       )}
@@ -122,7 +122,7 @@ function PanelLabel({
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex items-center gap-2">
-        <span className={cn("h-2 w-2 rounded-full", dot)} />
+        <span className={cn("h-2 w-2", dot)} />
         <span className="text-xs font-medium">{title}</span>
         <span className="text-[11px] text-muted-foreground">{hint}</span>
       </div>
@@ -197,7 +197,7 @@ export function ScreenshotReview() {
             <DialogTitle className="flex items-center gap-2 text-base">
               Visual regression
               {comp.flow && (
-                <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] font-normal text-emerald-600 dark:text-emerald-400">
+                <span className="rounded bg-green-500/10 px-1.5 py-0.5 font-mono text-[11px] font-normal text-green-600 dark:text-green-400">
                   {comp.flow}
                 </span>
               )}
@@ -237,7 +237,7 @@ export function ScreenshotReview() {
 
         <div className="grid flex-1 grid-cols-2 gap-4 overflow-auto p-5">
           <figure className="flex flex-col gap-2">
-            <PanelLabel dot="bg-emerald-500" title="Bank" hint="current source of truth" />
+            <PanelLabel dot="bg-green-500" title="Bank" hint="current source of truth" />
             <ImageFrame
               src={comp.bank_b64}
               alt="bank reference"

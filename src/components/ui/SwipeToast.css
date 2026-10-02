@@ -7,7 +7,7 @@
   --st-fuse: #f5a524;
   --st-fuse-h: 2px;
   --st-w: 356px;
-  --st-radius: 12px;
+  --st-radius: 6px;
   --st-slide: 400ms;
   --st-gap: 10px;
   --st-offset: 16px;
@@ -187,7 +187,7 @@
 .swipe-toast__action {
   height: 24px;
   padding: 0 8px;
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--st-ink);
   color: var(--st-bg);
   font-size: 12px;
@@ -200,7 +200,7 @@
   place-items: center;
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: inherit;
 }
@@ -282,4 +282,12 @@
     inset 0 0 0 1px color-mix(in srgb, var(--st-ink) 10%, transparent),
     0 1px 2px rgba(0, 0, 0, 0.05),
     0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Maestro Deck landing design: hairline border in the theme's line colour and
+   the landing's deep card shadow. */
+.swipe-toast__card {
+  box-shadow:
+    inset 0 0 0 1px hsl(var(--border)),
+    0 30px 60px -20px rgba(0, 0, 0, 0.55);
 }

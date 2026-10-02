@@ -1,12 +1,11 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { ArrowLeft } from "lucide-react";
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { PageHeader } from "@/components/PageHeader";
 import { resolveSection, SETTINGS_SECTIONS } from "@/components/settings/sections";
-import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 function groupSections() {
@@ -40,28 +39,13 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => navigate("/")}
-          aria-label="Back to workspace"
-          title="Back to workspace (Esc)"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm font-semibold">Settings</span>
-      </header>
+      <PageHeader title="Settings" />
 
       <div className="flex min-h-0 flex-1">
-        <nav className="w-56 shrink-0 overflow-y-auto border-r border-border p-3">
+        <nav className="w-56 shrink-0 overflow-y-auto border-r border-border py-3">
           {groups.map(({ group, sections }) => (
-            <div key={group ?? "ungrouped"} className="mb-4 flex flex-col gap-0.5">
-              {group ? (
-                <div className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-                  {group}
-                </div>
-              ) : null}
+            <div key={group ?? "ungrouped"} className="mb-4 flex flex-col">
+              {group ? <div className="mono-label px-4 pb-1.5 text-[10px]">{group}</div> : null}
               {sections.map((s) => {
                 const Icon = s.icon;
                 const current = active.id === s.id;
@@ -72,10 +56,12 @@ export function SettingsPage() {
                     onClick={() => navigate(`/settings/${s.id}`)}
                     aria-current={current ? "page" : undefined}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      // Landing nav cell, turned vertical: ghost fill and an
+                      // orange rule on the active entry.
+                      "flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                       current
-                        ? "bg-muted font-medium text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        ? "bg-accent font-medium text-foreground shadow-[inset_2px_0_0_hsl(var(--brand))]"
+                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" />

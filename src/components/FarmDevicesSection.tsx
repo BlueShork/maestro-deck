@@ -35,7 +35,7 @@ export function FarmDevicesSection() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="text-[11px] font-mono font-normal uppercase tracking-[0.02em] text-muted-foreground">
         Device Farm
       </div>
       {error ? <div className="text-[11px] text-muted-foreground">{error}</div> : null}
@@ -65,7 +65,7 @@ export function FarmDevicesSection() {
                   </span>
                 </span>
                 {active ? (
-                  <span className="text-[10px] text-primary">
+                  <span className="text-[10px] text-brand">
                     {session?.status === "connecting" ? "Connecting…" : "Connected"}
                   </span>
                 ) : STATE_LABEL[d.state] ? (

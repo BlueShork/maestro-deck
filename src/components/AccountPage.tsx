@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, Cloud, Gauge, LogOut, RefreshCw, ShoppingCart, Smartphone } from "lucide-react";
+import { Cloud, Gauge, LogOut, RefreshCw, ShoppingCart, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,6 +10,7 @@ import { BillyAppPromo } from "@/components/BillyAppPromo";
 import { Button } from "@/components/ui/Button";
 import { CLOUD_BILLING_URL, logout, tierLabel, type CloudBillingInfo } from "@/lib/cloudAuth";
 import { LoginCard } from "@/components/LoginCard";
+import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 
@@ -30,18 +31,7 @@ export function AccountPage() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => navigate("/")}
-          aria-label="Back to workspace"
-          title="Back to workspace (Esc)"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm font-semibold">Maestro Deck Cloud</span>
-      </header>
+      <PageHeader title="Maestro Deck Cloud" />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Decorative community banner, edge to edge. Its height is capped so
@@ -83,12 +73,12 @@ function ProfileView({ email }: { email: string | null }) {
         <div className="flex min-w-0 items-end gap-4">
           <div
             aria-hidden
-            className="flex h-24 w-24 shrink-0 select-none items-center justify-center rounded-full bg-foreground text-4xl font-bold text-background shadow-lg ring-4 ring-background"
+            className="flex h-24 w-24 shrink-0 select-none items-center justify-center rounded-lg bg-brand font-display text-4xl font-medium text-brand-foreground"
           >
             {(email?.trim()[0] ?? "?").toUpperCase()}
           </div>
           <div className="flex min-w-0 flex-col pb-1.5">
-            <span className="truncate text-lg font-semibold leading-tight">
+            <span className="truncate font-display text-2xl font-medium leading-tight tracking-[-0.03em]">
               {email ?? "unknown"}
             </span>
             <span className="text-xs text-muted-foreground">Signed in to Maestro Deck Cloud</span>
@@ -137,7 +127,7 @@ function BillingCard({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-5 py-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">Plan</span>
-          <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold text-primary">
+          <span className="bg-brand px-2 py-0.5 font-mono text-[10px] uppercase text-brand-foreground">
             {loading ? "…" : billing ? tierLabel(billing.tier) : "—"}
           </span>
           {billing?.currentPack && billing.expiresAt ? (
@@ -237,15 +227,17 @@ function PitchView() {
     <div className="grid grid-cols-1 gap-10 md:grid-cols-2 md:items-start">
       <div className="space-y-6">
         <div>
-          <h1 className="text-xl font-semibold">Maestro Deck Cloud</h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
+          <h1 className="font-display text-[40px] font-medium leading-none tracking-[-0.045em]">
+            Maestro Deck Cloud
+          </h1>
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
             Maestro Deck runs fully offline without an account — signing in is entirely optional.
             Connect one to run flows in the cloud and keep your runs and credits right here in the
             app.
           </p>
         </div>
 
-        <ul className="space-y-4">
+        <ul className="border border-border">
           <Benefit
             icon={Cloud}
             title="Run flows in the cloud"
@@ -284,10 +276,8 @@ function Benefit({
   description: string;
 }) {
   return (
-    <li className="flex gap-3">
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground ring-1 ring-border">
-        <Icon className="h-4 w-4" />
-      </div>
+    <li className="flex gap-3 px-4 py-3 [&+&]:border-t [&+&]:border-border">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
       <div className="min-w-0">
         <span className="text-sm font-medium">{title}</span>
         <p className="text-xs text-muted-foreground">{description}</p>

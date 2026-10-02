@@ -23,7 +23,7 @@ export function CloudInviteDialog() {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
       <DialogContent className="max-w-sm">
-        <span className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30 dark:text-emerald-400">
+        <span className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/15 text-green-600 ring-1 ring-green-500/30 dark:text-green-400">
           <Gift className="h-5 w-5" />
         </span>
 

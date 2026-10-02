@@ -21,7 +21,7 @@ const looks: Record<ToastVariant, VariantLook> = {
   default: {
     background: "hsl(var(--popover))",
     color: "hsl(var(--popover-foreground))",
-    fuseColor: "hsl(var(--muted-foreground))",
+    fuseColor: "hsl(var(--brand))",
     width: 356,
     duration: 4500,
     compact: false,
@@ -29,7 +29,7 @@ const looks: Record<ToastVariant, VariantLook> = {
   success: {
     background: "hsl(var(--popover))",
     color: "hsl(var(--popover-foreground))",
-    fuseColor: "#34d399",
+    fuseColor: "hsl(var(--success))",
     width: 300,
     duration: 1800,
     compact: true,
@@ -58,7 +58,7 @@ function iconFor(t: Toast): ReactNode {
   if (t.persistent) return <LoaderCircle className="animate-spin" />;
   switch (t.variant) {
     case "success":
-      return <CircleCheck className="text-emerald-400" />;
+      return <CircleCheck className="text-success" />;
     case "error":
       return <CircleAlert className="text-destructive" />;
     case "default":
