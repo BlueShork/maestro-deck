@@ -28,7 +28,7 @@ tauri-plugin-opener = "2.0"
 tauri-plugin-process = "2.0"
 # Native OS keyring (macOS Keychain, Windows Credential Manager, Linux
 # Secret Service). Used to store BYOK API credentials.
-keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+keyring = { version = "4", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
 # JWT signing for Vertex Oauth2.
 # `rust_crypto` is REQUIRED: since v10 the default features ship NO crypto
