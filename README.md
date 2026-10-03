@@ -1,5 +1,12 @@
 <p align="center">
-  <img src="docs/images/banner.png" alt="Maestro Deck: the visual IDE for Maestro tests. Inspect, build and run flows locally from one desktop window." width="900">
+  <img src="docs/images/icon.png" alt="Maestro Deck" width="96">
+</p>
+
+<h1 align="center">Maestro Deck</h1>
+
+<p align="center">
+  <b>The visual IDE for Maestro tests.</b><br>
+  Inspect, build and run flows locally from one desktop window.
 </p>
 
 <p align="center">
@@ -19,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot-app.png" alt="Maestro Deck: device mirror, inspector, YAML editor and run console in one window" width="900">
+  <img src="docs/images/app-inspector.webp" alt="Maestro Deck: workspace, device mirror with the inspector menu, YAML editor and run console in one window" width="900">
 </p>
 
 ---
@@ -42,7 +49,12 @@
 - **Live device mirror.** Low-latency scrcpy stream for Android, ScreenCaptureKit for iOS simulators, CDP screencast for the web.
 - **Drive the device from the preview:** tap, swipe, type, Home and Back.
 - **Inspector** with element overlay and **smart selectors** (`id` → `text` → `content-desc` → point), portable between Android and iOS.
-- **Devices panel** that picks up plugged-in phones and booted simulators on its own, and boots a simulator in one click.
+- **One device picker** for everything: phones plugged into this machine, simulators, the web browser, device-farm phones and cloud devices, filterable by source and type. Plugged-in phones and booted simulators show up on their own, and a simulator boots in one click.
+
+<p align="center">
+  <img src="docs/images/app-devices.webp" alt="The device picker: local simulators, device-farm phones and cloud devices, filtered by source and type" width="800">
+</p>
+
 
 ### Build and run
 - **YAML editor** (CodeMirror) with Maestro syntax highlighting and autocomplete for every command, dark mode commands from Maestro 2.9 included.
@@ -51,19 +63,20 @@
 - **Run all** over a workspace, with a file tree, folders and a right-click menu.
 
 ### Visual regression
-- **Screenshot bank.** Store baselines from `takeScreenshot`, compare later runs against them and review side-by-side diffs.
+- **Image bank.** Store baselines from `takeScreenshot`, compare later runs against them and review side-by-side diffs. Tolerances live in **Settings → Visual Regression**.
 
 ### Billy, the AI assistant
 - A chat agent that **sees the screen and acts on it**. It can read the hierarchy, take screenshots, tap and type, launch apps, read and write flows, and run them to fix a failing test.
 - Works with your **Maestro Deck account** (no key needed, voice input included), or bring your own key: **Anthropic** or **Google Vertex AI**.
 
 ### Maestro Deck Cloud (optional)
-- Sign in to **run flows on hosted devices**: an Android emulator, an iOS simulator, or a real phone from the device farm.
+- Sign in to **run flows on hosted devices**: an Android emulator, an iOS simulator, or a real phone from the device farm. All of them sit in the same device picker as your local devices.
 - **Live preview** of the remote device while the flow runs, with clear results.
-- The label next to **Run** always tells you whether a flow runs locally or in the cloud.
+- The label next to **Run** always tells you whether a flow runs locally or in the cloud, and a session bar under the device header shows the farm phone you're connected to.
+- Your **Account** page shows your plan and the device-farm minutes left, live.
 
 ### Everything else
-- Guided first test with a sample app, auto-update with release notes, native macOS menu bar, dark and light themes, and a **Tool paths** setting for locked-down machines.
+- Guided first test with a sample app, auto-update with release notes, native macOS menu bar, dark and light themes, and custom tool paths in **Settings → Toolchain** for locked-down machines.
 
 ---
 
@@ -73,7 +86,7 @@
 | ----------------------- | --------------------------------------------------------------------------------------- |
 | Android (USB, emulator) | ✅ Stable, Android 8.0 (API 26)+ with USB debugging                                     |
 | iOS simulator           | ✅ Stable, macOS with Xcode                                                             |
-| Web (Chromium)          | 🧪 Beta, turn it on in **Settings → Device & Performance**                              |
+| Web (Chromium)          | 🧪 Beta, turn it on in **Settings → Devices & Performance**                              |
 | Physical iPhone         | ⚠️ Needs the patched Maestro 2.5.1 bridge, not yet compatible with Maestro 2.10.0       |
 
 | Desktop OS              | Build                                   |
@@ -87,8 +100,8 @@
 ## Quickstart
 
 1. **Download** the installer for your OS from [Releases](https://github.com/BlueShork/maestro-deck/releases/latest).
-2. **Launch it.** The first-run setup installs Java, Maestro and ADB. Progress shows next to **Run**. Already have them? The app finds the ones on your `PATH`, or you can point to them in **Settings → Tool paths**.
-3. **Connect a device:** plug in an Android phone with USB debugging on, start an emulator, or boot an iOS simulator. It appears in the Devices panel.
+2. **Launch it.** The first-run setup installs Java, Maestro and ADB. Progress shows next to **Run**. Already have them? The app finds the ones on your `PATH`, or you can point to them in **Settings → Toolchain**.
+3. **Connect a device:** plug in an Android phone with USB debugging on, start an emulator, or boot an iOS simulator. It appears in the device picker.
 4. **Follow the guided first test**, or open a folder of flows and press **Run**.
 
 ---
@@ -163,7 +176,7 @@ On first launch, Maestro Deck asks whether you want to share **anonymous usage s
 
 These statistics exist for one reason: Maestro Deck is built by an independent developer, and they are the only way to know how many people use it, on which platforms, and which features matter — so we can decide what to build next. They are not used to track, profile or advertise to anyone, and they are never sold or shared.
 
-- **Collected:** app version, operating system, a random install ID (not tied to your machine or account), and usage — screens opened, device platform connected, runs finished (passed / failed / stopped), inspector opened, Billy message sent, cloud run started, screenshot bank check.
+- **Collected:** app version, operating system, a random install ID (not tied to your machine or account), and usage — screens opened, device platform connected, runs finished (passed / failed / stopped), inspector opened, Billy message sent, cloud run started, image bank check.
 - **Never collected:** flow contents, file paths, selectors, app IDs, screenshots, device names or serials, prompts or anything you type, your name, email or Maestro Deck Cloud account.
 - **Where:** [PostHog](https://posthog.com) EU Cloud (servers in the European Union), the same analytics used on [maestrodeck.cloud](https://www.maestrodeck.cloud). No person profiles are created, and development builds never report.
 

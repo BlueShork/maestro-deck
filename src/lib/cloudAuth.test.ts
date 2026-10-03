@@ -17,7 +17,7 @@ vi.mock("firebase/auth", () => ({
   signOut: vi.fn(),
 }));
 
-const { fetchCloudBilling, getCloudAuthErrorMessage, getCloudIdToken, tierLabel } =
+const { fetchCloudBilling, getCloudAuthErrorMessage, getCloudIdToken, liveMinutes, tierLabel } =
   await import("./cloudAuth");
 
 const fetchMock = vi.fn();
@@ -122,5 +122,46 @@ describe("getCloudAuthErrorMessage", () => {
   it("has a generic message for a thrown non-Error", () => {
     expect(getCloudAuthErrorMessage("boom")).toBe("Sign-in failed");
     expect(getCloudAuthErrorMessage(null)).toBe("Sign-in failed");
+  });
+});
+
+describe("liveMinutes", () => {
+  const billing = (over: Record<string, unknown>) =>
+    ({
+      tier: "pro",
+      runsRemaining: 10,
+      runsToday: 0,
+      dailyCap: 50,
+      currentPack: { id: "pro", displayName: "Pro" },
+      expiresAt: null,
+      ...over,
+    }) as Parameters<typeof liveMinutes>[0];
+
+  it("reports what is left out of the pack's included minutes", () => {
+    expect(liveMinutes(billing({ sessionMinutesRemaining: 180 }))).toEqual({
+      remaining: 180,
+      included: 240,
+    });
+  });
+
+  it("is null when the plan has no live minutes", () => {
+    expect(
+      liveMinutes(billing({ tier: "free", currentPack: null, sessionMinutesRemaining: 0 })),
+    ).toBeNull();
+    // An older dashboard that doesn't send the field.
+    expect(liveMinutes(billing({ tier: "free", currentPack: null }))).toBeNull();
+  });
+
+  it("still shows minutes left over from a pack that has ended", () => {
+    expect(
+      liveMinutes(billing({ tier: "free", currentPack: null, sessionMinutesRemaining: 25 })),
+    ).toEqual({ remaining: 25, included: 25 });
+  });
+
+  it("never reports more included than remaining (top-ups stack)", () => {
+    expect(liveMinutes(billing({ sessionMinutesRemaining: 300 }))).toEqual({
+      remaining: 300,
+      included: 300,
+    });
   });
 });

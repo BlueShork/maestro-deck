@@ -1,12 +1,10 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Activity, Ban, CheckCircle2, Eraser, List, Terminal, XCircle } from "lucide-react";
+import { Activity, Eraser, List, Terminal } from "lucide-react";
 import { memo, useEffect, useRef } from "react";
 
-import { Button } from "@/components/ui/Button";
-import RubberSegment from "@/components/ui/RubberSegment";
-import StatusMark, { type StatusMarkStatus } from "@/components/ui/StatusMark";
+import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { RunStatus } from "@/components/RunStatus";
 import { MetricsBody } from "@/components/MetricsPanel";
 import { renderAnsi } from "@/lib/ansi";
@@ -16,38 +14,28 @@ import { useRunStore } from "@/stores/runStore";
 import type { StepRunState } from "@/stores/runStore";
 import { useSettingsStore, type ConsoleMode } from "@/stores/settingsStore";
 
-/** Plain-language outcome of the last run instead of a raw `exit N` code. */
+/** Plain-language outcome of the last run instead of a raw `exit N` code,
+ *  as a square Space Mono chip like the landing's status tags. */
 function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: boolean }) {
   const kind = stopped ? "stopped" : exitCode === 0 ? "passed" : "failed";
-  const { Icon, label, className } = {
-    passed: {
-      Icon: CheckCircle2,
-      label: "Passed",
-      className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-    },
-    failed: {
-      Icon: XCircle,
-      label: "Failed",
-      className: "bg-red-500/15 text-red-700 dark:text-red-300",
-    },
-    stopped: {
-      Icon: Ban,
-      label: "Stopped",
-      className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-    },
+  const { label, className } = {
+    passed: { label: "Passed", className: "bg-success/15 text-success" },
+    failed: { label: "Failed", className: "bg-destructive/15 text-destructive" },
+    stopped: { label: "Stopped", className: "bg-warning/15 text-warning" },
   }[kind];
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
-        className,
-      )}
+      className={cn("px-1.5 py-0.5 font-mono text-[10px] uppercase leading-none", className)}
       title={`Flow ${label.toLowerCase()} — exit code ${exitCode}`}
     >
-      <Icon className="h-3 w-3" />
       {label}
     </span>
   );
+}
+
+/** Landing CI-demo status pip (see `.step-pip` in globals.css). */
+function StepPip({ status }: { status: StepRunState["status"] }) {
+  return <span aria-hidden className={cn("step-pip", `step-pip-${status}`)} />;
 }
 
 const CONSOLE_TABS: Array<{ id: ConsoleMode; label: string; icon: typeof List }> = [
@@ -80,53 +68,46 @@ export function RunConsole() {
   }, [logs]);
 
   return (
-    <section className="flex h-full min-h-0 flex-col border-t border-border bg-muted/40">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Console
-          </span>
-          {running ? (
-            <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 dark:bg-emerald-400" />
+    <section className="flex h-full min-h-0 flex-col bg-background">
+      <PanelHeader
+        title="Console"
+        meta={
+          running ? (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-brand">
+              <span className="h-1.5 w-1.5 animate-pulse bg-brand" />
               running
             </span>
           ) : exitCode !== null ? (
             <RunStatusBadge exitCode={exitCode} stopped={stopRequested} />
-          ) : null}
+          ) : null
+        }
+      >
+        {/* View tabs are header cells, lit like the landing's active nav item. */}
+        <div role="group" aria-label="Console view" className="flex items-stretch">
+          {CONSOLE_TABS.map(({ id, label, icon: Icon }) => (
+            <PanelAction
+              key={id}
+              wide
+              active={consoleMode === id}
+              aria-pressed={consoleMode === id}
+              onClick={() => setConsoleMode(id)}
+            >
+              <Icon className="h-3 w-3" />
+              {label}
+            </PanelAction>
+          ))}
         </div>
-        <div className="flex items-center gap-1">
-          <RubberSegment
-            aria-label="Console view"
-            size="sm"
-            radius={6}
-            inset={2}
-            items={CONSOLE_TABS.map(({ id, label, icon: Icon }) => ({
-              value: id,
-              label,
-              icon: <Icon className="h-3 w-3" />,
-            }))}
-            value={consoleMode}
-            onChange={(id) => setConsoleMode(id as ConsoleMode)}
-            trackColor="hsl(var(--border))"
-            thumbColor="hsl(var(--primary))"
-            textColor="hsl(var(--muted-foreground))"
-            activeTextColor="hsl(var(--primary-foreground))"
-            className="mr-1 text-[11px]"
-          />
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={clearConsole}
-            // Disabled while running: clearing `steps` mid-run would wipe the
-            // live step list and incoming events can't repopulate it.
-            disabled={running || (logs.length === 0 && steps.length === 0)}
-          >
-            <Eraser className="h-3 w-3" />
-            Clear
-          </Button>
-        </div>
-      </div>
+        <PanelAction
+          wide
+          onClick={clearConsole}
+          // Disabled while running: clearing `steps` mid-run would wipe the
+          // live step list and incoming events can't repopulate it.
+          disabled={running || (logs.length === 0 && steps.length === 0)}
+        >
+          <Eraser className="h-3 w-3" />
+          Clear
+        </PanelAction>
+      </PanelHeader>
 
       <RunStatus />
 
@@ -202,7 +183,7 @@ const SimpleConsoleBody = memo(function SimpleConsoleBody({
   const failedAt = steps.findIndex((s) => s.status === "failed");
   const totalMs = steps.reduce((acc, s) => acc + (s.durationMs ?? 0), 0);
   return (
-    <div className="space-y-0.5">
+    <div className="-mx-2">
       {steps.map((s) => (
         <SimpleStepLine key={s.index} step={s} />
       ))}
@@ -219,24 +200,16 @@ const SimpleConsoleBody = memo(function SimpleConsoleBody({
   );
 });
 
-const stepMark: Record<StepRunState["status"], StatusMarkStatus> = {
-  pending: "pending",
-  running: "running",
-  done: "done",
-  failed: "failed",
-  skipped: "cancelled",
-};
-
 // Memoized: steps are updated immutably (unchanged steps keep their reference),
 // so only the step whose status/duration changed re-renders.
 const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunState }) {
   const colorClass =
     step.status === "done"
-      ? "text-emerald-600 dark:text-emerald-400"
+      ? "text-foreground"
       : step.status === "failed"
-        ? "text-red-600 dark:text-red-400"
+        ? "text-destructive"
         : step.status === "running"
-          ? "text-blue-600 dark:text-blue-400"
+          ? "text-foreground"
           : "text-muted-foreground";
   const label = humanLabel(step);
   const duration =
@@ -246,17 +219,18 @@ const SimpleStepLine = memo(function SimpleStepLine({ step }: { step: StepRunSta
         ? "skipped"
         : formatDuration(step.durationMs);
   return (
-    <div className={cn("flex items-center gap-2 whitespace-pre", colorClass)}>
-      <StatusMark
-        status={stepMark[step.status]}
-        size={14}
-        doneColor="currentColor"
-        errorColor="currentColor"
-      />
+    <div
+      className={cn(
+        "flex items-center gap-2.5 whitespace-pre border-l-2 border-transparent px-2 py-0.5",
+        step.status === "running" && "border-l-brand bg-brand/10",
+        colorClass,
+      )}
+    >
+      <StepPip status={step.status} />
       <span className="flex-1 truncate">{label}</span>
       <span className="tabular-nums text-muted-foreground">{duration}</span>
       {step.status === "failed" && step.error ? (
-        <span className="ml-2 truncate text-red-600/70 dark:text-red-400/70" title={step.error}>
+        <span className="ml-2 truncate text-destructive/80" title={step.error}>
           — {step.error}
         </span>
       ) : null}
@@ -277,27 +251,30 @@ function SimpleSummary({
   totalMs: number;
   failedAt: number;
 }) {
+  // Landing CI result banner: a tinted hairline box with the verdict in bold.
+  const banner = "mt-3 flex items-center gap-2.5 border px-3 py-2";
   if (stopRequested) {
     return (
-      <div className="mt-2 flex items-center gap-2 text-muted-foreground">
-        <StatusMark status="cancelled" size={14} />
-        Test stopped
+      <div className={cn(banner, "border-warning/35 bg-warning/10 text-muted-foreground")}>
+        <StepPip status="skipped" />
+        <b className="font-semibold text-warning">Test stopped</b>
       </div>
     );
   }
   if (exitCode === 0 && failedAt === -1) {
     return (
-      <div className="mt-2 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-        <StatusMark status="done" size={14} doneColor="currentColor" />
-        Test passed — {totalSteps} step{totalSteps === 1 ? "" : "s"} in{" "}
-        {formatDuration(totalMs) || "<0.1s"}
+      <div className={cn(banner, "border-success/35 bg-success/10 text-muted-foreground")}>
+        <StepPip status="done" />
+        <b className="font-semibold text-success">Test passed</b>
+        {totalSteps} step{totalSteps === 1 ? "" : "s"} in {formatDuration(totalMs) || "<0.1s"}
       </div>
     );
   }
   return (
-    <div className="mt-2 flex items-center gap-2 text-red-600 dark:text-red-400">
-      <StatusMark status="failed" size={14} errorColor="currentColor" />
-      Test failed{failedAt >= 0 ? ` at step ${failedAt + 1}` : ""}
+    <div className={cn(banner, "border-destructive/35 bg-destructive/10 text-muted-foreground")}>
+      <StepPip status="failed" />
+      <b className="font-semibold text-destructive">Test failed</b>
+      {failedAt >= 0 ? `at step ${failedAt + 1}` : null}
     </div>
   );
 }

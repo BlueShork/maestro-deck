@@ -142,10 +142,30 @@ pub fn run() {
         ])
         .setup(|app| {
             ipc::register_events(app)?;
-            // The static `maximized` window flag is unreliable (notably on macOS),
-            // so maximize explicitly once the window exists.
+            // The window is created hidden (`visible: false`): showing it at
+            // 1400×900 and maximizing a frame later read as two windows
+            // opening. Size it to the screen's work area while hidden, then
+            // let the splash page show it once its markup is ready
+            // (index.html), with a fallback here if the page never gets there.
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.maximize();
+                let monitor = window
+                    .current_monitor()
+                    .ok()
+                    .flatten()
+                    .or_else(|| window.primary_monitor().ok().flatten());
+                if let Some(monitor) = monitor {
+                    let area = monitor.work_area();
+                    let _ = window.set_position(area.position);
+                    let _ = window.set_size(area.size);
+                }
+                let fallback = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    if !fallback.is_visible().unwrap_or(true) {
+                        let _ = fallback.show();
+                        let _ = fallback.maximize();
+                    }
+                });
             }
             // macOS only: native menu bar (see app_menu.rs, including why Quit
             // is a custom item). Windows/Linux have no app menu and quit via

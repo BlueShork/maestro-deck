@@ -7,6 +7,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { AccountPage } from "@/components/AccountPage";
 import { CloudInviteDialog } from "@/components/CloudInviteDialog";
+import { DevicePicker } from "@/components/devices/DevicePicker";
 import { ImageBankPage } from "@/components/ImageBankPage";
 import { MainView } from "@/components/MainView";
 import { OnboardingOverlay } from "@/components/OnboardingOverlay";
@@ -398,6 +399,7 @@ export default function App() {
       <TourOverlay />
       <OnboardingOverlay />
       <SetupPopup />
+      <DevicePicker />
       <Toaster />
     </>
   );

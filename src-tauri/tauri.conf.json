@@ -19,8 +19,8 @@
         "minHeight": 700,
         "resizable": true,
         "fullscreen": false,
-        "maximized": true,
-        "center": true,
+        "visible": false,
+        "backgroundColor": "#101013",
         "decorations": true,
         "transparent": false
       }

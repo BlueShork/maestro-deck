@@ -52,7 +52,7 @@ export function MessageList() {
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <Sparkles className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm font-medium">Bring your own key</p>
+          <p className="font-display text-xl font-medium tracking-[-0.03em]">Bring your own key</p>
           <p className="max-w-xs text-xs text-muted-foreground">
             Configure an Anthropic or Vertex AI provider in Settings, then start chatting.
             Credentials stay on this machine, encrypted at rest.
@@ -65,8 +65,8 @@ export function MessageList() {
     }
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-        <Sparkles className="h-8 w-8 text-primary" />
-        <p className="text-base font-semibold">Billy Assistant</p>
+        <Sparkles className="h-8 w-8 text-brand" />
+        <p className="font-display text-2xl font-medium tracking-[-0.03em]">Billy Assistant</p>
         <p className="max-w-xs text-sm text-muted-foreground">Hello, how can I help you today?</p>
       </div>
     );

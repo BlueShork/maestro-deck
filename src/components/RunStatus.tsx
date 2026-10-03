@@ -28,7 +28,7 @@ const RUNNING_HINT: Record<CloudJobPlatform, string> = {
 };
 
 const VERDICT_COLOR: Record<Verdict, string> = {
-  passed: "text-emerald-600 dark:text-emerald-400",
+  passed: "text-green-600 dark:text-green-400",
   failed: "text-red-600 dark:text-red-400",
   stopped: "text-amber-600 dark:text-amber-400",
 };
@@ -124,7 +124,7 @@ export function RunStatus() {
     <div
       className={cn(
         "flex min-w-0 items-center gap-3 overflow-hidden border-b border-border px-3 py-2",
-        verdict ? VERDICT_COLOR[verdict] : "text-blue-600 dark:text-blue-400",
+        verdict ? VERDICT_COLOR[verdict] : "text-brand",
       )}
     >
       <LatticeLoader
@@ -133,7 +133,7 @@ export function RunStatus() {
         label={label}
         doneLabel="Passed in"
         errorLabel={verdict === "stopped" ? "Stopped after" : "Failed after"}
-        errorColor={verdict === "stopped" ? "#f59e0b" : "#ef4444"}
+        errorColor={verdict === "stopped" ? "#ffaf00" : "#e10500"}
         grid={3}
         pattern={executing ? "orbit" : "snake"}
         fontSize={11}

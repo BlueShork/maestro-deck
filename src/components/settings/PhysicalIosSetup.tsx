@@ -36,7 +36,7 @@ function Row({
       label={
         <span className="flex items-center gap-2">
           {ok ? (
-            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
           ) : (
             <X className="h-3.5 w-3.5 text-destructive" />
           )}
@@ -128,7 +128,7 @@ export function PhysicalIosSetup({
             </span>
           </div>
           {allReady && (
-            <div className="bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-400">
+            <div className="bg-green-500/10 text-xs text-green-700 dark:text-green-400">
               Ready — plug in your iPhone and pick it in the device list.
             </div>
           )}

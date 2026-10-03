@@ -44,8 +44,8 @@ function SparklineImpl({ values, width = 220, height = 28, className }: Props) {
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}
-          strokeLinejoin="round"
-          strokeLinecap="round"
+          strokeLinejoin="miter"
+          strokeLinecap="square"
         />
       )}
     </svg>

@@ -10,6 +10,7 @@ import {
   settingsInputClass,
 } from "@/components/settings/SettingsPrimitives";
 import { Button } from "@/components/ui/Button";
+import { Segmented } from "@/components/ui/Segmented";
 import { credentials } from "@/lib/chat/credentials";
 import { MAESTRODECK_MODEL } from "@/lib/chat/models";
 import { invalidateProvider } from "@/lib/chat/registry";
@@ -121,24 +122,12 @@ export function AiSettings() {
       description="Where Billy's answers come from. Use Billy through your Maestro Deck account, or bring your own key — keys are stored encrypted in a local vault and only ever sent to the provider you pick."
     >
       <div className="flex">
-        <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
-          {PROVIDER_TABS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setProvider(p.id)}
-              aria-pressed={provider === p.id}
-              className={cn(
-                "rounded px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                provider === p.id
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          aria-label="Provider"
+          items={PROVIDER_TABS.map((p) => ({ value: p.id, label: p.label }))}
+          value={provider}
+          onChange={setProvider}
+        />
       </div>
 
       {provider === "maestrodeck" ? (
@@ -260,7 +249,7 @@ export function AiSettings() {
           className={cn(
             "text-xs",
             status.kind === "ok"
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              ? "bg-green-500/10 text-green-600 dark:text-green-400"
               : "bg-destructive/10 text-destructive",
           )}
         >
@@ -272,9 +261,7 @@ export function AiSettings() {
 }
 
 function SavedTag() {
-  return (
-    <span className="ml-1 text-xs font-normal text-emerald-600 dark:text-emerald-400">saved</span>
-  );
+  return <span className="ml-1 text-xs font-normal text-green-600 dark:text-green-400">saved</span>;
 }
 
 /** Billy hosted by Maestro Deck: nothing to configure, only an account. */

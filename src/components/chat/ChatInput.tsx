@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { ArrowUp, Loader2, Mic, Square } from "lucide-react";
+import { Loader2, Mic, Square } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
+import { PixelChevron } from "@/components/brand/Pixel";
 import { cn } from "@/lib/utils";
 import { useBillyVoiceStore } from "@/stores/billyVoiceStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -88,11 +89,11 @@ export function ChatInput() {
   const canSend = value.trim().length > 0;
 
   return (
-    <div className="px-3 pb-3 pt-2">
+    <div className="border-t border-border p-3">
       <div
         className={cn(
-          "group relative flex flex-col rounded-2xl border border-border bg-muted/40 px-3 pt-2.5 pb-2 transition-colors",
-          "focus-within:border-primary/60 focus-within:bg-background focus-within:shadow-sm",
+          "group relative flex flex-col rounded-lg border border-border bg-surface px-3 pb-2 pt-2.5 transition-colors",
+          "focus-within:border-brand",
         )}
       >
         <textarea
@@ -115,14 +116,8 @@ export function ChatInput() {
             <span className="text-[10px] text-muted-foreground">Transcribing…</span>
           ) : (
             <span className="text-[10px] text-muted-foreground/70">
-              <kbd className="rounded border border-border bg-background px-1 font-mono text-[9px]">
-                Enter
-              </kbd>{" "}
-              to send,{" "}
-              <kbd className="rounded border border-border bg-background px-1 font-mono text-[9px]">
-                Shift + Enter
-              </kbd>{" "}
-              for newline
+              <kbd className="border border-border px-1 text-[9px]">Enter</kbd> to send,{" "}
+              <kbd className="border border-border px-1 text-[9px]">Shift + Enter</kbd> for newline
             </span>
           )}
           <div className="flex items-center gap-1.5">
@@ -134,7 +129,7 @@ export function ChatInput() {
                 aria-label={recordingActive ? "Send voice question" : "Ask by voice"}
                 title={recordingActive ? "Send" : "Ask Billy by voice"}
                 className={cn(
-                  "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
+                  "inline-flex h-7 w-7 items-center justify-center rounded-md transition-all",
                   recordingActive
                     ? "bg-destructive text-destructive-foreground hover:opacity-80"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -155,7 +150,7 @@ export function ChatInput() {
                 type="button"
                 onClick={cancel}
                 aria-label="Stop"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-80"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
               </button>
@@ -166,13 +161,13 @@ export function ChatInput() {
                 disabled={!canSend}
                 aria-label="Send"
                 className={cn(
-                  "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
+                  "inline-flex h-7 w-7 items-center justify-center rounded-md transition-all",
                   canSend
-                    ? "bg-primary text-primary-foreground hover:scale-105"
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "bg-muted text-muted-foreground/50 cursor-not-allowed",
                 )}
               >
-                <ArrowUp className="h-4 w-4" />
+                <PixelChevron direction="up" />
               </button>
             )}
           </div>

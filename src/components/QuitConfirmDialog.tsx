@@ -73,7 +73,7 @@ export function QuitConfirmDialog() {
         <label className="mt-1 flex cursor-pointer select-none items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
-            className="h-3.5 w-3.5 accent-primary"
+            className="pixel-check h-3.5 w-3.5"
             checked={dontAskAgain}
             onChange={(e) => setDontAskAgain(e.target.checked)}
           />
@@ -81,7 +81,7 @@ export function QuitConfirmDialog() {
         </label>
 
         <div className="mt-4 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+          <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           <Button variant="destructive" size="sm" onClick={onConfirm}>

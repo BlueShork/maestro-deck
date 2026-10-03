@@ -17,8 +17,10 @@ export function SettingsSection({
 }) {
   return (
     <section className="flex flex-col gap-7">
-      <header className="flex flex-col gap-1.5">
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+      <header className="flex flex-col gap-3">
+        <h2 className="font-display text-[34px] font-medium leading-none tracking-[-0.045em]">
+          {title}
+        </h2>
         {description ? (
           <p className="text-[13px] leading-relaxed text-muted-foreground">{description}</p>
         ) : null}
@@ -40,14 +42,12 @@ export function SettingsSubgroup({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-0.5 px-1">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h3>
+        <h3 className="mono-label">{title}</h3>
         {description ? (
           <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
         ) : null}
       </div>
-      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card/40 [&>*]:px-4 [&>*]:py-3">
+      <div className="divide-y divide-border overflow-hidden border border-border bg-background [&>*]:px-4 [&>*]:py-3">
         {children}
       </div>
     </div>
@@ -56,7 +56,7 @@ export function SettingsSubgroup({
 
 export function SettingsBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="ml-1.5 rounded border border-border bg-muted px-1 py-0.5 align-middle font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+    <span className="ml-1.5 bg-surface px-1.5 py-0.5 align-middle font-mono text-[9px] uppercase text-muted-foreground">
       {children}
     </span>
   );
@@ -111,7 +111,7 @@ export function SettingsField({
 }
 
 export const settingsInputClass =
-  "w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+  "w-full rounded-md border border-input bg-background px-2.5 py-1.5 font-mono text-xs outline-none transition-colors focus-visible:border-brand focus-visible:ring-1 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50";
 
 /** A boolean setting: label + description on the left, a Switch on the right. */
 export function ToggleRow({

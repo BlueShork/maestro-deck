@@ -1,26 +1,13 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import {
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  FolderOpen,
-  Globe,
-  ImageIcon,
-  Layers,
-  RefreshCw,
-  Search,
-  Trash2,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { FolderOpen, ImageIcon, RefreshCw, Search, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { AndroidLogo, AppleLogo } from "@/components/BrandIcons";
-import { FlowScrollGrid } from "@/components/effects/FlowScrollGrid";
+import { DeviceArt } from "@/components/devices/DeviceArt";
+import { PageHeader } from "@/components/PageHeader";
+import { PixelChevron } from "@/components/brand/Pixel";
 import { Button } from "@/components/ui/Button";
 import { filterGroups, filterImages } from "@/lib/bankFilter";
 import { ipc } from "@/lib/ipc";
@@ -47,12 +34,26 @@ function parseDeviceKey(key: string): { name: string; resolution: string; kind: 
   return { name, resolution, kind };
 }
 
-function DeviceGlyph({ kind, className }: { kind: DeviceKind; className?: string }) {
-  if (kind === "web") return <Globe className={className} />;
-  return kind === "ios" ? (
-    <AppleLogo className={className} />
-  ) : (
-    <AndroidLogo className={className} />
+/** The bank's device drawn like the device picker draws it. Bank keys don't
+ *  say whether a capture came from a simulator, so every handset is a phone. */
+function BankDeviceArt({
+  meta,
+  seedKey,
+  className,
+}: {
+  meta: { name: string; kind: DeviceKind };
+  seedKey: string;
+  className?: string;
+}) {
+  return (
+    <DeviceArt
+      platform={meta.kind}
+      kind={meta.kind === "web" ? "web" : "physical"}
+      source="local"
+      tablet={/\b(ipad|tablet|tab)\b/i.test(meta.name)}
+      seedKey={seedKey}
+      className={className}
+    />
   );
 }
 
@@ -109,7 +110,7 @@ function Thumb({
 
   return (
     <div
-      className="group animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both relative flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-lg"
+      className="group animate-in fade-in-0 fill-mode-both relative flex flex-col overflow-hidden border-b border-r border-border bg-background transition-colors duration-150 hover:bg-accent"
       style={{ animationDelay: `${Math.min(index, 14) * 35}ms` }}
     >
       {/* Screen mat */}
@@ -118,16 +119,16 @@ function Thumb({
         onClick={onOpen}
         aria-label={`Open ${image.name}`}
         style={{ aspectRatio: aspect }}
-        className="relative flex items-center justify-center overflow-hidden bg-[radial-gradient(120%_120%_at_50%_0%,hsl(var(--muted))_0%,hsl(var(--background))_100%)] p-2"
+        className="relative flex items-center justify-center overflow-hidden bg-surface p-3 transition-colors group-hover:bg-transparent"
       >
         {src ? (
           <img
             src={src}
             alt={image.name}
-            className="max-h-full max-w-full rounded-md object-contain shadow-md ring-1 ring-black/10 transition-transform duration-300 group-hover:scale-[1.02]"
+            className="max-h-full max-w-full rounded-sm object-contain shadow-[0_12px_24px_-12px_rgba(0,0,0,0.5)]"
           />
         ) : (
-          <div className="h-full w-full animate-pulse rounded-md bg-muted/60" />
+          <div className="h-full w-full animate-pulse bg-muted" />
         )}
       </button>
 
@@ -146,10 +147,10 @@ function Thumb({
           }
         }}
         className={cn(
-          "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium backdrop-blur transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[10px] uppercase transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           confirming
-            ? "bg-red-500/90 text-white opacity-100"
-            : "bg-background/70 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
+            ? "bg-destructive text-white opacity-100"
+            : "border border-border bg-background text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
         )}
       >
         {confirming ? "Delete?" : <Trash2 className="h-3.5 w-3.5" />}
@@ -157,7 +158,7 @@ function Thumb({
 
       {/* Caption */}
       <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-        <span className="truncate text-xs font-medium">{image.name}</span>
+        <span className="truncate font-mono text-[11px]">{image.name}</span>
         <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
           {image.width}×{image.height}
         </span>
@@ -220,11 +221,13 @@ function Lightbox({
   }, [prev, next]);
 
   return (
-    <div className="animate-in fade-in-0 fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-md duration-200">
+    <div className="animate-in fade-in-0 fixed inset-0 z-50 flex flex-col bg-[#101013] duration-200">
       {/* Top metadata bar */}
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 px-4 py-2.5 text-white">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{image.name}</div>
+          <div className="truncate font-display text-lg font-medium tracking-[-0.02em]">
+            {image.name}
+          </div>
           <div className="truncate font-mono text-[11px] text-white/50">
             {image.width}×{image.height} · {formatBytes(image.size_bytes)} ·{" "}
             {formatDate(image.modified_ms)}
@@ -266,9 +269,9 @@ function Lightbox({
               prev();
             }}
             aria-label="Previous"
-            className="absolute left-3 z-10 rounded-full bg-white/10 p-2 text-white/80 backdrop-blur transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="absolute left-3 z-10 rounded-md bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <PixelChevron direction="left" size={16} />
           </button>
         )}
 
@@ -299,9 +302,9 @@ function Lightbox({
               next();
             }}
             aria-label="Next"
-            className="absolute right-3 z-10 rounded-full bg-white/10 p-2 text-white/80 backdrop-blur transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="absolute right-3 z-10 rounded-md bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
-            <ChevronRight className="h-5 w-5" />
+            <PixelChevron size={16} />
           </button>
         )}
       </div>
@@ -333,11 +336,11 @@ function EmptyState({
 }) {
   return (
     <div className="animate-in fade-in-0 zoom-in-95 flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center duration-300">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/40 text-muted-foreground">
+      <div className="flex h-16 w-16 items-center justify-center bg-brand text-brand-foreground">
         {icon}
       </div>
       <div className="max-w-sm space-y-1.5">
-        <div className="text-base font-semibold">{title}</div>
+        <div className="font-display text-xl font-medium tracking-[-0.03em]">{title}</div>
         <div className="text-sm text-muted-foreground">{children}</div>
       </div>
     </div>
@@ -347,10 +350,10 @@ function EmptyState({
 function ThumbSkeleton({ index }: { index: number }) {
   return (
     <div
-      className="animate-in fade-in-0 fill-mode-both overflow-hidden rounded-xl border border-border bg-card"
+      className="animate-in fade-in-0 fill-mode-both overflow-hidden border-b border-r border-border bg-background"
       style={{ animationDelay: `${Math.min(index, 10) * 40}ms` }}
     >
-      <div className="aspect-[3/4] animate-pulse bg-muted/50" />
+      <div className="aspect-[3/4] animate-pulse bg-surface" />
       <div className="flex items-center justify-between border-t border-border px-3 py-2">
         <div className="h-2.5 w-16 animate-pulse rounded bg-muted/60" />
         <div className="h-2.5 w-10 animate-pulse rounded bg-muted/40" />
@@ -440,68 +443,55 @@ export function ImageBankPage() {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-3">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => navigate("/")}
-          aria-label="Back to workspace"
-          title="Back to workspace (Esc)"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-foreground ring-1 ring-border">
-          <Layers className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-tight">Image Bank</div>
-          <div className="truncate font-mono text-[11px] text-muted-foreground">
+      <PageHeader title="Image Bank">
+        <div className="flex min-w-0 flex-1 items-center px-4 font-mono text-[11px] uppercase text-muted-foreground">
+          <span className="truncate">
             {folderPath
               ? `${groups.length} device${groups.length === 1 ? "" : "s"} · ${totalImages} baseline${totalImages === 1 ? "" : "s"}`
               : "no workspace"}
-          </div>
+          </span>
         </div>
         {folderPath && groups.length > 0 && (
-          <div className="relative w-56">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <label className="flex w-72 items-center gap-2 border-l border-border px-4 text-muted-foreground focus-within:text-foreground">
+            <Search className="h-3.5 w-3.5 shrink-0" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search screenshots…"
               aria-label="Search screenshots by name"
-              className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-7 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
+              className="h-full w-full bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
             />
             {filtering && (
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Clear search"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="shrink-0 p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <X className="h-3 w-3" />
               </button>
             )}
-          </div>
+          </label>
         )}
-        <Button
-          size="icon"
-          variant="ghost"
+        <button
+          type="button"
           onClick={() => void refresh()}
           disabled={loading || !folderPath}
           aria-label="Refresh"
           title="Refresh"
+          className="flex w-12 items-center justify-center border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-        </Button>
-      </header>
+        </button>
+      </PageHeader>
 
       {!folderPath ? (
         <EmptyState icon={<FolderOpen className="h-7 w-7" />} title="No workspace open">
           Open a folder in the workspace to browse its screenshot baselines.
         </EmptyState>
       ) : loading && groups.length === 0 ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-4">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))]">
             {Array.from({ length: 8 }).map((_, i) => (
               <ThumbSkeleton key={i} index={i} />
             ))}
@@ -510,7 +500,7 @@ export function ImageBankPage() {
       ) : groups.length === 0 ? (
         <EmptyState icon={<ImageIcon className="h-7 w-7" />} title="No baselines yet">
           Run a flow with a{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+          <code className="bg-surface px-1.5 py-0.5 font-mono text-xs text-foreground">
             takeScreenshot
           </code>{" "}
           command to seed the bank. Captures are compared against these on every run.
@@ -518,10 +508,8 @@ export function ImageBankPage() {
       ) : (
         <div className="flex min-h-0 flex-1">
           {/* Device sidebar */}
-          <nav className="w-64 shrink-0 space-y-1 overflow-y-auto border-r border-border p-2.5">
-            <div className="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Devices
-            </div>
+          <nav className="w-64 shrink-0 overflow-y-auto border-r border-border py-2.5">
+            <div className="mono-label px-4 pb-1.5 pt-1 text-[10px]">Devices</div>
             {visibleGroups.map((g) => {
               const meta = parseDeviceKey(g.device_key);
               const active = selected === g.device_key;
@@ -535,21 +523,16 @@ export function ImageBankPage() {
                   }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "group relative flex w-full items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "group relative flex w-full items-center gap-2.5 overflow-hidden px-4 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                     active ? "bg-accent" : "hover:bg-accent/50",
                   )}
                 >
-                  {active && (
-                    <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground/40" />
-                  )}
-                  <span
-                    className={cn(
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50",
-                      active ? "text-foreground" : "text-muted-foreground",
-                    )}
-                  >
-                    <DeviceGlyph kind={meta.kind} className="h-4 w-4" />
-                  </span>
+                  {active && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand" />}
+                  <BankDeviceArt
+                    meta={meta}
+                    seedKey={g.device_key}
+                    className="h-9 w-auto shrink-0"
+                  />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-medium">{meta.name}</span>
                     <span className="block truncate font-mono text-[10px] text-muted-foreground">
@@ -558,10 +541,10 @@ export function ImageBankPage() {
                   </span>
                   <span
                     className={cn(
-                      "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+                      "shrink-0 px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
                       active
-                        ? "bg-foreground/10 text-foreground"
-                        : "bg-muted text-muted-foreground",
+                        ? "bg-brand text-brand-foreground"
+                        : "bg-surface text-muted-foreground",
                     )}
                   >
                     {filtering ? filterImages(g.images, query).length : g.images.length}
@@ -574,15 +557,22 @@ export function ImageBankPage() {
           {/* Gallery */}
           <div ref={galleryScrollRef} className="min-h-0 flex-1 overflow-y-auto">
             {activeGroup && activeMeta ? (
-              <div className="p-5">
-                <div className="mb-4 flex items-end justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-muted/50 text-foreground">
-                      <DeviceGlyph kind={activeMeta.kind} className="h-5 w-5" />
-                    </span>
-                    <div>
-                      <h1 className="text-lg font-semibold leading-tight">{activeMeta.name}</h1>
-                      <div className="font-mono text-[11px] text-muted-foreground">
+              <div>
+                {/* Landing page hero: the device, its name in Inter Tight, a
+                    Space Mono meta line, the destructive action on the right. */}
+                <div className="flex items-end justify-between gap-3 border-b border-border px-6 pb-5 pt-6">
+                  <div className="flex items-end gap-4">
+                    <BankDeviceArt
+                      meta={activeMeta}
+                      seedKey={activeGroup.device_key}
+                      className="h-20 w-auto shrink-0"
+                    />
+                    <div className="flex flex-col gap-2 pb-0.5">
+                      <span className="mono-label">Baselines</span>
+                      <h1 className="font-display text-[34px] font-medium leading-none tracking-[-0.045em]">
+                        {activeMeta.name}
+                      </h1>
+                      <div className="font-mono text-[11px] uppercase text-muted-foreground">
                         {activeMeta.resolution} ·{" "}
                         {filtering
                           ? `${visibleImages.length} / ${activeGroup.images.length} baseline`
@@ -593,7 +583,7 @@ export function ImageBankPage() {
                   </div>
                   <Button
                     size="sm"
-                    variant={confirmGroup ? "destructive" : "ghost"}
+                    variant={confirmGroup ? "destructive" : "secondary"}
                     onClick={() => {
                       if (confirmGroup) {
                         void ipc
@@ -605,7 +595,7 @@ export function ImageBankPage() {
                         window.setTimeout(() => setConfirmGroup(false), 3000);
                       }
                     }}
-                    className={cn(!confirmGroup && "text-muted-foreground")}
+                    className={cn("mb-0.5", !confirmGroup && "text-muted-foreground")}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     {confirmGroup ? "Confirm delete device?" : "Delete device"}
@@ -617,9 +607,12 @@ export function ImageBankPage() {
                     No screenshot matches "{query.trim()}" in this device group.
                   </EmptyState>
                 ) : (
-                  <FlowScrollGrid
-                    scrollContainerRef={galleryScrollRef}
-                    minItemWidth={groupAspect < 1 ? 150 : 300}
+                  // Landing tiles: cells sharing hairlines, no gaps.
+                  <div
+                    className="grid"
+                    style={{
+                      gridTemplateColumns: `repeat(auto-fill, minmax(${groupAspect < 1 ? 170 : 300}px, 1fr))`,
+                    }}
                   >
                     {visibleImages.map((img) => (
                       <Thumb
@@ -637,7 +630,7 @@ export function ImageBankPage() {
                         }
                       />
                     ))}
-                  </FlowScrollGrid>
+                  </div>
                 )}
               </div>
             ) : null}

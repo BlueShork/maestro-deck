@@ -98,7 +98,7 @@ function GlyphEl({ glyph }: { glyph: StatusGlyph }): ReactElement {
   if (glyph.kind === "running") {
     return (
       <span
-        className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current text-muted-foreground"
+        className="inline-block h-1.5 w-1.5 animate-pulse bg-current text-muted-foreground"
         aria-label="En cours"
       />
     );
@@ -115,7 +115,7 @@ function GlyphEl({ glyph }: { glyph: StatusGlyph }): ReactElement {
   }
   return (
     <span
-      className="text-emerald-600 motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200 dark:text-emerald-400"
+      className="text-green-600 motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200 dark:text-green-400"
       aria-label="Succès"
     >
       ✓
@@ -173,12 +173,12 @@ export function ToolCallCard({ use, result }: ToolCallCardProps): ReactElement {
   const inputJson = formatInput(use);
 
   return (
-    <div className="my-1 rounded-lg border border-border bg-muted/40 text-xs motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200">
+    <div className="my-1 rounded-md border border-border bg-surface text-xs motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 font-mono text-[11px] transition-colors duration-150 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <GlyphEl glyph={glyph} />
         <span className="text-muted-foreground">{label}</span>
@@ -196,18 +196,14 @@ export function ToolCallCard({ use, result }: ToolCallCardProps): ReactElement {
       >
         <div className="overflow-hidden">
           <div className="border-t border-border px-3 py-2">
-            <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
-              Input
-            </div>
+            <div className="mb-1 mono-label text-[10px]">Input</div>
             <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px] text-foreground">
               {inputJson}
             </pre>
 
             {result && (
               <>
-                <div className="mb-1 mt-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground/60">
-                  Result
-                </div>
+                <div className="mb-1 mt-2 mono-label text-[10px]">Result</div>
                 <ResultBody result={result} />
               </>
             )}

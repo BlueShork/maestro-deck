@@ -9,7 +9,7 @@ const ANSI_RE = new RegExp(`${ESC}\\[([\\d;]*)m`, "g");
 const FG: Record<number, string> = {
   30: "text-zinc-500",
   31: "text-red-400",
-  32: "text-emerald-400",
+  32: "text-green-400",
   33: "text-amber-300",
   34: "text-blue-400",
   35: "text-fuchsia-400",
@@ -17,7 +17,7 @@ const FG: Record<number, string> = {
   37: "text-zinc-200",
   90: "text-zinc-500",
   91: "text-red-300",
-  92: "text-emerald-300",
+  92: "text-green-300",
   93: "text-amber-200",
   94: "text-blue-300",
   95: "text-fuchsia-300",

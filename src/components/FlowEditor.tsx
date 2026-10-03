@@ -49,8 +49,8 @@ import { clearIndentOnBlankLine } from "@/lib/editorCommands";
 import { maestroCompletions } from "@/lib/editorCompletions";
 import { parseFlow, type Step } from "@/lib/flowAst";
 
+import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { StepContextMenu } from "@/components/StepContextMenu";
-import { Button } from "@/components/ui/Button";
 import { themeExtensions } from "@/lib/editor-theme";
 import { openFlowFile } from "@/lib/flow-io";
 import { resolveTheme } from "@/lib/theme";
@@ -377,30 +377,30 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-xs font-medium tracking-tight">
-            {filePath ? filePath.split(/[\\/]/).pop() : "Untitled.yaml"}
-          </span>
-          {dirty ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_hsl(45_100%_60%/0.5)]" />
-          ) : null}
-        </div>
-        <div className="flex items-center gap-1">
-          <Button size="xs" variant="ghost" onClick={() => void onOpen()}>
-            <FileUp className="h-3.5 w-3.5" />
-            Open
-          </Button>
-          <Button size="xs" variant="ghost" onClick={() => void onSave()}>
-            <Save className="h-3.5 w-3.5" />
-            Save
-          </Button>
-          <Button size="xs" variant="ghost" onClick={() => void onSaveAs()}>
-            <FileDown className="h-3.5 w-3.5" />
-            Save As
-          </Button>
-        </div>
-      </div>
+      <PanelHeader
+        title="Editor"
+        meta={
+          <>
+            <span className="min-w-0 truncate font-mono text-[11px] text-foreground">
+              {filePath ? filePath.split(/[\\/]/).pop() : "Untitled.yaml"}
+            </span>
+            {dirty ? (
+              <span className="h-1.5 w-1.5 shrink-0 bg-brand" title="Unsaved changes" />
+            ) : null}
+          </>
+        }
+      >
+        <PanelAction onClick={() => void onOpen()} title="Open a flow" aria-label="Open">
+          <FileUp className="h-3.5 w-3.5" />
+        </PanelAction>
+        <PanelAction wide onClick={() => void onSave()} title="Save">
+          <Save className="h-3.5 w-3.5" />
+          Save
+        </PanelAction>
+        <PanelAction onClick={() => void onSaveAs()} title="Save as" aria-label="Save As">
+          <FileDown className="h-3.5 w-3.5" />
+        </PanelAction>
+      </PanelHeader>
       <div
         ref={hostRef}
         className="min-h-0 flex-1 overflow-hidden"

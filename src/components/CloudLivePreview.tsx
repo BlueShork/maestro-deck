@@ -75,15 +75,15 @@ export function CloudLivePreview({
   }, [jobId, running]);
 
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-card p-4">
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background p-4">
       {frame ? (
         <img
           src={frame}
           alt={`Cloud ${device} screen`}
-          className="max-h-full max-w-full rounded-2xl border border-border object-contain"
+          className="max-h-full max-w-full rounded-lg border border-border object-contain"
         />
       ) : (
-        <div className="flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+        <div className="flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
           <LatticeLoader
             // Remounted per phase so the stopwatch counts the current wait.
             key={running ? "booting" : "queued"}

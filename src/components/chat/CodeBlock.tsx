@@ -32,8 +32,8 @@ export function CodeBlock({ language, code, className }: CodeBlockProps) {
   return (
     <>
       <div className="group relative my-3">
-        <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-border bg-muted/80 px-3 py-1.5 text-[11px] text-muted-foreground">
-          <span className="font-mono">{language ?? "text"}</span>
+        <div className="flex items-center justify-between rounded-t-md border border-b-0 border-border bg-surface px-3 py-1.5 text-[11px] text-muted-foreground">
+          <span className="mono-label">{language ?? "text"}</span>
           <div className="flex items-center gap-1">
             {isYaml && (
               <Button

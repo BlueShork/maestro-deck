@@ -39,7 +39,7 @@ describe("renderAnsi", () => {
 
   it("handles compound codes separated by ;", () => {
     const html = render(`${ESC}[1;32mok`);
-    expect(html).toContain('class="text-emerald-400"');
+    expect(html).toContain('class="text-green-400"');
   });
 
   it("emits text before the first escape with no class", () => {
@@ -53,7 +53,7 @@ describe("renderAnsi", () => {
     const b = render(`${ESC}[32mB`);
     expect(a).toContain("text-red-400");
     expect(a).toContain("A");
-    expect(b).toContain("text-emerald-400");
+    expect(b).toContain("text-green-400");
     expect(b).toContain("B");
   });
 });

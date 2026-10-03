@@ -3,7 +3,6 @@
 
 import { exists } from "@tauri-apps/plugin-fs";
 import {
-  ChevronRight,
   FileCode2,
   FilePlus,
   FileText,
@@ -13,7 +12,7 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
-  X,
+  FolderX,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
@@ -27,6 +26,8 @@ import {
 } from "@/components/ui/ContextMenu";
 import { openFlowFile, pickWorkspaceFolder } from "@/lib/flow-io";
 import { ipc } from "@/lib/ipc";
+import { PixelChevron } from "@/components/brand/Pixel";
+import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { cn } from "@/lib/utils";
 import {
   createFlowInDir,
@@ -132,82 +133,65 @@ export function WorkspaceTree() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Workspace
-        </div>
-        <div className="flex items-center gap-0.5">
-          {folderPath ? (
-            <>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => startNewFolder(folderPath)}
-                aria-label="New folder"
-                title="New folder"
-                className="h-6 w-6"
-              >
-                <FolderPlus className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => startNewFile(folderPath)}
-                aria-label="New flow"
-                className="h-6 w-6"
-              >
-                <FilePlus className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => void refresh(folderPath)}
-                disabled={loading}
-                aria-label="Refresh workspace"
-                className="h-6 w-6"
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={onClose}
-                aria-label="Close workspace"
-                className="h-6 w-6"
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </>
-          ) : (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => void pickWorkspaceFolder()}
-              aria-label="Open folder"
-              className="h-6 w-6"
+      <PanelHeader title="Workspace">
+        {folderPath ? (
+          <>
+            <PanelAction
+              onClick={() => startNewFolder(folderPath)}
+              aria-label="New folder"
+              title="New folder"
             >
               <FolderPlus className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
+            </PanelAction>
+            <PanelAction
+              onClick={() => startNewFile(folderPath)}
+              aria-label="New flow"
+              title="New flow"
+            >
+              <FilePlus className="h-3.5 w-3.5" />
+            </PanelAction>
+            <PanelAction
+              onClick={() => void refresh(folderPath)}
+              disabled={loading}
+              aria-label="Refresh workspace"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+            </PanelAction>
+            <PanelAction onClick={onClose} aria-label="Close workspace" title="Close workspace">
+              <FolderX className="h-3.5 w-3.5" />
+            </PanelAction>
+          </>
+        ) : (
+          <PanelAction
+            onClick={() => void pickWorkspaceFolder()}
+            aria-label="Open folder"
+            title="Open folder"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+          </PanelAction>
+        )}
+      </PanelHeader>
 
       {!folderPath ? (
         <EmptyState onOpenFolder={() => void pickWorkspaceFolder()} />
       ) : error ? (
-        <div className="m-3 rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive-foreground">
+        <div className="m-3 rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
           {error}
         </div>
       ) : tree && tree.kind === "dir" ? (
         <>
           <div
-            className="flex items-center justify-between gap-2 border-b border-border px-3 py-1 font-mono text-[10px] text-muted-foreground"
+            className="flex h-8 items-center justify-between gap-2 border-b border-border bg-surface px-3 font-mono text-[11px] text-foreground"
             title={folderPath}
           >
-            <span className="truncate">{tree.name || folderPath}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span aria-hidden className="h-1.5 w-1.5 shrink-0 bg-brand" />
+              <span className="truncate">{tree.name || folderPath}</span>
+            </span>
             {hasConfig ? (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-sans text-[9px] font-medium uppercase tracking-wide text-primary"
+                className="inline-flex shrink-0 items-center gap-1 bg-brand px-1.5 py-0.5 text-[9px] uppercase leading-none text-brand-foreground"
                 title="config.yaml found — Maestro will follow its flows order"
               >
                 <FileText className="h-2.5 w-2.5" />
@@ -217,7 +201,7 @@ export function WorkspaceTree() {
           </div>
           <ContextMenu>
             <ContextMenuTrigger asChild>
-              <div className="min-h-0 flex-1 overflow-y-auto py-1">
+              <div className="min-h-0 flex-1 overflow-y-auto py-1.5">
                 {pendingNewDir === folderPath ? (
                   <NewItemInput
                     kind="file"
@@ -286,12 +270,16 @@ export function WorkspaceTree() {
 
 function EmptyState({ onOpenFolder }: { onOpenFolder: () => void }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-      <FolderClosed className="h-8 w-8 text-muted-foreground" />
-      <div className="text-xs text-muted-foreground">Open a folder to browse Maestro flows.</div>
-      <Button size="sm" variant="outline" onClick={onOpenFolder}>
-        <FolderPlus className="h-3.5 w-3.5" />
+    <div className="flex flex-1 flex-col justify-end gap-4 p-4">
+      <div className="flex flex-col gap-2">
+        <span className="mono-label">No folder open</span>
+        <p className="font-display text-xl font-medium leading-tight tracking-[-0.03em]">
+          Open a folder to browse your Maestro flows.
+        </p>
+      </div>
+      <Button onClick={onOpenFolder} className="group h-9 justify-between gap-2.5 px-3">
         Open folder
+        <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />
       </Button>
     </div>
   );
@@ -352,25 +340,24 @@ function TreeItem({
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <div
-                className="group relative flex items-center"
-                style={{ paddingLeft: `${depth * 12 + 6}px` }}
+                className="group relative flex h-7 items-center transition-colors hover:bg-accent/60"
+                style={{ paddingLeft: `${depth * 14 + 10}px` }}
                 onContextMenu={(e) => e.stopPropagation()}
               >
                 <button
                   type="button"
                   onClick={() => toggle(node.path)}
-                  className="flex min-w-0 flex-1 items-center gap-1 py-0.5 text-left text-xs text-foreground/90 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-full min-w-0 flex-1 items-center gap-2 text-left text-xs text-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                 >
-                  <ChevronRight
-                    className={cn(
-                      "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
-                      expanded && "rotate-90",
-                    )}
+                  <PixelChevron
+                    size={8}
+                    direction={expanded ? "down" : "right"}
+                    className="text-muted-foreground"
                   />
                   {expanded ? (
-                    <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-300/80" />
+                    <FolderOpen className="h-3.5 w-3.5 shrink-0 text-brand" />
                   ) : (
-                    <FolderClosed className="h-3.5 w-3.5 shrink-0 text-amber-500/80 dark:text-amber-300/60" />
+                    <FolderClosed className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   )}
                   <span className="truncate">{node.name}</span>
                 </button>
@@ -382,7 +369,7 @@ function TreeItem({
                   }}
                   aria-label={`New folder in ${node.name}`}
                   title="New folder here"
-                  className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
+                  className="hidden h-7 w-7 items-center justify-center border-l border-border text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
                 >
                   <FolderPlus className="h-3 w-3" />
                 </button>
@@ -394,7 +381,7 @@ function TreeItem({
                   }}
                   aria-label={`New flow in ${node.name}`}
                   title="New flow here"
-                  className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
+                  className="hidden h-7 w-7 items-center justify-center border-l border-border text-muted-foreground hover:bg-accent hover:text-foreground group-hover:flex"
                 >
                   <FilePlus className="h-3 w-3" />
                 </button>
@@ -491,28 +478,26 @@ function TreeItem({
         <ContextMenuTrigger asChild>
           <div
             className={cn(
-              "group relative flex items-center transition-colors",
-              isActive ? "bg-accent" : "hover:bg-accent/50",
+              "group relative flex h-7 items-center transition-colors",
+              isActive ? "bg-accent" : "hover:bg-accent/60",
             )}
             onContextMenu={(e) => e.stopPropagation()}
           >
-            {isActive && (
-              <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground/40" />
-            )}
+            {isActive && <span className="absolute inset-y-0 left-0 w-0.5 bg-brand" />}
             <button
               type="button"
               onClick={() => void openFlowFile(node.path)}
               className={cn(
-                "flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex h-full min-w-0 flex-1 items-center gap-2 text-left text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                 isActive ? "text-foreground" : "text-foreground/85",
               )}
-              style={{ paddingLeft: `${depth * 12 + 22}px` }}
+              style={{ paddingLeft: `${depth * 14 + 26}px` }}
               title={node.path}
             >
               <FileCode2
                 className={cn(
                   "h-3.5 w-3.5 shrink-0",
-                  isActive ? "text-foreground" : "text-muted-foreground",
+                  isActive ? "text-brand" : "text-muted-foreground",
                 )}
               />
               <span className="truncate">{node.name}</span>
@@ -525,7 +510,7 @@ function TreeItem({
               }}
               aria-label={`Delete ${node.name}`}
               title="Delete flow"
-              className="mr-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-destructive/15 hover:text-destructive group-hover:flex"
+              className="hidden h-7 w-7 items-center justify-center border-l border-border text-muted-foreground hover:bg-destructive/15 hover:text-destructive group-hover:flex"
             >
               <Trash2 className="h-3 w-3" />
             </button>
@@ -601,7 +586,7 @@ function NewItemInput({
   const placeholder = kind === "folder" ? "folder-name" : "flow-name.yaml";
 
   return (
-    <div className="flex items-center gap-1.5" style={{ paddingLeft: `${depth * 12 + 22}px` }}>
+    <div className="flex h-7 items-center gap-2" style={{ paddingLeft: `${depth * 14 + 26}px` }}>
       <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <input
         ref={inputRef}
@@ -612,7 +597,7 @@ function NewItemInput({
         onKeyDown={onKeyDown}
         onBlur={() => (value.trim() ? commit(value) : cancel())}
         placeholder={placeholder}
-        className="my-0.5 w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs outline-none focus:border-primary/70"
+        className="mr-2 h-6 w-full border border-brand bg-background px-1.5 text-xs outline-none"
       />
     </div>
   );

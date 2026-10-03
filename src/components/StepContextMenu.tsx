@@ -54,10 +54,10 @@ export function StepContextMenu({ x, y, step, snippet, onRunFrom, onClose }: Ste
           }}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={2} className="w-56 p-0 shadow-xl">
+      <DropdownMenuContent align="start" sideOffset={2} className="w-56 p-0">
         <div className="border-b border-border px-3 py-2">
-          <div className="truncate font-mono text-[11px] font-medium">{step.command}</div>
-          <div className="truncate text-[10px] text-muted-foreground">
+          <div className="truncate font-mono text-[11px] text-foreground">{step.command}</div>
+          <div className="mono-label truncate text-[10px]">
             Line {step.line}
             {step.arg ? ` · ${step.arg}` : ""}
           </div>
@@ -84,7 +84,7 @@ export function StepContextMenu({ x, y, step, snippet, onRunFrom, onClose }: Ste
               }}
               className="gap-2 text-xs"
             >
-              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand" />
               Ask Billy about this step
             </DropdownMenuItem>
           ) : null}

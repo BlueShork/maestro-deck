@@ -93,11 +93,13 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] w-full max-w-3xl flex-col p-0">
-        <DialogHeader className="border-b border-border px-5 py-4">
+        <DialogHeader className="border-b border-border px-5 pb-4 pt-6">
           <DialogTitle>Apply changes to {filePath ?? "current file"}?</DialogTitle>
-          <DialogDescription className="flex items-center gap-3 text-xs">
-            <span className="text-emerald-500">+{stats.added}</span>
-            <span className="text-destructive">−{stats.removed}</span>
+          <DialogDescription className="flex items-center gap-3 font-mono text-[11px] uppercase">
+            <span className="bg-success/15 px-1.5 py-0.5 text-success">+{stats.added}</span>
+            <span className="bg-destructive/15 px-1.5 py-0.5 text-destructive">
+              −{stats.removed}
+            </span>
             <span className="text-muted-foreground">
               The current YAML will be replaced with Billy's proposal.
             </span>
@@ -111,7 +113,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
                 <tr
                   key={idx}
                   className={cn(
-                    line.op === "add" && "bg-emerald-500/10",
+                    line.op === "add" && "bg-green-500/10",
                     line.op === "del" && "bg-destructive/10",
                   )}
                 >
@@ -122,7 +124,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
                     {line.newNo ?? ""}
                   </td>
                   <td className="select-none border-r border-border/40 px-1 text-center align-top w-6">
-                    {line.op === "add" && <Plus className="inline h-3 w-3 text-emerald-500" />}
+                    {line.op === "add" && <Plus className="inline h-3 w-3 text-green-500" />}
                     {line.op === "del" && <Minus className="inline h-3 w-3 text-destructive" />}
                   </td>
                   <td className="whitespace-pre px-2 py-0.5 align-top">{line.text || " "}</td>
@@ -133,7 +135,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
         </div>
 
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={apply} className="gap-1.5">

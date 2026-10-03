@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ipc", () => ({ ipc: { onFarmSession: vi.fn(async () => () => undefined) } }));
 
-import { FarmDevicesSection } from "@/components/FarmDevicesSection";
 import { FarmSessionBar } from "@/components/FarmSessionBar";
 import { useFarmStore } from "@/stores/farmStore";
 
@@ -30,22 +29,6 @@ beforeEach(() => {
     session: null,
     refreshDevices: vi.fn(async () => undefined),
     connect: vi.fn(async () => undefined),
-  });
-});
-
-describe("FarmDevicesSection", () => {
-  it("lists phones with their state and only connects available ones", () => {
-    render(<FarmDevicesSection />);
-    expect(screen.getByText("Galaxy S24 Ultra")).toBeTruthy();
-    expect(screen.getAllByText("Android 15").length).toBe(3);
-    expect(screen.getByText("In use")).toBeTruthy();
-    expect(screen.getByText("Offline")).toBeTruthy();
-    fireEvent.click(screen.getByText("Pixel 8"));
-    expect(useFarmStore.getState().connect).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText("Galaxy S24 Ultra"));
-    expect(useFarmStore.getState().connect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "a" }),
-    );
   });
 });
 

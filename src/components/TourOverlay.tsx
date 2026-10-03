@@ -3,6 +3,7 @@
 
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 
+import { PixelChevron } from "@/components/brand/Pixel";
 import { Button } from "@/components/ui/Button";
 import { TOUR_STEPS } from "@/lib/tourSteps";
 import { usePanelsStore } from "@/stores/panelsStore";
@@ -127,7 +128,7 @@ export function TourOverlay() {
           hole; otherwise a flat dim covers everything. */}
       {ring ? (
         <div
-          className="pointer-events-auto absolute rounded-lg ring-2 ring-primary transition-all"
+          className="pointer-events-auto absolute ring-2 ring-brand transition-all"
           style={{
             top: ring.top,
             left: ring.left,
@@ -141,30 +142,33 @@ export function TourOverlay() {
       )}
 
       <div
-        className="pointer-events-auto absolute w-[360px] rounded-lg border border-border bg-popover p-4 shadow-xl"
+        className="warm-bands pointer-events-auto absolute w-[360px] overflow-hidden rounded-lg border border-border bg-background p-5 pt-6 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)]"
         style={bubbleStyle}
       >
-        <div className="mb-1 text-xs font-medium text-muted-foreground">
+        <div className="mono-label mb-2">
           {stepIndex + 1} / {TOUR_STEPS.length}
         </div>
-        <h3 className="mb-1.5 text-sm font-semibold text-foreground">{step.title}</h3>
+        <h3 className="mb-2 font-display text-xl font-medium leading-tight tracking-[-0.03em] text-foreground">
+          {step.title}
+        </h3>
         <p className="mb-4 text-sm leading-relaxed text-muted-foreground">{body}</p>
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={skip}
-            className="text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="text-xs text-muted-foreground underline decoration-brand underline-offset-[3px] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             Skip tour
           </button>
           <div className="flex items-center gap-2">
             {!isFirst && (
-              <Button size="sm" variant="ghost" onClick={prev}>
+              <Button size="sm" variant="secondary" onClick={prev}>
                 Back
               </Button>
             )}
-            <Button size="sm" variant="default" onClick={next}>
+            <Button size="sm" variant="default" onClick={next} className="group gap-2 px-3">
               {isLast ? "Finish" : "Next"}
+              <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />
             </Button>
           </div>
         </div>

@@ -1,13 +1,14 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { Mic, Sparkles, Square, Volume2 } from "lucide-react";
+import { Mic, Square, Volume2 } from "lucide-react";
 import { isValidElement, memo, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { ChatMessage as ChatMessageT, ContentBlock } from "@/types/chat";
 import { messageText } from "@/lib/chat/content";
+import { PixelIcon } from "@/components/brand/Pixel";
 import { cn } from "@/lib/utils";
 import { useBillyVoiceStore } from "@/stores/billyVoiceStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -63,7 +64,7 @@ function Markdown({ text }: { text: string }): ReactElement {
           const block = extractCodeFromPre(children);
           if (!block) {
             return (
-              <pre className="my-3 max-w-full overflow-x-auto rounded-lg border border-border bg-muted/60 p-3 font-mono text-[12px] leading-relaxed">
+              <pre className="my-3 max-w-full overflow-x-auto rounded-md border border-border bg-surface p-3 font-mono text-[12px] leading-relaxed">
                 {children}
               </pre>
             );
@@ -85,7 +86,7 @@ function Markdown({ text }: { text: string }): ReactElement {
           }
           return (
             <code
-              className="rounded-md bg-muted/70 px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+              className="bg-surface px-1 py-0.5 font-mono text-[0.85em] text-foreground"
               {...props}
             >
               {children}
@@ -97,7 +98,7 @@ function Markdown({ text }: { text: string }): ReactElement {
             href={href}
             target="_blank"
             rel="noreferrer noopener"
-            className="font-medium text-primary underline-offset-2 hover:underline"
+            className="font-medium text-foreground underline decoration-brand underline-offset-[3px] hover:text-brand"
           >
             {children}
           </a>
@@ -107,16 +108,20 @@ function Markdown({ text }: { text: string }): ReactElement {
         ),
         em: ({ children }) => <em className="italic">{children}</em>,
         h1: ({ children }) => (
-          <h1 className="mb-2 mt-3 text-base font-semibold first:mt-0">{children}</h1>
+          <h1 className="mb-2 mt-3 font-display text-lg font-medium tracking-[-0.02em] first:mt-0">
+            {children}
+          </h1>
         ),
         h2: ({ children }) => (
-          <h2 className="mb-1.5 mt-3 text-sm font-semibold first:mt-0">{children}</h2>
+          <h2 className="mb-1.5 mt-3 font-display text-base font-medium tracking-[-0.02em] first:mt-0">
+            {children}
+          </h2>
         ),
         h3: ({ children }) => (
           <h3 className="mb-1 mt-2.5 text-sm font-medium first:mt-0">{children}</h3>
         ),
         blockquote: ({ children }) => (
-          <blockquote className="mb-3 border-l-2 border-primary/40 pl-3 italic text-muted-foreground last:mb-0">
+          <blockquote className="mb-3 border-l-2 border-brand bg-brand/5 py-1 pl-3 text-muted-foreground last:mb-0">
             {children}
           </blockquote>
         ),
@@ -127,7 +132,9 @@ function Markdown({ text }: { text: string }): ReactElement {
           </div>
         ),
         th: ({ children }) => (
-          <th className="border-b border-border px-2 py-1.5 text-left font-semibold">{children}</th>
+          <th className="border-b border-border px-2 py-1.5 text-left font-mono text-[10px] font-normal uppercase text-muted-foreground">
+            {children}
+          </th>
         ),
         td: ({ children }) => <td className="border-b border-border/40 px-2 py-1.5">{children}</td>,
       }}
@@ -158,7 +165,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: { message: Cha
   if (isUser) {
     return (
       <div className="flex justify-end motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
+        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-surface px-4 py-2.5 text-sm text-foreground">
           {message.viaVoice && (
             <Mic
               aria-label="Asked by voice"
@@ -222,10 +229,8 @@ function AssistantShell({ messageId, children }: { messageId: string; children: 
   return (
     <div className="min-w-0 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
       <div className="mb-1.5 flex items-center gap-2">
-        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/80 to-primary/40 text-primary-foreground ring-1 ring-primary/20">
-          <Sparkles className="h-3 w-3" />
-        </div>
-        <span className="text-[11px] font-medium text-muted-foreground">Billy</span>
+        <PixelIcon size={16} />
+        <span className="mono-label">Billy</span>
         <SpeakButton messageId={messageId} />
       </div>
       {children}
@@ -255,7 +260,7 @@ function SpeakButton({ messageId }: { messageId: string }) {
       title={speaking ? "Stop" : "Read aloud"}
       className={cn(
         "inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-        speaking && "text-primary",
+        speaking && "text-brand",
       )}
     >
       {speaking ? <Square className="h-2.5 w-2.5 fill-current" /> : <Volume2 className="h-3 w-3" />}
@@ -266,9 +271,9 @@ function SpeakButton({ messageId }: { messageId: string }) {
 function PulseDots() {
   return (
     <div className="flex h-5 items-center gap-1 text-muted-foreground">
-      <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-bounce" />
-      <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-bounce [animation-delay:120ms]" />
-      <span className="h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-bounce [animation-delay:240ms]" />
+      <span className="h-1.5 w-1.5 bg-current motion-safe:animate-bounce" />
+      <span className="h-1.5 w-1.5 bg-current motion-safe:animate-bounce [animation-delay:120ms]" />
+      <span className="h-1.5 w-1.5 bg-current motion-safe:animate-bounce [animation-delay:240ms]" />
     </div>
   );
 }

@@ -2,14 +2,23 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, Cloud, Gauge, LogOut, RefreshCw, ShoppingCart, Smartphone } from "lucide-react";
+import { Cloud, Gauge, LogOut, RefreshCw, ShoppingCart, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { BillyAppPromo } from "@/components/BillyAppPromo";
 import { Button } from "@/components/ui/Button";
-import { CLOUD_BILLING_URL, logout, tierLabel, type CloudBillingInfo } from "@/lib/cloudAuth";
+import {
+  CLOUD_BILLING_URL,
+  liveMinutes,
+  logout,
+  tierLabel,
+  type CloudBillingInfo,
+} from "@/lib/cloudAuth";
 import { LoginCard } from "@/components/LoginCard";
+import { PageHeader } from "@/components/PageHeader";
+import { PixelChevron, PixelIcon, PixelMosaic } from "@/components/brand/Pixel";
+import { DeviceArt } from "@/components/devices/DeviceArt";
 import { cn } from "@/lib/utils";
 import { useCloudAuthStore } from "@/stores/cloudAuthStore";
 
@@ -30,34 +39,24 @@ export function AccountPage() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => navigate("/")}
-          aria-label="Back to workspace"
-          title="Back to workspace (Esc)"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm font-semibold">Maestro Deck Cloud</span>
-      </header>
+      <PageHeader title="Maestro Deck Cloud" />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {user ? null : <PitchView />}
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", !user && "hidden")}>
         {/* Decorative community banner, edge to edge. Its height is capped so
             a wide window crops the empty top/bottom instead of turning it
             into a wall; the artwork's content sits in the middle. */}
         {user ? (
-          <img
-            src="/promo/community-banner.webp"
-            alt=""
-            aria-hidden
-            className="block h-[clamp(120px,14vw,220px)] w-full border-b border-border object-cover"
-            draggable={false}
+          <PixelMosaic
+            cols={40}
+            rows={5}
+            palette="orange"
+            seed={11}
+            className="h-[clamp(120px,14vw,220px)] w-full border-b border-border"
           />
         ) : null}
         <div className="mx-auto max-w-3xl px-6 py-10">
-          {user ? <ProfileView email={user.email} /> : <PitchView />}
+          {user ? <ProfileView email={user.email} /> : null}
         </div>
       </div>
     </div>
@@ -83,19 +82,19 @@ function ProfileView({ email }: { email: string | null }) {
         <div className="flex min-w-0 items-end gap-4">
           <div
             aria-hidden
-            className="flex h-24 w-24 shrink-0 select-none items-center justify-center rounded-full bg-foreground text-4xl font-bold text-background shadow-lg ring-4 ring-background"
+            className="flex h-24 w-24 shrink-0 select-none items-center justify-center border border-border bg-background font-display text-5xl font-medium tracking-[-0.04em] text-foreground"
           >
             {(email?.trim()[0] ?? "?").toUpperCase()}
           </div>
           <div className="flex min-w-0 flex-col pb-1.5">
-            <span className="truncate text-lg font-semibold leading-tight">
+            <span className="truncate font-display text-2xl font-medium leading-tight tracking-[-0.03em]">
               {email ?? "unknown"}
             </span>
-            <span className="text-xs text-muted-foreground">Signed in to Maestro Deck Cloud</span>
+            <span className="mono-label mt-1">Signed in to Maestro Deck Cloud</span>
           </div>
         </div>
         <Button
-          variant="ghost"
+          variant="secondary"
           size="sm"
           disabled={signingOut}
           onClick={() => {
@@ -133,11 +132,11 @@ function BillingCard({
   onRetry: () => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-5 py-3">
+    <div className="warm-bands overflow-hidden rounded-lg border border-border bg-background">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 pb-3 pt-4">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Plan</span>
-          <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold text-primary">
+          <span className="mono-label">Plan</span>
+          <span className="bg-brand px-2 py-0.5 font-mono text-[10px] uppercase text-brand-foreground">
             {loading ? "…" : billing ? tierLabel(billing.tier) : "—"}
           </span>
           {billing?.currentPack && billing.expiresAt ? (
@@ -146,9 +145,9 @@ function BillingCard({
             </span>
           ) : null}
         </div>
-        <Button size="sm" onClick={() => void openUrl(CLOUD_BILLING_URL)} className="gap-1.5">
-          <ShoppingCart className="h-3.5 w-3.5" />
+        <Button size="sm" onClick={() => void openUrl(CLOUD_BILLING_URL)} className="group gap-2">
           Buy more runs
+          <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />
         </Button>
       </div>
 
@@ -160,7 +159,7 @@ function BillingCard({
               Your runs couldn't be loaded ({error}). Buying more still works.
             </span>
           </div>
-          <Button variant="outline" size="sm" onClick={onRetry} className="gap-1.5">
+          <Button variant="secondary" size="sm" onClick={onRetry} className="gap-1.5">
             <RefreshCw className="h-3.5 w-3.5" />
             Retry
           </Button>
@@ -168,8 +167,8 @@ function BillingCard({
       ) : (
         <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
           <div className="flex flex-col justify-center p-6">
-            <div className="text-xs text-muted-foreground">Runs remaining</div>
-            <div className="mt-2 text-5xl font-semibold tabular-nums leading-none tracking-tight">
+            <div className="mono-label">Runs remaining</div>
+            <div className="mt-3 font-display text-6xl font-medium tabular-nums leading-none tracking-[-0.045em]">
               {loading ? "…" : (billing?.runsRemaining ?? "—")}
             </div>
             <div className="mt-2 text-xs text-muted-foreground">
@@ -183,7 +182,7 @@ function BillingCard({
               label={loading ? "…" : billing ? `${billing.runsToday}/${billing.dailyCap}` : "—"}
             />
             <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground">Used today</span>
+              <span className="mono-label">Used today</span>
               <span className="mt-1 text-sm font-medium">
                 {loading || !billing
                   ? "—"
@@ -195,81 +194,164 @@ function BillingCard({
           </div>
         </div>
       )}
+      {!error && billing ? <LiveMinutesRow billing={billing} /> : null}
     </div>
   );
 }
 
-/** Today's usage as a ring that fills toward the daily cap; amber once full. */
-function UsageRing({ used, cap, label }: { used: number; cap: number; label: string }) {
-  const r = 34;
-  const circumference = 2 * Math.PI * r;
-  const ratio = cap > 0 ? Math.min(1, used / cap) : 0;
+/** Below this share of the grant the minutes turn amber. */
+const LOW_MINUTES_SHARE = 0.1;
+const MINUTE_CELLS = 24;
+
+/**
+ * Live device-farm minutes, for plans that include them: the balance in
+ * Inter Tight next to a farm phone, and a stepped gauge of what is left.
+ */
+function LiveMinutesRow({ billing }: { billing: CloudBillingInfo }) {
+  const minutes = liveMinutes(billing);
+  if (!minutes) return null;
+  const { remaining, included } = minutes;
+  const share = included > 0 ? remaining / included : 0;
+  const low = remaining === 0 || share <= LOW_MINUTES_SHARE;
+  const lit = Math.round(share * MINUTE_CELLS);
   return (
-    <div className="relative h-20 w-20 shrink-0">
-      <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90" aria-hidden>
-        <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7" className="stroke-muted" />
-        <circle
-          cx="40"
-          cy="40"
-          r={r}
-          fill="none"
-          strokeWidth="7"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - ratio)}
-          className={cn(
-            "transition-[stroke-dashoffset] duration-700 ease-out",
-            ratio >= 1 ? "stroke-amber-500" : "stroke-primary",
-          )}
-          // A zero-length round cap still draws a dot; hide the arc at 0.
-          opacity={ratio > 0 ? 1 : 0}
-        />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold tabular-nums">
+    <div className="flex flex-wrap items-center gap-6 border-t border-border p-6">
+      <DeviceArt
+        platform="android"
+        kind="physical"
+        source="farm"
+        dim={remaining === 0}
+        seedKey="profile-farm"
+        className="h-20 w-auto shrink-0"
+      />
+      <div className="flex min-w-[10rem] flex-col">
+        <span className="mono-label">Live device minutes</span>
+        <span className="mt-3 flex items-baseline gap-2">
+          <span
+            className={cn(
+              "font-display text-5xl font-medium tabular-nums leading-none tracking-[-0.045em]",
+              remaining === 0 ? "text-destructive" : low ? "text-warning" : "text-foreground",
+            )}
+          >
+            {remaining.toLocaleString()}
+          </span>
+          <span className="font-mono text-[11px] uppercase text-muted-foreground">
+            / {included.toLocaleString()} min
+          </span>
+        </span>
+      </div>
+      <div className="flex min-w-[14rem] flex-1 flex-col gap-2">
+        <div className="flex gap-0.5" aria-hidden>
+          {Array.from({ length: MINUTE_CELLS }).map((_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-2 flex-1",
+                i < lit ? (low ? "bg-warning" : "bg-brand") : "bg-surface",
+              )}
+            />
+          ))}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {remaining === 0
+            ? "No minutes left — top up to open live sessions on farm phones."
+            : "Live sessions on real phones in the device farm: mirror, inspect and run as if it were on your desk."}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Today's usage as the landing's CI bar: square cells (one per run up to
+ *  20, proportional beyond), orange as runs are spent, amber at the cap. */
+const USAGE_CELLS_MAX = 20;
+function UsageRing({ used, cap, label }: { used: number; cap: number; label: string }) {
+  const full = cap > 0 && used >= cap;
+  const cells = Math.max(1, Math.min(cap, USAGE_CELLS_MAX));
+  const lit = cap > 0 ? Math.min(cells, Math.ceil((used / cap) * cells)) : 0;
+  return (
+    <div className="flex w-28 shrink-0 flex-col gap-2">
+      <span className="font-display text-2xl font-medium leading-none tracking-[-0.03em] tabular-nums">
         {label}
       </span>
+      <div className="flex gap-0.5" aria-hidden>
+        {Array.from({ length: cells }).map((_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-2 flex-1",
+              i < lit ? (full ? "bg-warning" : "bg-brand") : "bg-surface",
+            )}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
+/** What an account adds, shown on the sign-in page's mosaic panel. */
+const BENEFITS: Array<{ icon: typeof Gauge; title: string; description: string }> = [
+  {
+    icon: Cloud,
+    title: "Run flows in the cloud",
+    description: "Hosted emulators, simulators and real phones.",
+  },
+  {
+    icon: Smartphone,
+    title: "Live sessions on real devices",
+    description: "Mirror and drive a farm phone as if it were on your desk.",
+  },
+  {
+    icon: Gauge,
+    title: "Track runs & credits",
+    description: "Your balance, right here in the app.",
+  },
+  {
+    icon: ShoppingCart,
+    title: "Buy more in one click",
+    description: "Top up without leaving Maestro Deck.",
+  },
+];
+
+/**
+ * Signed-out page, laid out like the dashboard's /login: the form in its own
+ * column, a full-height warm mosaic beside it with the pixel mark set large,
+ * and what an account adds in a card over the mosaic.
+ */
 function PitchView() {
   return (
-    <div className="grid grid-cols-1 gap-10 md:grid-cols-2 md:items-start">
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-xl font-semibold">Maestro Deck Cloud</h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            Maestro Deck runs fully offline without an account — signing in is entirely optional.
-            Connect one to run flows in the cloud and keep your runs and credits right here in the
-            app.
-          </p>
+    <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2">
+      <div className="flex min-h-0 overflow-y-auto">
+        <div className="m-auto w-full max-w-[400px] px-6 py-12">
+          <span className="mono-label mb-4 block">Maestro Deck Cloud</span>
+          <LoginCard variant="page" />
         </div>
-
-        <ul className="space-y-4">
-          <Benefit
-            icon={Cloud}
-            title="Run flows in the cloud"
-            description="Kick off a flow from the app and let it run on a hosted emulator, simulator or real phone."
-          />
-          <Benefit
-            icon={Smartphone}
-            title="Preview on real devices"
-            description="Watch a flow execute on a real physical device, streamed back to the app."
-          />
-          <Benefit
-            icon={Gauge}
-            title="Track runs & credits"
-            description="See how many cloud runs you have left without switching to a browser."
-          />
-          <Benefit
-            icon={ShoppingCart}
-            title="Buy more in one click"
-            description="Out of runs? Buy more runs without leaving Maestro Deck."
-          />
-        </ul>
       </div>
 
-      <LoginCard />
+      <PixelMosaic
+        cols={10}
+        rows={12}
+        palette="orange"
+        seed={11}
+        className="hidden border-l border-border lg:block"
+      >
+        <div className="absolute right-8 top-8 w-[min(340px,70%)] border border-border bg-background shadow-[0_30px_60px_-20px_rgba(0,0,0,0.6)]">
+          <div className="border-b border-border px-4 py-3">
+            <span className="mono-label">With an account</span>
+          </div>
+          <ul>
+            {BENEFITS.map((b) => (
+              <Benefit key={b.title} {...b} />
+            ))}
+          </ul>
+        </div>
+        <PixelIcon
+          compact={false}
+          color="#101013"
+          size={176}
+          className="absolute bottom-0 left-12"
+        />
+      </PixelMosaic>
     </div>
   );
 }
@@ -284,10 +366,8 @@ function Benefit({
   description: string;
 }) {
   return (
-    <li className="flex gap-3">
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground ring-1 ring-border">
-        <Icon className="h-4 w-4" />
-      </div>
+    <li className="flex gap-3 px-4 py-3 [&+&]:border-t [&+&]:border-border">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
       <div className="min-w-0">
         <span className="text-sm font-medium">{title}</span>
         <p className="text-xs text-muted-foreground">{description}</p>

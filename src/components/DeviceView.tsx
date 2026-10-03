@@ -17,11 +17,11 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 
-import { DottedGrid } from "@/components/effects/DottedGrid";
+import { PixelMosaic } from "@/components/brand/Pixel";
+import { connectingHint, useConnectingEntry } from "@/components/devices/useCatalog";
 import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { Logo } from "@/components/Logo";
 import LatticeLoader from "@/components/ui/LatticeLoader";
-import { FarmSessionBar } from "@/components/FarmSessionBar";
 import { H264Decoder } from "@/lib/decoder";
 import { registerDeviceCanvas } from "@/lib/deviceFrame";
 import { events, ipc } from "@/lib/ipc";
@@ -354,7 +354,7 @@ const InspectorOverlay = memo(function InspectorOverlay({
   if (!enabled || !bounds || scale <= 0) return null;
   return (
     <div
-      className="pointer-events-none absolute border-2 border-red-500 bg-red-500/15 shadow-[0_0_0_1px_rgba(239,68,68,0.35),0_0_14px_rgba(239,68,68,0.45)]"
+      className="pointer-events-none absolute border-2 border-brand bg-brand/15"
       style={{
         left: (canvasRect.width - displayW) / 2 + bounds.left * overlayScaleX,
         top: (canvasRect.height - displayH) / 2 + bounds.top * overlayScaleY,
@@ -775,10 +775,7 @@ export function DeviceView() {
   );
 
   return (
-    // The farm session bar sits above the canvas container, outside its
-    // pointer handlers, so its buttons never turn into taps on the phone.
     <div className="flex h-full w-full flex-col">
-      <FarmSessionBar />
       <div
         ref={containerRef}
         className="relative flex min-h-0 w-full flex-1 items-center justify-center"
@@ -799,7 +796,7 @@ export function DeviceView() {
         <canvas
           ref={canvasRef}
           className={cn(
-            "pointer-events-none rounded-lg bg-black shadow-2xl",
+            "pointer-events-none rounded-lg bg-black shadow-[0_30px_60px_-20px_rgba(0,0,0,0.55)]",
             !hasFrame && "hidden",
             inspectEnabled && "cursor-crosshair",
           )}
@@ -817,7 +814,7 @@ export function DeviceView() {
         />
 
         {hasFrame ? (
-          <div className="absolute right-3 top-3 z-10 flex gap-2">
+          <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border border-border bg-background">
             {isIos ? (
               <button
                 type="button"
@@ -825,7 +822,7 @@ export function DeviceView() {
                 disabled={pressingHome || !connectedSerial}
                 title="Press Home (return to home screen)"
                 aria-label="Press Home button"
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <House className="h-4 w-4" />
               </button>
@@ -838,7 +835,7 @@ export function DeviceView() {
                 title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
                 aria-label="Toggle device dark mode"
                 aria-pressed={darkMode ?? false}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </button>
@@ -849,7 +846,7 @@ export function DeviceView() {
               disabled={capturing}
               title="Screenshot · ⌘⇧S"
               aria-label="Take screenshot"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/70 text-foreground/80 shadow-sm backdrop-blur-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Camera className="h-4 w-4" />
             </button>
@@ -887,7 +884,37 @@ function EmptyState({
   streamEnabled: boolean;
   iosPhysical: boolean;
 }) {
+  const connecting = useConnectingEntry();
   const lightweight = connected && !streamEnabled;
+  // Something was picked but isn't connected yet (a simulator booting, a farm
+  // session opening): say so in the frame instead of the "plug in" prompt.
+  if (!connected && connecting) {
+    return (
+      <div className="pointer-events-none relative aspect-[9/19.5] h-full w-auto overflow-hidden rounded-lg border border-brand/40">
+        <PixelMosaic
+          cols={9}
+          rows={19}
+          palette="paper"
+          seed={5}
+          className="absolute inset-0 dark:hidden"
+        />
+        <PixelMosaic
+          cols={9}
+          rows={19}
+          palette="dark"
+          seed={5}
+          className="absolute inset-0 hidden dark:block"
+        />
+        <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 animate-pulse bg-brand" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
+          <PreviewLoader label={`Connecting to ${connecting.name}`} />
+          <div className="max-w-[16rem] text-xs text-muted-foreground">
+            {connectingHint(connecting)}
+          </div>
+        </div>
+      </div>
+    );
+  }
   // Physical iPhones build the on-device XCTest driver on first connect (~10 min),
   // so a generic "Waiting for frames…" looks frozen. Show progress + reassurance.
   if (iosPhysical && connected && !lightweight) {
@@ -895,19 +922,36 @@ function EmptyState({
   }
   if (!connected) {
     return (
-      <DottedGrid className="pointer-events-none aspect-[9/19.5] h-full w-auto rounded-2xl border border-border">
-        <Logo className="h-auto w-40 text-foreground" />
-        <div className="max-w-[16rem] text-xs text-muted-foreground">
-          Plug in an Android device with USB debugging enabled, then pick it in the sidebar.
+      <div className="pointer-events-none relative aspect-[9/19.5] h-full w-auto overflow-hidden rounded-lg border border-border">
+        {/* Landing block mosaic, in the current theme's quiet tones. */}
+        <PixelMosaic
+          cols={9}
+          rows={19}
+          palette="paper"
+          seed={3}
+          className="absolute inset-0 dark:hidden"
+        />
+        <PixelMosaic
+          cols={9}
+          rows={19}
+          palette="dark"
+          seed={3}
+          className="absolute inset-0 hidden dark:block"
+        />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <Logo className="w-44" />
+          <div className="max-w-[16rem] text-xs text-muted-foreground">
+            Plug in an Android device with USB debugging enabled, then pick it in the sidebar.
+          </div>
         </div>
-      </DottedGrid>
+      </div>
     );
   }
   if (lightweight) {
     return (
-      <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
-        <Smartphone className="h-10 w-10 text-muted-foreground/60" />
-        <div className="text-sm font-medium">Lightweight mode</div>
+      <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
+        <Smartphone className="h-8 w-8 text-brand" />
+        <div className="font-display text-xl font-medium tracking-[-0.03em]">Lightweight mode</div>
         <div className="max-w-[16rem] text-xs text-muted-foreground">
           Live stream is off. Inspect and Run still work — taps from this view are disabled. Toggle
           in Settings to re-enable mirroring.
@@ -916,7 +960,7 @@ function EmptyState({
     );
   }
   return (
-    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
       <PreviewLoader label="Waiting for the first frame" />
       <div className="max-w-[16rem] text-xs text-muted-foreground">
         The stream will appear here once scrcpy pushes the first frame.
@@ -953,7 +997,7 @@ function IosPhysicalWaiting() {
     return () => window.clearTimeout(id);
   }, []);
   return (
-    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-background/60 p-6 text-center">
+    <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
       <PreviewLoader
         label={building ? "Building the test driver on your iPhone" : "Connecting to your iPhone"}
       />
