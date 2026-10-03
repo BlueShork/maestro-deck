@@ -1,6 +1,6 @@
 [package]
 name = "maestro-deck"
-version = "1.0.0"
+version = "1.1.0"
 description = "Source-available visual IDE for Maestro mobile tests"
 authors = ["Ethan Morisset <contact@maestrodeck.cloud>"]
 license = "BUSL-1.1"

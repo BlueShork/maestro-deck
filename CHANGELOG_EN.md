@@ -1,3 +1,18 @@
+# What's New in v1.1.0
+
+## Interface
+- **A whole new look.** The app has been redesigned to match the Maestro Deck website and dashboard: new colours, typography, panel headers, buttons, toasts and dialogs, plus a new app icon.
+
+## Devices
+- **New device picker.** Local phones, simulators and emulators, the web target, device-farm phones and cloud fleets now live in a single searchable list, with each device's state at a glance (connected, ready, off, in use…). Picking a shut-down simulator boots it.
+- **Pick the build for a cloud run right from the picker** (.apk for Android, zipped .app for iOS); a wrong file is rejected before the run is charged.
+- **Redesigned device-farm session bar** to follow and end a live session.
+
+## Account
+- **Live device minutes.** The account page now shows the device-farm minutes left on your plan, and warns you when they run low.
+
+---
+
 # What's New in v1.0.0
 
 ## Device farm
