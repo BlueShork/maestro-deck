@@ -15,8 +15,9 @@ import { pluginUrl } from "@/lib/plugins/url";
 import { cn } from "@/lib/utils";
 import { usePluginsStore } from "@/stores/pluginsStore";
 
-const STATUS: Record<CatalogItem["status"], { label: string; className: string }> = {
-  available: { label: "Available", className: "border border-border text-muted-foreground" },
+/** Badge per status. Being listed already means available, so it gets none. */
+const STATUS: Record<CatalogItem["status"], { label: string; className: string } | null> = {
+  available: null,
   installed: { label: "Installed", className: "bg-brand text-brand-foreground" },
   update: { label: "Update", className: "border border-brand text-brand" },
   incompatible: { label: "Needs update", className: "border border-border text-muted-foreground" },
@@ -171,9 +172,11 @@ function PluginCard({ item }: { item: CatalogItem }) {
             item.name.trim()[0]?.toUpperCase()
           )}
         </div>
-        <span className={cn("px-2 py-0.5 font-mono text-[10px] uppercase", status.className)}>
-          {status.label}
-        </span>
+        {status ? (
+          <span className={cn("px-2 py-0.5 font-mono text-[10px] uppercase", status.className)}>
+            {status.label}
+          </span>
+        ) : null}
       </div>
 
       <div className="flex flex-1 flex-col px-5 py-4">
