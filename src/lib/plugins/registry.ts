@@ -27,7 +27,8 @@ function isEntry(e: unknown): e is RegistryEntry {
   const r = e as Record<string, unknown>;
   const str = (k: string) => typeof r[k] === "string" && (r[k] as string).length > 0;
   return (
-    ["id", "name", "description", "repo", "version", "minAppVersion", "url", "sha256"].every(str) &&
+    ["id", "name", "repo", "version", "minAppVersion", "url", "sha256"].every(str) &&
+    typeof r.description === "string" &&
     ID_RE.test(r.id as string) &&
     compareVersions(r.version as string, "0.0.0") !== null &&
     compareVersions(r.minAppVersion as string, "0.0.0") !== null &&

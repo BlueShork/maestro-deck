@@ -17,6 +17,13 @@ import type {
   UINode,
   WorkspaceNode,
 } from "@/types";
+import type {
+  InstalledPlugin,
+  PluginHttpRequest,
+  PluginHttpResponse,
+  PluginManifest,
+  RegistryEntry,
+} from "@/lib/plugins/types";
 import type { BankGroup, RunReport } from "@/types/visualRegression";
 
 export class IpcError extends Error {
@@ -228,6 +235,22 @@ export const ipc = {
     }),
   /** Fetch a text artifact from its signed GCS URL — same CORS story. */
   cloudDownloadText: (url: string) => call<string>("cloud_download_text", { url }),
+  pluginsRegistry: () => call<string>("plugins_registry"),
+  pluginsList: () => call<InstalledPlugin[]>("plugins_list"),
+  pluginsInstall: (pin: Pick<RegistryEntry, "id" | "version" | "url" | "sha256">) =>
+    call<PluginManifest>("plugins_install", { pin }),
+  pluginsUninstall: (id: string) => call<void>("plugins_uninstall", { id }),
+  pluginsLoadDev: (path: string) => call<PluginManifest>("plugins_load_dev", { path }),
+  pluginHttpFetch: (pluginId: string, request: PluginHttpRequest) =>
+    call<PluginHttpResponse>("plugin_http_fetch", { pluginId, request }),
+  pluginOpenExternal: (pluginId: string, url: string) =>
+    call<void>("plugin_open_external", { pluginId, url }),
+  pluginSecretGet: (pluginId: string, key: string) =>
+    call<string | null>("plugin_secret_get", { pluginId, key }),
+  pluginSecretSet: (pluginId: string, key: string, value: string) =>
+    call<void>("plugin_secret_set", { pluginId, key, value }),
+  pluginSecretDelete: (pluginId: string, key: string) =>
+    call<void>("plugin_secret_delete", { pluginId, key }),
 };
 
 export interface IosPhysicalSetupStatus {

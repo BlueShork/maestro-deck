@@ -128,6 +128,18 @@ function ToastCard({ toast: t, onClosed }: { toast: Toast; onClosed: () => void 
               {t.description}
             </span>
           ) : null}
+          {t.action ? (
+            <button
+              type="button"
+              onClick={() => {
+                t.action?.onClick();
+                close();
+              }}
+              className="mt-1 self-start font-mono text-[11px] uppercase text-brand transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {t.action.label}
+            </button>
+          ) : null}
         </div>
         {t.variant === "error" || t.variant === "default" ? (
           <button
