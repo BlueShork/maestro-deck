@@ -13,8 +13,6 @@ use std::path::{Component, Path, PathBuf};
 use serde::Serialize;
 use sha1::{Digest, Sha1};
 
-use super::manifest::safe_relative;
-
 pub const MAX_CHANGES: usize = 2000;
 pub const READ_CAP: u64 = 25 * 1024 * 1024;
 
@@ -183,6 +181,47 @@ fn file_oid(path: &Path, autocrlf: bool) -> Result<String, String> {
     )))
 }
 
+/// (size, mtime seconds, mtime nanoseconds) as git last saw a file.
+type CachedStat = (u32, u32, u32);
+
+/// Stat data from the index for entries that still equal HEAD. A file whose
+/// size and mtime match is unchanged without being read, as in `git status`.
+/// Entries modified at or after the index was written are left out: their
+/// stat cannot vouch for their content ("racy git").
+fn clean_stats(
+    repo: &gix::Repository,
+    head: &HashMap<String, (String, bool)>,
+) -> HashMap<String, CachedStat> {
+    let Ok(index) = repo.index_or_empty() else {
+        return HashMap::new();
+    };
+    let written = gix::index::entry::stat::Time::from(index.timestamp());
+    index
+        .entries()
+        .iter()
+        .filter_map(|e| {
+            let path = e.path(&index).to_string();
+            let (oid, _) = head.get(&path)?;
+            let m = e.stat.mtime;
+            let in_head = gix::ObjectId::from_hex(oid.as_bytes()).ok()?;
+            if e.id != in_head || (m.secs, m.nsecs) >= (written.secs, written.nsecs) {
+                return None;
+            }
+            Some((path, (e.stat.size, m.secs, m.nsecs)))
+        })
+        .collect()
+}
+
+fn stat_matches(meta: &fs::Metadata, cached: Option<&CachedStat>) -> bool {
+    let (Some(&(size, secs, nsecs)), Ok(modified)) = (cached, meta.modified()) else {
+        return false;
+    };
+    let Ok(t) = modified.duration_since(std::time::UNIX_EPOCH) else {
+        return false;
+    };
+    meta.len() as u32 == size && t.as_secs() as u32 == secs && t.subsec_nanos() == nsecs
+}
+
 #[cfg(unix)]
 fn is_exec(meta: &fs::Metadata, _head: bool) -> bool {
     use std::os::unix::fs::PermissionsExt;
@@ -225,6 +264,17 @@ pub fn info(root: &Path) -> Result<Option<WorkspaceInfo>, String> {
     Ok(Some(WorkspaceInfo { name, git }))
 }
 
+/// A repo-relative, `/`-separated path that cannot leave the work tree. Unlike
+/// a plugin's own file paths, `:` is allowed where the OS allows it in names.
+fn safe_repo_path(p: &str) -> bool {
+    !p.is_empty()
+        && !p.starts_with('/')
+        && !p.contains('\\')
+        && (!cfg!(windows) || !p.contains(':'))
+        && p.split('/')
+            .all(|seg| !seg.is_empty() && seg != "." && seg != "..")
+}
+
 fn push(out: &mut Vec<Change>, c: Change) -> Result<(), String> {
     out.push(c);
     if out.len() > MAX_CHANGES {
@@ -245,6 +295,14 @@ pub fn changes(root: &Path) -> Result<Vec<Change>, String> {
         p => format!("{p}/"),
     };
     let head = head_blobs(&repo)?;
+    let stats = clean_stats(&repo, &head);
+    let differs =
+        |path: &str, abs: &Path, meta: &fs::Metadata, oid: &str| -> Result<bool, String> {
+            if stat_matches(meta, stats.get(path)) {
+                return Ok(false);
+            }
+            Ok(file_oid(abs, autocrlf)? != oid)
+        };
     let mut out = Vec::new();
     let mut seen = HashSet::new();
 
@@ -271,7 +329,7 @@ pub fn changes(root: &Path) -> Result<Vec<Change>, String> {
         let in_head = head.get(&path);
         let status = match in_head {
             None => Some(Status::Added),
-            Some((oid, _)) if file_oid(entry.path(), autocrlf)? != *oid => Some(Status::Modified),
+            Some((oid, _)) if differs(&path, entry.path(), &meta, oid)? => Some(Status::Modified),
             Some(_) => None,
         };
         if let Some(status) = status {
@@ -297,7 +355,7 @@ pub fn changes(root: &Path) -> Result<Vec<Change>, String> {
         match fs::symlink_metadata(&abs) {
             Ok(m) if m.is_file() => {
                 // Tracked but now ignored: the walk skipped it, git still tracks it.
-                if file_oid(&abs, autocrlf)? != *oid {
+                if differs(path, &abs, &m, oid)? {
                     push(
                         &mut out,
                         Change {
@@ -326,7 +384,7 @@ pub fn changes(root: &Path) -> Result<Vec<Change>, String> {
 }
 
 pub fn read_file(root: &Path, path: &str, allowed: &HashSet<String>) -> Result<Vec<u8>, String> {
-    if !safe_relative(path) {
+    if !safe_repo_path(path) {
         return Err(format!("bad_request: invalid path {path:?}"));
     }
     if !allowed.contains(path) || path.split('/').any(|c| c == ".git") {
@@ -571,6 +629,32 @@ mod tests {
         assert!(changes(d.path()).unwrap_err().starts_with("too_large:"));
     }
 
+    /// Files whose stat still matches the index entry, and whose entry equals
+    /// HEAD, are trusted without being read, the way git does it.
+    #[cfg(unix)]
+    #[test]
+    fn unchanged_files_with_matching_index_stat_are_not_read() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = repo();
+        let p = d.path();
+        let f = p.join("shots/b.png");
+        // Age the file so the index is written after it (not racy), then
+        // refresh the index's stat data.
+        let past = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&f)
+            .unwrap()
+            .set_modified(past)
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        git(p, &["update-index", "--refresh"]);
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let listed = changes(p);
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(listed.unwrap(), vec![]);
+    }
+
     #[test]
     fn changes_outside_a_repo_is_bad_request() {
         let d = tempfile::tempdir().unwrap();
@@ -597,6 +681,25 @@ mod tests {
         assert!(read_file(p, "../x", &allowed)
             .unwrap_err()
             .starts_with("bad_request:"));
+    }
+
+    /// Legal on macOS and Linux, and common in screenshot names.
+    #[cfg(unix)]
+    #[test]
+    fn listed_files_with_a_colon_in_the_name_can_be_read() {
+        let d = repo();
+        let p = d.path();
+        std::fs::write(p.join("shots/at 12:30.png"), [5u8]).unwrap();
+        let listed = changes(p).unwrap();
+        assert_eq!(
+            summary(&listed),
+            vec![("shots/at 12:30.png".into(), Status::Added)]
+        );
+        let allowed = HashSet::from(["shots/at 12:30.png".to_string()]);
+        assert_eq!(
+            read_file(p, "shots/at 12:30.png", &allowed).unwrap(),
+            vec![5u8]
+        );
     }
 
     #[cfg(unix)]
