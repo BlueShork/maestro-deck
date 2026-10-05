@@ -14,6 +14,7 @@ pub mod manifest;
 pub mod protocol;
 pub mod secrets;
 pub mod store;
+pub mod workspace;
 
 use std::path::PathBuf;
 

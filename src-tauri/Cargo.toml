@@ -81,6 +81,10 @@ parking_lot = "0.12"
 bytes = "1.8"
 hex = "0.4"
 sha2 = "0.10"
+# Workspace git status for plugins (no git binary needed).
+gix = { version = "0.88", default-features = false, features = ["sha1"] }
+ignore = "0.4"
+sha1 = "0.10"
 
 # YAML for Maestro flow generation
 serde_yaml = "0.9"
