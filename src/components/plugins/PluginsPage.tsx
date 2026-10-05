@@ -7,7 +7,7 @@ import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PixelChevron, PixelMosaic } from "@/components/brand/Pixel";
-import { PageHeader, PageTitle } from "@/components/PageHeader";
+import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { buildCatalog } from "@/lib/plugins/registry";
 import type { CatalogItem } from "@/lib/plugins/types";
@@ -77,19 +77,23 @@ export function PluginsPage() {
           rows={4}
           palette="orange"
           seed={7}
-          className="h-[clamp(96px,10vw,160px)] w-full border-b border-border"
-        />
+          className="h-[clamp(120px,12vw,190px)] w-full border-b border-border"
+        >
+          {/* Title tab sits on the banner's bottom edge, aligned with the cards. */}
+          <div className="relative mx-auto flex h-full max-w-5xl items-end px-6">
+            <h1 className="border border-b-0 border-border bg-background px-5 pb-3 pt-4 font-display text-[34px] font-medium leading-none tracking-[-0.045em] text-foreground">
+              Marketplace
+            </h1>
+          </div>
+        </PixelMosaic>
 
-        <div className="mx-auto max-w-5xl px-6 py-10">
-          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-            <div className="max-w-xl">
-              <span className="mono-label mb-3 block">Marketplace</span>
-              <PageTitle
-                title="Plugins"
-                description="Connect Maestro Deck to the tools your team already uses. An installed plugin opens in the right-hand panel, next to your device."
-              />
-            </div>
-            <span className="mono-label pb-1">
+        <div className="mx-auto max-w-5xl px-6 py-8">
+          <div className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
+            <p className="max-w-xl text-[13px] leading-relaxed text-muted-foreground">
+              Connect Maestro Deck to the tools your team already uses. An installed plugin opens in
+              the right-hand panel, next to your device.
+            </p>
+            <span className="mono-label">
               {installedCount} installed · {items.length} in the marketplace
             </span>
           </div>
