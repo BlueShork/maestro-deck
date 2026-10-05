@@ -161,3 +161,32 @@ pub async fn plugin_secret_delete(plugin_id: String, key: String) -> Result<(), 
     secret_manifest(&root, &plugin_id, &key)?;
     secrets::delete(&root, &plugin_id, &key)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Network: installs every plugin of the live registry into a temp dir.
+    /// Run with `cargo test --lib plugins::commands -- --ignored`.
+    #[tokio::test]
+    #[ignore]
+    async fn live_registry_installs() {
+        #[derive(serde::Deserialize)]
+        struct Doc {
+            plugins: Vec<RegistryPin>,
+        }
+        let doc: Doc = serde_json::from_str(&plugins_registry().await.unwrap()).unwrap();
+        assert!(!doc.plugins.is_empty());
+        let root = tempfile::tempdir().unwrap();
+        for pin in doc.plugins {
+            let bytes = download(&pin.url, DOWNLOAD_CAP, Duration::from_secs(60))
+                .await
+                .unwrap();
+            let m = store::install_bytes(root.path(), &pin, &bytes, APP_VERSION).unwrap();
+            assert_eq!(m.id, pin.id);
+        }
+        assert!(store::list(root.path(), APP_VERSION)
+            .iter()
+            .all(|p| p.error.is_none()));
+    }
+}
