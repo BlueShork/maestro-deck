@@ -11,6 +11,7 @@
 pub mod commands;
 pub mod http;
 pub mod manifest;
+pub mod protocol;
 pub mod secrets;
 pub mod store;
 

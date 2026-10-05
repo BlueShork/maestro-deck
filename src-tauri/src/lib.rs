@@ -82,6 +82,10 @@ pub fn run() {
     builder
         .manage(state::AppState::default())
         .manage(app_menu::MenuChecks::default())
+        .register_asynchronous_uri_scheme_protocol("mdplugin", |_ctx, request, responder| {
+            let path = request.uri().path().to_string();
+            std::thread::spawn(move || responder.respond(plugins::protocol::respond(&path)));
+        })
         .invoke_handler(tauri::generate_handler![
             ping,
             app_menu::set_menu_checked,
