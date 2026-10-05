@@ -8,7 +8,10 @@
 //! plugin's manifest from disk each time, so a compromised webview cannot widen
 //! a plugin's permissions.
 
+pub mod commands;
+pub mod http;
 pub mod manifest;
+pub mod secrets;
 pub mod store;
 
 use std::path::PathBuf;

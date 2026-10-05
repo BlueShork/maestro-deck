@@ -68,14 +68,14 @@ pub async fn delete_credential(provider: String) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 #[cfg(not(target_os = "windows"))]
-fn write_payload(account: &str, payload: &str) -> Result<(), String> {
+pub(crate) fn write_payload(account: &str, payload: &str) -> Result<(), String> {
     entry(account)?
         .set_password(payload)
         .map_err(|err| format!("keyring write failed: {err}"))
 }
 
 #[cfg(not(target_os = "windows"))]
-fn read_payload(account: &str) -> Result<Option<String>, String> {
+pub(crate) fn read_payload(account: &str) -> Result<Option<String>, String> {
     match entry(account)?.get_password() {
         Ok(value) => Ok(Some(value)),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -84,7 +84,7 @@ fn read_payload(account: &str) -> Result<Option<String>, String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn delete_payload(account: &str) -> Result<(), String> {
+pub(crate) fn delete_payload(account: &str) -> Result<(), String> {
     match entry(account)?.delete_credential() {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
@@ -105,7 +105,7 @@ fn chunk_account(account: &str, idx: usize) -> String {
 }
 
 #[cfg(target_os = "windows")]
-fn write_payload(account: &str, payload: &str) -> Result<(), String> {
+pub(crate) fn write_payload(account: &str, payload: &str) -> Result<(), String> {
     // Always clear any previous chunks for this account, otherwise switching
     // from a large payload back to a small one would leave stale chunks
     // behind that could re-surface on a future read.
@@ -154,7 +154,7 @@ fn split_on_char_boundary(s: &str, max_bytes: usize) -> Vec<String> {
 }
 
 #[cfg(target_os = "windows")]
-fn read_payload(account: &str) -> Result<Option<String>, String> {
+pub(crate) fn read_payload(account: &str) -> Result<Option<String>, String> {
     let primary = match entry(account)?.get_password() {
         Ok(v) => v,
         Err(keyring::Error::NoEntry) => return Ok(None),
@@ -180,7 +180,7 @@ fn read_payload(account: &str) -> Result<Option<String>, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn delete_payload(account: &str) -> Result<(), String> {
+pub(crate) fn delete_payload(account: &str) -> Result<(), String> {
     delete_chunks(account);
     match entry(account)?.delete_credential() {
         Ok(()) => Ok(()),
