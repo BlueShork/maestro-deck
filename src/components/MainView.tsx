@@ -3,7 +3,7 @@
 
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { tempDir } from "@tauri-apps/api/path";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { CloudLivePreview } from "@/components/CloudLivePreview";
 import { DeviceSelector } from "@/components/DeviceSelector";
@@ -18,6 +18,7 @@ import { ScreenshotReview } from "@/components/ScreenshotReview";
 import { Toolbar } from "@/components/Toolbar";
 import { WorkspaceTree } from "@/components/WorkspaceTree";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { PluginPanel } from "@/components/plugins/PluginPanel";
 import { ipc } from "@/lib/ipc";
 import { flowDisplayName, parseFlow } from "@/lib/flowAst";
 import { buildPartialFlow } from "@/lib/partialFlow";
@@ -29,6 +30,7 @@ import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore } from "@/stores/panelsStore";
+import { usePluginsStore } from "@/stores/pluginsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { startCloudRun, stopWatchingCloudRun } from "@/lib/cloudRunner";
@@ -58,6 +60,11 @@ export function MainView() {
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const panels = usePanelsStore((s) => s.visible);
   const chatOpen = useChatStore((s) => s.isOpen);
+  const pluginPanel = usePluginsStore((s) => s.openPanel);
+  const rightOpen = chatOpen || pluginPanel !== null;
+  useEffect(() => {
+    void usePluginsStore.getState().refreshInstalled();
+  }, []);
   const cloudJob = useRunStore((s) => s.cloud);
   // Every cloud fleet uploads frames: the emulator runner, the Mac worker and
   // the device-farm worker all write the same live.jpg.
@@ -75,7 +82,7 @@ export function MainView() {
     100 -
     (panels.workspace ? WORKSPACE_SIZE : 0) -
     (panels.inspector ? INSPECTOR_SIZE : 0) -
-    (chatOpen ? CHAT_SIZE : 0);
+    (rightOpen ? CHAT_SIZE : 0);
 
   // The bottom row (console) opens at its minimum height so the
   // editor + device get the most room; the user can drag it taller and the
@@ -351,11 +358,11 @@ export function MainView() {
               </PanelGroup>
             </Panel>
 
-            {chatOpen ? (
+            {rightOpen ? (
               <>
                 <PanelResizeHandle className={RESIZE_HANDLE_H} />
                 <Panel id="chat" order={4} defaultSize={CHAT_SIZE} minSize={20} maxSize={50}>
-                  <ChatPanel />
+                  {chatOpen ? <ChatPanel /> : <PluginPanel />}
                 </Panel>
               </>
             ) : null}

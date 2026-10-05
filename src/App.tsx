@@ -9,6 +9,7 @@ import { AccountPage } from "@/components/AccountPage";
 import { CloudInviteDialog } from "@/components/CloudInviteDialog";
 import { DevicePicker } from "@/components/devices/DevicePicker";
 import { ImageBankPage } from "@/components/ImageBankPage";
+import { PluginsPage } from "@/components/plugins/PluginsPage";
 import { MainView } from "@/components/MainView";
 import { OnboardingOverlay } from "@/components/OnboardingOverlay";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
@@ -388,6 +389,7 @@ export default function App() {
         <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
         <Route path="/image-bank" element={<ImageBankPage />} />
+        <Route path="/plugins" element={<PluginsPage />} />
         <Route path="/account" element={<AccountPage />} />
         {/* MainView already covers "/"; redirect any other unknown path there. */}
         <Route path="*" element={<Navigate to="/" replace />} />
