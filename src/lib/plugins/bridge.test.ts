@@ -44,6 +44,12 @@ function deps(over: Partial<BridgeDeps> = {}): BridgeDeps {
     toast: vi.fn(),
     appInfo: () => ({ appVersion: "1.1.0", platform: "macos" }),
     storage: memoryStorage(),
+    workspaceRoot: () => "/repo",
+    workspaceInfo: vi.fn(async () => ({ name: "repo", git: null })),
+    workspaceChanges: vi.fn(async () => [
+      { path: "a.yaml", status: "added" as const, size: 1, executable: false },
+    ]),
+    workspaceRead: vi.fn(async () => "aGk="),
     ...over,
   };
 }
@@ -169,5 +175,48 @@ describe("clearPluginStorage", () => {
     expect(s.getItem(storageKey("jira", "a"))).toBeNull();
     expect(s.getItem(storageKey("jira-x", "a"))).toBe("1");
     expect(s.getItem("maestro-deck.panels")).toBe("1");
+  });
+});
+
+describe("workspace methods", () => {
+  const ws = (over: Partial<BridgeDeps> = {}) => {
+    const d = deps(over);
+    d.manifest = { ...d.manifest, permissions: { ...d.manifest.permissions, workspace: true } };
+    return d;
+  };
+
+  it("are forbidden without the permission", async () => {
+    for (const m of ["workspace.info", "workspace.changes", "workspace.readFile"]) {
+      const r = await handleRpc(rpc(m, { path: "a.yaml" }), deps());
+      expect(r).toMatchObject({ ok: false, error: { code: "forbidden" } });
+    }
+  });
+
+  it("route to the open folder", async () => {
+    const d = ws();
+    expect(await handleRpc(rpc("workspace.info"), d)).toMatchObject({
+      ok: true,
+      result: { name: "repo" },
+    });
+    expect(d.workspaceInfo).toHaveBeenCalledWith("/repo");
+    expect(await handleRpc(rpc("workspace.changes"), d)).toMatchObject({
+      ok: true,
+      result: { files: [{ path: "a.yaml" }] },
+    });
+    expect(await handleRpc(rpc("workspace.readFile", { path: "a.yaml" }), d)).toMatchObject({
+      ok: true,
+      result: { base64: "aGk=" },
+    });
+    expect(d.workspaceRead).toHaveBeenCalledWith("/repo", "a.yaml");
+  });
+
+  it("info is null and the rest is bad_request with no folder open", async () => {
+    const d = ws({ workspaceRoot: () => null });
+    await handleRpc(rpc("workspace.info"), d);
+    expect(d.workspaceInfo).toHaveBeenCalledWith(null);
+    expect(await handleRpc(rpc("workspace.changes"), d)).toMatchObject({
+      ok: false,
+      error: { code: "bad_request" },
+    });
   });
 });

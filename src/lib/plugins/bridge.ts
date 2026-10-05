@@ -38,6 +38,11 @@ export interface BridgeDeps {
   toast(t: ToastRequest): void;
   appInfo(): { appVersion: string; platform: string };
   storage: Pick<Storage, "getItem" | "setItem">;
+  /** The folder open in the app, or null. The plugin never names it. */
+  workspaceRoot(): string | null;
+  workspaceInfo(root: string | null): Promise<unknown>;
+  workspaceChanges(root: string): Promise<unknown[]>;
+  workspaceRead(root: string, path: string): Promise<string>;
 }
 
 const KEY_RE = /^[a-z0-9_-]{1,64}$/;
@@ -107,6 +112,18 @@ function requireSecrets(deps: BridgeDeps) {
   }
 }
 
+function requireWorkspace(deps: BridgeDeps): void {
+  if (!deps.manifest.permissions.workspace) {
+    throw new RpcError("forbidden", "this plugin did not request workspace access");
+  }
+}
+
+function openRoot(deps: BridgeDeps): string {
+  const root = deps.workspaceRoot();
+  if (!root) throw new RpcError("bad_request", "no folder is open in Maestro Deck");
+  return root;
+}
+
 function toastRequest(p: Record<string, unknown>): ToastRequest {
   const kind = str(p, "kind");
   if (kind !== "success" && kind !== "error" && kind !== "info")
@@ -162,6 +179,17 @@ async function dispatch(req: RpcRequest, deps: BridgeDeps): Promise<unknown> {
     case "ui.openExternal":
       await deps.openExternal(str(obj(req.params), "url"));
       return null;
+    case "workspace.info":
+      requireWorkspace(deps);
+      return deps.workspaceInfo(deps.workspaceRoot());
+    case "workspace.changes":
+      requireWorkspace(deps);
+      return { files: await deps.workspaceChanges(openRoot(deps)) };
+    case "workspace.readFile": {
+      requireWorkspace(deps);
+      const path = str(obj(req.params), "path");
+      return { base64: await deps.workspaceRead(openRoot(deps), path) };
+    }
     default:
       throw new RpcError("unknown_method", `unknown method: ${req.method}`);
   }

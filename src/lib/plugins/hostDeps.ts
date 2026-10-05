@@ -5,6 +5,7 @@ import { ipc } from "@/lib/ipc";
 import type { BridgeDeps } from "@/lib/plugins/bridge";
 import type { PluginManifest } from "@/lib/plugins/types";
 import { toast } from "@/stores/toastStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 function platform(): string {
   const ua = navigator.userAgent;
@@ -36,5 +37,9 @@ export function makeBridgeDeps(manifest: PluginManifest): BridgeDeps {
     },
     appInfo: () => ({ appVersion: __APP_VERSION__, platform: platform() }),
     storage: localStorage,
+    workspaceRoot: () => useWorkspaceStore.getState().folderPath,
+    workspaceInfo: (root) => ipc.pluginWorkspaceInfo(id, root),
+    workspaceChanges: (root) => ipc.pluginWorkspaceChanges(id, root),
+    workspaceRead: (root, path) => ipc.pluginWorkspaceRead(id, root, path),
   };
 }

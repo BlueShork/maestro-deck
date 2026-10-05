@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/ipc", () => ({ ipc: {} }));
 
 import type { PluginManifest } from "@/lib/plugins/types";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 import { PluginHost } from "./PluginHost";
 
@@ -52,5 +53,14 @@ describe("PluginHost", () => {
     fireEvent.load(frame);
     expect(screen.queryByTitle("Jira")).toBeNull();
     expect(screen.getByText(/navigated away/i)).toBeTruthy();
+  });
+
+  it("tells the plugin when the workspace folder changes", () => {
+    render(<PluginHost manifest={manifest} />);
+    const frame = screen.getByTitle("Jira") as HTMLIFrameElement;
+    fireEvent.load(frame);
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    act(() => useWorkspaceStore.getState().setFolder("/other"));
+    expect(post).toHaveBeenCalledWith({ type: "md-event", name: "workspace" }, "*");
   });
 });

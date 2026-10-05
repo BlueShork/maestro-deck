@@ -8,6 +8,7 @@ import { makeBridgeDeps } from "@/lib/plugins/hostDeps";
 import { readThemeVars } from "@/lib/plugins/theme";
 import type { PluginManifest } from "@/lib/plugins/types";
 import { pluginUrl } from "@/lib/plugins/url";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 /**
  * One plugin, isolated: `allow-scripts allow-forms` and NOT `allow-same-origin`
@@ -56,6 +57,16 @@ export function PluginHost({ manifest }: { manifest: PluginManifest }) {
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => obs.disconnect();
   }, [sendTheme]);
+
+  useEffect(
+    () =>
+      useWorkspaceStore.subscribe((s, prev) => {
+        if (s.folderPath !== prev.folderPath && loads.current === 1) {
+          frame.current?.contentWindow?.postMessage({ type: "md-event", name: "workspace" }, "*");
+        }
+      }),
+    [],
+  );
 
   if (stopped) {
     return (
