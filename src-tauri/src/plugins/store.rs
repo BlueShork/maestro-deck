@@ -105,7 +105,21 @@ pub fn installed_manifest(root: &Path, id: &str) -> Result<Manifest, String> {
         .into_iter()
         .find(|e| e.id == id)
         .ok_or_else(|| format!("forbidden: plugin {id} is not installed"))?;
-    load_manifest(&plugin_dir(root, &entry))
+    entry_manifest(root, &entry)
+}
+
+/// The entry's manifest, which must still name the entry: an edited manifest or
+/// a dev folder rebuilt under another id would otherwise run with that other
+/// plugin's id, and so with its secrets.
+fn entry_manifest(root: &Path, entry: &InstalledEntry) -> Result<Manifest, String> {
+    let m = load_manifest(&plugin_dir(root, entry))?;
+    if m.id != entry.id {
+        return Err(format!(
+            "manifest.json declares id {} but the plugin is installed as {}",
+            m.id, entry.id
+        ));
+    }
+    Ok(m)
 }
 
 fn check_compat(m: &Manifest, app_version: &str) -> Result<(), String> {
@@ -255,8 +269,8 @@ pub fn list(root: &Path, app_version: &str) -> Vec<InstalledPlugin> {
     read_installed(root)
         .into_iter()
         .map(|e| {
-            let loaded = load_manifest(&plugin_dir(root, &e))
-                .and_then(|m| check_compat(&m, app_version).map(|()| m));
+            let loaded =
+                entry_manifest(root, &e).and_then(|m| check_compat(&m, app_version).map(|()| m));
             let (manifest, error) = match loaded {
                 Ok(m) => (Some(m), None),
                 Err(err) => (None, Some(err)),
@@ -434,6 +448,19 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("manifest.json invalid"));
+    }
+
+    #[test]
+    fn manifest_id_must_match_the_installed_entry() {
+        let root = tempfile::tempdir().unwrap();
+        let zip = good_zip();
+        install_bytes(root.path(), &pin_for(&zip), &zip, "1.1.0").unwrap();
+        let swapped = MANIFEST.replace(r#""id":"jira""#, r#""id":"linear""#);
+        std::fs::write(root.path().join("jira/manifest.json"), swapped).unwrap();
+        let listed = list(root.path(), "1.1.0");
+        assert!(listed[0].manifest.is_none());
+        assert!(listed[0].error.as_deref().unwrap().contains("linear"));
+        assert!(installed_manifest(root.path(), "jira").is_err());
     }
 
     #[test]

