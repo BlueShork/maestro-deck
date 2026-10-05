@@ -9,6 +9,7 @@
 //! a plugin's permissions.
 
 pub mod manifest;
+pub mod store;
 
 use std::path::PathBuf;
 
