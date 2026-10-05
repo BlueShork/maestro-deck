@@ -122,8 +122,12 @@ fn entry_manifest(root: &Path, entry: &InstalledEntry) -> Result<Manifest, Strin
     Ok(m)
 }
 
-fn check_compat(m: &Manifest, app_version: &str) -> Result<(), String> {
-    if manifest::version_at_least(app_version, &m.min_app_version) {
+/// Plugins loaded from a local folder in a debug build skip the check, so a
+/// plugin targeting the next release can be developed against this one.
+fn check_compat(m: &Manifest, app_version: &str, dev: bool) -> Result<(), String> {
+    if (dev && cfg!(debug_assertions))
+        || manifest::version_at_least(app_version, &m.min_app_version)
+    {
         Ok(())
     } else {
         Err(format!(
@@ -196,7 +200,7 @@ pub fn install_bytes(
                 m.id, m.version, pin.id, pin.version
             ));
         }
-        check_compat(&m, app_version)?;
+        check_compat(&m, app_version, false)?;
         Ok(m)
     });
     let m = match checked {
@@ -234,7 +238,7 @@ pub fn register_dev(root: &Path, dir: &Path, app_version: &str) -> Result<Manife
         .canonicalize()
         .map_err(|e| format!("cannot open folder: {e}"))?;
     let m = load_manifest(&dir)?;
-    check_compat(&m, app_version)?;
+    check_compat(&m, app_version, true)?;
     upsert(
         root,
         InstalledEntry {
@@ -269,8 +273,8 @@ pub fn list(root: &Path, app_version: &str) -> Vec<InstalledPlugin> {
     read_installed(root)
         .into_iter()
         .map(|e| {
-            let loaded =
-                entry_manifest(root, &e).and_then(|m| check_compat(&m, app_version).map(|()| m));
+            let loaded = entry_manifest(root, &e)
+                .and_then(|m| check_compat(&m, app_version, e.dev_path.is_some()).map(|()| m));
             let (manifest, error) = match loaded {
                 Ok(m) => (Some(m), None),
                 Err(err) => (None, Some(err)),
@@ -461,6 +465,38 @@ mod tests {
         assert!(listed[0].manifest.is_none());
         assert!(listed[0].error.as_deref().unwrap().contains("linear"));
         assert!(installed_manifest(root.path(), "jira").is_err());
+    }
+
+    #[test]
+    fn dev_plugins_skip_min_app_version_in_debug_builds() {
+        let root = tempfile::tempdir().unwrap();
+        let dev = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dev.path().join("manifest.json"),
+            r#"{"id":"github","name":"GitHub","version":"1.0.0","minAppVersion":"9.0.0","entry":"index.html"}"#,
+        )
+        .unwrap();
+        std::fs::write(dev.path().join("index.html"), "x").unwrap();
+        // Tests build with debug assertions, like `tauri dev`.
+        register_dev(root.path(), dev.path(), "1.1.0").unwrap();
+        let listed = list(root.path(), "1.1.0");
+        assert!(listed[0].manifest.is_some() && listed[0].error.is_none());
+    }
+
+    #[test]
+    fn installed_plugins_still_need_min_app_version() {
+        let root = tempfile::tempdir().unwrap();
+        let m = MANIFEST.replace("\"minAppVersion\":\"1.1.0\"", "\"minAppVersion\":\"9.0.0\"");
+        let zip = make_zip(&[("manifest.json", m.as_bytes()), ("index.html", b"x")]);
+        let pin = RegistryPin {
+            id: "jira".into(),
+            version: "1.0.0".into(),
+            url: "https://example.com/p.zip".into(),
+            sha256: sha256_hex(&zip),
+        };
+        assert!(install_bytes(root.path(), &pin, &zip, "1.1.0")
+            .unwrap_err()
+            .contains("requires Maestro Deck 9.0.0"));
     }
 
     #[test]

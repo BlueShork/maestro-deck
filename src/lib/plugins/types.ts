@@ -5,6 +5,7 @@ export interface PluginPermissions {
   http: string[];
   open: string[];
   secrets: boolean;
+  workspace?: boolean;
 }
 export interface PluginManifest {
   id: string;

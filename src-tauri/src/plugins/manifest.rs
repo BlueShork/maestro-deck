@@ -34,6 +34,8 @@ pub struct Permissions {
     /// Extra origins `ui.openExternal` may open (the `http` ones are implied).
     pub open: Vec<String>,
     pub secrets: bool,
+    /// Whether the plugin may read the workspace through `workspace.*`.
+    pub workspace: bool,
 }
 
 pub fn valid_id(id: &str) -> bool {
@@ -169,6 +171,17 @@ mod tests {
                 "permissions":{"http":["https://*.atlassian.net"],"open":["https://id.atlassian.com"],"secrets":true}}"#,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn workspace_permission_defaults_to_false() {
+        assert!(!sample().permissions.workspace);
+        let m: Manifest = serde_json::from_str(
+            r#"{"id":"github","name":"GitHub","version":"1.0.0","minAppVersion":"1.2.0",
+                "entry":"index.html","permissions":{"workspace":true}}"#,
+        )
+        .unwrap();
+        assert!(m.permissions.workspace);
     }
 
     #[test]
