@@ -22,6 +22,8 @@ import type {
   PluginHttpRequest,
   PluginHttpResponse,
   PluginManifest,
+  PluginWorkspaceChange,
+  PluginWorkspaceInfo,
   RegistryEntry,
 } from "@/lib/plugins/types";
 import type { BankGroup, RunReport } from "@/types/visualRegression";
@@ -251,6 +253,12 @@ export const ipc = {
     call<void>("plugin_secret_set", { pluginId, key, value }),
   pluginSecretDelete: (pluginId: string, key: string) =>
     call<void>("plugin_secret_delete", { pluginId, key }),
+  pluginWorkspaceInfo: (pluginId: string, workspace: string | null) =>
+    call<PluginWorkspaceInfo | null>("plugin_workspace_info", { pluginId, workspace }),
+  pluginWorkspaceChanges: (pluginId: string, workspace: string) =>
+    call<PluginWorkspaceChange[]>("plugin_workspace_changes", { pluginId, workspace }),
+  pluginWorkspaceRead: (pluginId: string, workspace: string, path: string) =>
+    call<string>("plugin_workspace_read", { pluginId, workspace, path }),
 };
 
 export interface IosPhysicalSetupStatus {

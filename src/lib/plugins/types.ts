@@ -54,3 +54,17 @@ export interface PluginHttpResponse {
   headers: Record<string, string>;
   body: string;
 }
+export interface PluginWorkspaceInfo {
+  name: string;
+  git: {
+    branch: string | null;
+    head: string | null;
+    github: { owner: string; repo: string } | null;
+  } | null;
+}
+export interface PluginWorkspaceChange {
+  path: string;
+  status: "added" | "modified" | "deleted";
+  size: number;
+  executable: boolean;
+}

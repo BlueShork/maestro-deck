@@ -82,6 +82,7 @@ pub fn run() {
     builder
         .manage(state::AppState::default())
         .manage(app_menu::MenuChecks::default())
+        .manage(plugins::commands::WorkspaceAllow::default())
         .register_asynchronous_uri_scheme_protocol("mdplugin", |_ctx, request, responder| {
             let path = request.uri().path().to_string();
             std::thread::spawn(move || responder.respond(plugins::protocol::respond(&path)));
@@ -150,6 +151,9 @@ pub fn run() {
             plugins::commands::plugin_secret_get,
             plugins::commands::plugin_secret_set,
             plugins::commands::plugin_secret_delete,
+            plugins::commands::plugin_workspace_info,
+            plugins::commands::plugin_workspace_changes,
+            plugins::commands::plugin_workspace_read,
             get_tool_paths,
             set_tool_paths,
             env_check::environment_status,

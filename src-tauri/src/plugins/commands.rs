@@ -6,15 +6,18 @@
 //! Every per-plugin command takes the plugin id and re-reads its manifest from
 //! disk: the webview says which plugin is asking, Rust decides what it may do.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use base64::Engine as _;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
 use super::http::{self, HttpRequest, HttpResponse};
 use super::manifest::{origin_allowed, valid_id, valid_key, Manifest};
 use super::store::{self, InstalledPlugin, RegistryPin};
+use super::workspace::{self, Change, Status, WorkspaceInfo};
 use super::{plugins_root, secrets, APP_VERSION, REGISTRY_URL};
 
 const DOWNLOAD_CAP: usize = 20 * 1024 * 1024;
@@ -162,6 +165,95 @@ pub async fn plugin_secret_delete(plugin_id: String, key: String) -> Result<(), 
     secrets::delete(&root, &plugin_id, &key)
 }
 
+/// Paths each plugin may read: the added and modified files from its latest
+/// `workspace.changes` for that root. A new folder or a new listing replaces
+/// it, so a plugin can only send what it just showed the QA.
+#[derive(Default)]
+pub struct WorkspaceAllow(parking_lot::Mutex<HashMap<(String, PathBuf), HashSet<String>>>);
+
+impl WorkspaceAllow {
+    fn replace(&self, plugin_id: &str, root: &Path, paths: HashSet<String>) {
+        self.0
+            .lock()
+            .insert((plugin_id.to_string(), root.to_path_buf()), paths);
+    }
+
+    fn get(&self, plugin_id: &str, root: &Path) -> HashSet<String> {
+        self.0
+            .lock()
+            .get(&(plugin_id.to_string(), root.to_path_buf()))
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
+fn require_workspace(m: &Manifest) -> Result<(), String> {
+    if m.permissions.workspace {
+        Ok(())
+    } else {
+        Err("forbidden: this plugin did not request workspace access".into())
+    }
+}
+
+fn readable(files: &[Change]) -> HashSet<String> {
+    files
+        .iter()
+        .filter(|c| c.status != Status::Deleted)
+        .map(|c| c.path.clone())
+        .collect()
+}
+
+#[tauri::command]
+pub async fn plugin_workspace_info(
+    plugin_id: String,
+    workspace: Option<String>,
+) -> Result<Option<WorkspaceInfo>, String> {
+    require_workspace(&manifest_for(&root()?, &plugin_id)?)?;
+    let Some(ws) = workspace else {
+        return Ok(None);
+    };
+    tokio::task::spawn_blocking(move || workspace::info(Path::new(&ws)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn plugin_workspace_changes(
+    allow: tauri::State<'_, WorkspaceAllow>,
+    plugin_id: String,
+    workspace: String,
+) -> Result<Vec<Change>, String> {
+    require_workspace(&manifest_for(&root()?, &plugin_id)?)?;
+    let ws = PathBuf::from(&workspace);
+    let dir = ws.clone();
+    let files = tokio::task::spawn_blocking(move || workspace::changes(&dir))
+        .await
+        .map_err(|e| e.to_string())?;
+    // A failed listing clears the allowlist too: nothing stale stays readable.
+    allow.replace(
+        &plugin_id,
+        &ws,
+        files.as_deref().map(readable).unwrap_or_default(),
+    );
+    files
+}
+
+#[tauri::command]
+pub async fn plugin_workspace_read(
+    allow: tauri::State<'_, WorkspaceAllow>,
+    plugin_id: String,
+    workspace: String,
+    path: String,
+) -> Result<String, String> {
+    require_workspace(&manifest_for(&root()?, &plugin_id)?)?;
+    let ws = PathBuf::from(&workspace);
+    let allowed = allow.get(&plugin_id, &ws);
+    let bytes = tokio::task::spawn_blocking(move || workspace::read_file(&ws, &path, &allowed))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,5 +280,48 @@ mod tests {
         assert!(store::list(root.path(), APP_VERSION)
             .iter()
             .all(|p| p.error.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::*;
+
+    #[test]
+    fn allowlist_is_per_plugin_and_per_root() {
+        let allow = WorkspaceAllow::default();
+        allow.replace("github", Path::new("/a"), ["x.yaml".to_string()].into());
+        assert!(allow.get("github", Path::new("/a")).contains("x.yaml"));
+        assert!(allow.get("github", Path::new("/b")).is_empty());
+        assert!(allow.get("jira", Path::new("/a")).is_empty());
+        allow.replace("github", Path::new("/a"), HashSet::new());
+        assert!(allow.get("github", Path::new("/a")).is_empty());
+    }
+
+    #[test]
+    fn workspace_needs_the_permission() {
+        let mut m: Manifest = serde_json::from_str(
+            r#"{"id":"github","name":"G","version":"1.0.0","minAppVersion":"1.2.0","entry":"index.html"}"#,
+        )
+        .unwrap();
+        assert!(require_workspace(&m).unwrap_err().starts_with("forbidden:"));
+        m.permissions.workspace = true;
+        assert!(require_workspace(&m).is_ok());
+    }
+
+    #[test]
+    fn readable_paths_exclude_deletions() {
+        let c = |p: &str, status| Change {
+            path: p.into(),
+            status,
+            size: 0,
+            executable: false,
+        };
+        let set = readable(&[
+            c("a", Status::Added),
+            c("m", Status::Modified),
+            c("d", Status::Deleted),
+        ]);
+        assert_eq!(set, HashSet::from(["a".to_string(), "m".to_string()]));
     }
 }
