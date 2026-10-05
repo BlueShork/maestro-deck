@@ -25,6 +25,7 @@ pub mod maestro_health;
 pub mod maestro_mcp;
 pub mod metrics;
 pub mod onboarding;
+pub mod plugins;
 pub mod process_ext;
 pub mod prockill;
 pub mod runner;
