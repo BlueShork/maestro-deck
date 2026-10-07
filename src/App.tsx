@@ -9,6 +9,8 @@ import { AccountPage } from "@/components/AccountPage";
 import { CloudInviteDialog } from "@/components/CloudInviteDialog";
 import { DevicePicker } from "@/components/devices/DevicePicker";
 import { ImageBankPage } from "@/components/ImageBankPage";
+import { PluginsPage } from "@/components/plugins/PluginsPage";
+import { isFullPage } from "@/lib/fullPage";
 import { MainView } from "@/components/MainView";
 import { OnboardingOverlay } from "@/components/OnboardingOverlay";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
@@ -58,18 +60,16 @@ import { useWorkspaceStore } from "@/stores/workspaceStore";
  */
 export default function App() {
   const location = useLocation();
-  const settingsOpen = location.pathname.startsWith("/settings");
-  const imageBankOpen = location.pathname.startsWith("/image-bank");
-  const accountOpen = location.pathname.startsWith("/account");
+  const pageOpen = isFullPage(location.pathname);
   // Farm session events (warnings, reconnect, endings) arrive from the native side.
   useEffect(() => {
     void useFarmStore.getState().start();
   }, []);
 
   useEffect(() => {
-    setShortcutsSuppressed(settingsOpen || imageBankOpen || accountOpen);
+    setShortcutsSuppressed(pageOpen);
     return () => setShortcutsSuppressed(false);
-  }, [settingsOpen, imageBankOpen, accountOpen]);
+  }, [pageOpen]);
   const theme = useSettingsStore((s) => s.theme);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
@@ -381,13 +381,14 @@ export default function App() {
     <>
       {/* Always mounted; hidden (not unmounted) while settings is open so the
           editor + video decoder survive and returning is instant. */}
-      <div className={settingsOpen || imageBankOpen || accountOpen ? "hidden" : "contents"}>
+      <div className={pageOpen ? "hidden" : "contents"}>
         <MainView />
       </div>
       <Routes>
         <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
         <Route path="/image-bank" element={<ImageBankPage />} />
+        <Route path="/plugins" element={<PluginsPage />} />
         <Route path="/account" element={<AccountPage />} />
         {/* MainView already covers "/"; redirect any other unknown path there. */}
         <Route path="*" element={<Navigate to="/" replace />} />

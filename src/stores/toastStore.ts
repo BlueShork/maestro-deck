@@ -16,6 +16,9 @@ export interface Toast {
    *  calling `dismiss(id)` explicitly (used for long-running ops like
    *  the inspect-mode dump whose duration is unknown). */
   persistent?: boolean;
+  /** One inline button, e.g. "Open" on "ACME-123 created". Clicking it runs
+   *  `onClick` and dismisses the toast. */
+  action?: { label: string; onClick: () => void };
 }
 
 interface ToastState {
@@ -75,12 +78,12 @@ export const useToastStore = create<ToastState>((set, get) => ({
 }));
 
 export const toast = {
-  info: (title: string, description?: string) =>
-    useToastStore.getState().push({ title, description, variant: "default" }),
-  success: (title: string, description?: string) =>
-    useToastStore.getState().push({ title, description, variant: "success" }),
-  error: (title: string, description?: string) =>
-    useToastStore.getState().push({ title, description, variant: "error" }),
+  info: (title: string, description?: string, action?: Toast["action"]) =>
+    useToastStore.getState().push({ title, description, variant: "default", action }),
+  success: (title: string, description?: string, action?: Toast["action"]) =>
+    useToastStore.getState().push({ title, description, variant: "success", action }),
+  error: (title: string, description?: string, action?: Toast["action"]) =>
+    useToastStore.getState().push({ title, description, variant: "error", action }),
   /** Snackbar-style, inverse-contrast toast — used for device actions
    *  (tap sent, swipe sent, etc.). Quick and unobtrusive. */
   action: (title: string, description?: string) =>

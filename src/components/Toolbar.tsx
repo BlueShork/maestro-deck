@@ -10,6 +10,7 @@ import {
   Loader2,
   MousePointer2,
   Play,
+  Puzzle,
   Settings,
   Cloud,
   Sparkle,
@@ -26,6 +27,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { PixelChevron, PixelIcon } from "@/components/brand/Pixel";
 import { DeviceArt } from "@/components/devices/DeviceArt";
+import { PluginToolbarButtons } from "@/components/plugins/PluginToolbarButtons";
 import { useCatalog } from "@/components/devices/useCatalog";
 import {
   DropdownMenu,
@@ -362,6 +364,8 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
             <TooltipContent>AI assistant</TooltipContent>
           </Tooltip>
 
+          <PluginToolbarButtons Cell={ToolbarCell} />
+
           <Tooltip>
             <TooltipTrigger asChild>
               <ToolbarCell
@@ -387,6 +391,15 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
               </ToolbarCell>
             </TooltipTrigger>
             <TooltipContent>Image bank</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <ToolbarCell icon onClick={() => navigate("/plugins")} aria-label="Open plugins">
+                <Puzzle className="h-4 w-4" />
+              </ToolbarCell>
+            </TooltipTrigger>
+            <TooltipContent>Plugins</TooltipContent>
           </Tooltip>
 
           <Tooltip>

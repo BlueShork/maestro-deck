@@ -129,3 +129,13 @@ describe("toast helpers", () => {
     expect(useToastStore.getState().toasts[0].open).toBe(false);
   });
 });
+
+describe("toast actions", () => {
+  it("keeps the action on the pushed toast", () => {
+    const onClick = () => {};
+    toast.success("ACME-1 created", undefined, { label: "Open", onClick });
+    const t = useToastStore.getState().toasts.at(-1)!;
+    expect(t.action?.label).toBe("Open");
+    expect(t.action?.onClick).toBe(onClick);
+  });
+});

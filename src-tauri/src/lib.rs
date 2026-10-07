@@ -25,6 +25,7 @@ pub mod maestro_health;
 pub mod maestro_mcp;
 pub mod metrics;
 pub mod onboarding;
+pub mod plugins;
 pub mod process_ext;
 pub mod prockill;
 pub mod runner;
@@ -81,6 +82,11 @@ pub fn run() {
     builder
         .manage(state::AppState::default())
         .manage(app_menu::MenuChecks::default())
+        .manage(plugins::commands::WorkspaceAllow::default())
+        .register_asynchronous_uri_scheme_protocol("mdplugin", |_ctx, request, responder| {
+            let path = request.uri().path().to_string();
+            std::thread::spawn(move || responder.respond(plugins::protocol::respond(&path)));
+        })
         .invoke_handler(tauri::generate_handler![
             ping,
             app_menu::set_menu_checked,
@@ -135,6 +141,19 @@ pub fn run() {
             save_credential,
             get_credential,
             delete_credential,
+            plugins::commands::plugins_registry,
+            plugins::commands::plugins_list,
+            plugins::commands::plugins_install,
+            plugins::commands::plugins_uninstall,
+            plugins::commands::plugins_load_dev,
+            plugins::commands::plugin_http_fetch,
+            plugins::commands::plugin_open_external,
+            plugins::commands::plugin_secret_get,
+            plugins::commands::plugin_secret_set,
+            plugins::commands::plugin_secret_delete,
+            plugins::commands::plugin_workspace_info,
+            plugins::commands::plugin_workspace_changes,
+            plugins::commands::plugin_workspace_read,
             get_tool_paths,
             set_tool_paths,
             env_check::environment_status,
