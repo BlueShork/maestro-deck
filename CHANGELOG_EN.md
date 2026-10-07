@@ -1,3 +1,12 @@
+# What's New in v1.2.0
+
+## Plugins
+- **New plugin marketplace.** A new Plugins page lists the integrations you can add to Maestro Deck. Install, update or remove one in a click, with no app update needed.
+- **Jira plugin.** Connect your Jira account and create an issue straight from Maestro Deck.
+- **Safe by design.** Each plugin runs isolated from the app, can only reach the sites it declares, and asks for the permissions it needs. Plugin downloads are checked before install, and credentials are kept in your system keychain.
+
+---
+
 # What's New in v1.1.0
 
 ## Interface
