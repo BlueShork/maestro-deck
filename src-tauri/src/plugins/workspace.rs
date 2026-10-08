@@ -22,11 +22,21 @@ pub struct GithubRepo {
     pub repo: String,
 }
 
+/// The `origin` remote of any forge: `host` is lowercase and carries a port
+/// only for an https URL with a non-default one; `path` is the project path
+/// (`group/sub/project`), without `.git`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RemoteRef {
+    pub host: String,
+    pub path: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GitInfo {
     pub branch: Option<String>,
     pub head: Option<String>,
     pub github: Option<GithubRepo>,
+    pub remote: Option<RemoteRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -79,6 +89,53 @@ pub fn parse_github_remote(url: &str) -> Option<GithubRepo> {
     (parts.next().is_none() && ok(owner) && ok(repo)).then(|| GithubRepo {
         owner: owner.into(),
         repo: repo.into(),
+    })
+}
+
+pub fn parse_remote(url: &str) -> Option<RemoteRef> {
+    let url = url.trim();
+    let after_user = |authority: &str| authority.rsplit('@').next().map(str::to_ascii_lowercase);
+    let (host, path) = if let Some(rest) = url.strip_prefix("https://") {
+        let (authority, path) = rest.split_once('/')?;
+        let host = after_user(authority)?;
+        let host = host
+            .strip_suffix(":443")
+            .map(str::to_string)
+            .unwrap_or(host);
+        (host, path)
+    } else if let Some(rest) = url.strip_prefix("ssh://") {
+        let (authority, path) = rest.split_once('/')?;
+        let host = after_user(authority)?;
+        (host.split(':').next()?.to_string(), path)
+    } else if !url.contains("://") {
+        // scp-like `user@host:path`. A drive letter (`C:/x`) is not a host.
+        let (user_host, path) = url.split_once(':')?;
+        let host = after_user(user_host)?;
+        if !user_host.contains('@') && !host.contains('.') {
+            return None;
+        }
+        (host, path)
+    } else {
+        return None;
+    };
+    let host_ok = !host.is_empty()
+        && !host.starts_with('.')
+        && host
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"-.:".contains(&c));
+    let path = path.trim_matches('/');
+    let path = path.strip_suffix(".git").unwrap_or(path);
+    let segs: Vec<&str> = path.split('/').collect();
+    let seg_ok = |s: &&str| {
+        !s.is_empty()
+            && *s != "."
+            && *s != ".."
+            && s.bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c))
+    };
+    (host_ok && segs.len() >= 2 && segs.iter().all(seg_ok)).then(|| RemoteRef {
+        host,
+        path: path.to_string(),
     })
 }
 
@@ -246,18 +303,17 @@ pub fn info(root: &Path) -> Result<Option<WorkspaceInfo>, String> {
             let head = repo.head().map_err(internal)?;
             let branch = head.referent_name().map(|n| n.shorten().to_string());
             let head_id = head.id().map(|id| id.to_string());
-            let github = repo
-                .find_remote("origin")
-                .ok()
-                .and_then(|r| {
-                    r.url(gix::remote::Direction::Fetch)
-                        .map(|u| u.to_bstring().to_string())
-                })
-                .and_then(|u| parse_github_remote(&u));
+            let origin_url = repo.find_remote("origin").ok().and_then(|r| {
+                r.url(gix::remote::Direction::Fetch)
+                    .map(|u| u.to_bstring().to_string())
+            });
+            let github = origin_url.as_deref().and_then(parse_github_remote);
+            let remote = origin_url.as_deref().and_then(parse_remote);
             Some(GitInfo {
                 branch,
                 head: head_id,
                 github,
+                remote,
             })
         }
     };
@@ -496,6 +552,73 @@ mod tests {
     }
 
     #[test]
+    fn parses_generic_remotes() {
+        let r = |host: &str, path: &str| {
+            Some(RemoteRef {
+                host: host.into(),
+                path: path.into(),
+            })
+        };
+        assert_eq!(
+            parse_remote("https://gitlab.com/acme/app.git"),
+            r("gitlab.com", "acme/app")
+        );
+        assert_eq!(
+            parse_remote("https://me@GitLab.Acme.fr/group/sub/app/"),
+            r("gitlab.acme.fr", "group/sub/app")
+        );
+        assert_eq!(
+            parse_remote("https://gitlab.acme.fr:8443/g/app.git"),
+            r("gitlab.acme.fr:8443", "g/app")
+        );
+        assert_eq!(
+            parse_remote("https://gitlab.acme.fr:443/g/app"),
+            r("gitlab.acme.fr", "g/app")
+        );
+        assert_eq!(
+            parse_remote("ssh://git@gitlab.acme.fr:2222/g/sub/app.git"),
+            r("gitlab.acme.fr", "g/sub/app")
+        );
+        assert_eq!(
+            parse_remote("git@gitlab.com:acme/my.app.git"),
+            r("gitlab.com", "acme/my.app")
+        );
+        assert_eq!(
+            parse_remote("git@github.com:acme/app.git"),
+            r("github.com", "acme/app")
+        );
+        assert_eq!(parse_remote("http://gitlab.com/acme/app"), None);
+        assert_eq!(parse_remote("https://gitlab.com/acme"), None);
+        assert_eq!(parse_remote("/srv/repos/app.git"), None);
+        assert_eq!(parse_remote("C:/repos/app"), None);
+        assert_eq!(parse_remote("https://gitlab.com/a b/app"), None);
+        assert_eq!(parse_remote(""), None);
+    }
+
+    #[test]
+    fn info_reports_the_generic_remote() {
+        let d = repo();
+        git(
+            d.path(),
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "git@gitlab.com:g/sub/app.git",
+            ],
+        );
+        let g = info(d.path()).unwrap().unwrap().git.unwrap();
+        assert_eq!(
+            g.remote,
+            Some(RemoteRef {
+                host: "gitlab.com".into(),
+                path: "g/sub/app".into()
+            })
+        );
+        assert_eq!(g.github, None);
+    }
+
+    #[test]
     fn blob_oid_matches_git() {
         // `printf 'hello\n' | git hash-object --stdin`
         assert_eq!(
@@ -516,6 +639,13 @@ mod tests {
             Some(GithubRepo {
                 owner: "acme".into(),
                 repo: "app".into()
+            })
+        );
+        assert_eq!(
+            g.remote,
+            Some(RemoteRef {
+                host: "github.com".into(),
+                path: "acme/app".into()
             })
         );
     }

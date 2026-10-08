@@ -60,6 +60,7 @@ export interface PluginWorkspaceInfo {
     branch: string | null;
     head: string | null;
     github: { owner: string; repo: string } | null;
+    remote: { host: string; path: string } | null;
   } | null;
 }
 export interface PluginWorkspaceChange {
