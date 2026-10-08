@@ -28,6 +28,7 @@ interface PluginsState {
   install: (entry: RegistryEntry) => Promise<void>;
   uninstall: (id: string) => Promise<void>;
   loadDev: (path: string) => Promise<void>;
+  revokeOrigin: (id: string, origin: string) => Promise<void>;
   openPluginPanel: (id: string) => void;
   closePluginPanel: () => void;
   togglePluginPanel: (id: string) => void;
@@ -98,6 +99,14 @@ export const usePluginsStore = create<PluginsState>()(
             toast.success(`Loaded ${m.name} from ${path}`);
           } catch (err) {
             toast.error("Could not load the local plugin", message(err));
+          }
+        },
+        revokeOrigin: async (id, origin) => {
+          try {
+            await ipc.pluginRevokeOrigin(id, origin);
+            await get().refreshInstalled();
+          } catch (err) {
+            toast.error("Could not revoke access", message(err));
           }
         },
         openPluginPanel: (id) => {

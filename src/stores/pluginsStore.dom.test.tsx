@@ -10,6 +10,7 @@ vi.mock("@/lib/ipc", () => ({
     pluginsInstall: vi.fn(),
     pluginsUninstall: vi.fn(),
     pluginsLoadDev: vi.fn(),
+    pluginRevokeOrigin: vi.fn(),
   },
 }));
 
@@ -102,6 +103,14 @@ describe("pluginsStore", () => {
     expect(usePluginsStore.getState().openPanel).toBe("jira");
     useChatStore.getState().setOpen(true);
     expect(usePluginsStore.getState().openPanel).toBeNull();
+  });
+
+  it("revokes a granted origin and refreshes the list", async () => {
+    m.pluginRevokeOrigin.mockResolvedValue(undefined);
+    m.pluginsList.mockResolvedValue([]);
+    await usePluginsStore.getState().revokeOrigin("gitlab", "https://git.acme.fr");
+    expect(m.pluginRevokeOrigin).toHaveBeenCalledWith("gitlab", "https://git.acme.fr");
+    expect(m.pluginsList).toHaveBeenCalled();
   });
 
   it("toggle closes an open panel", () => {

@@ -247,6 +247,12 @@ export const ipc = {
     call<PluginHttpResponse>("plugin_http_fetch", { pluginId, request }),
   pluginOpenExternal: (pluginId: string, url: string) =>
     call<void>("plugin_open_external", { pluginId, url }),
+  pluginOriginAllowed: (pluginId: string, origin: string) =>
+    call<boolean>("plugin_origin_allowed", { pluginId, origin }),
+  pluginGrantOrigin: (pluginId: string, origin: string) =>
+    call<string>("plugin_grant_origin", { pluginId, origin }),
+  pluginRevokeOrigin: (pluginId: string, origin: string) =>
+    call<void>("plugin_revoke_origin", { pluginId, origin }),
   pluginSecretGet: (pluginId: string, key: string) =>
     call<string | null>("plugin_secret_get", { pluginId, key }),
   pluginSecretSet: (pluginId: string, key: string, value: string) =>
