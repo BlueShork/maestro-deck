@@ -35,6 +35,11 @@ export interface BridgeDeps {
   secretDelete(key: string): Promise<void>;
   httpFetch(req: PluginHttpRequest): Promise<PluginHttpResponse>;
   openExternal(url: string): Promise<void>;
+  /**
+   * Resolves whether the plugin may now reach `origin` (already allowed, or
+   * the user said yes in the host's dialog). `origin` is normalised.
+   */
+  requestOrigin(origin: string): Promise<boolean>;
   toast(t: ToastRequest): void;
   appInfo(): { appVersion: string; platform: string };
   storage: Pick<Storage, "getItem" | "setItem">;
@@ -86,6 +91,26 @@ export function clearPluginStorage(pluginId: string, storage: Storage): void {
     if (k?.startsWith(prefix)) doomed.push(k);
   }
   for (const k of doomed) storage.removeItem(k);
+}
+
+/** `https://host[:port]` with nothing after it, normalised; null otherwise. */
+export function normalizeOrigin(s: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(s.trim());
+  } catch {
+    return null;
+  }
+  if (
+    u.protocol !== "https:" ||
+    u.username ||
+    u.password ||
+    u.search ||
+    u.hash ||
+    u.pathname !== "/"
+  )
+    return null;
+  return u.origin;
 }
 
 function obj(params: unknown): Record<string, unknown> {
@@ -172,6 +197,14 @@ async function dispatch(req: RpcRequest, deps: BridgeDeps): Promise<unknown> {
         p.headers && typeof p.headers === "object" ? (p.headers as Record<string, string>) : {};
       const body = typeof p.body === "string" ? p.body : undefined;
       return deps.httpFetch({ url: str(p, "url"), method: str(p, "method"), headers, body });
+    }
+    case "http.requestOrigin": {
+      if (!deps.manifest.permissions.userOrigins)
+        throw new RpcError("forbidden", "this plugin did not request user-granted origins");
+      const raw = str(obj(req.params), "origin");
+      const origin = normalizeOrigin(raw);
+      if (!origin) throw new RpcError("bad_request", `not an https origin: ${raw}`);
+      return deps.requestOrigin(origin);
     }
     case "ui.toast":
       deps.toast(toastRequest(obj(req.params)));
