@@ -45,6 +45,8 @@ pub struct InstalledPlugin {
     pub dev: bool,
     pub manifest: Option<Manifest>,
     pub error: Option<String>,
+    /// Origins the user allowed this plugin to reach (see `grants`).
+    pub granted_origins: Vec<String>,
 }
 
 fn now_millis() -> u64 {
@@ -279,12 +281,14 @@ pub fn list(root: &Path, app_version: &str) -> Vec<InstalledPlugin> {
                 Ok(m) => (Some(m), None),
                 Err(err) => (None, Some(err)),
             };
+            let granted_origins = super::grants::granted(root, &e.id);
             InstalledPlugin {
                 id: e.id,
                 version: e.version,
                 dev: e.dev_path.is_some(),
                 manifest,
                 error,
+                granted_origins,
             }
         })
         .collect()
