@@ -10,7 +10,7 @@ import { OriginGrantDialog } from "./OriginGrantDialog";
 
 describe("OriginGrantDialog", () => {
   afterEach(() => {
-    act(() => useOriginGrantStore.getState().answer(false));
+    act(() => useOriginGrantStore.setState({ pending: null, refused: {} }));
     cleanup();
   });
 
@@ -18,7 +18,7 @@ describe("OriginGrantDialog", () => {
     render(<OriginGrantDialog />);
     let p!: Promise<boolean>;
     act(() => {
-      p = askOriginGrant("GitLab", "https://git.acme.fr:8443");
+      p = askOriginGrant("gitlab", "GitLab", "https://git.acme.fr:8443");
     });
     expect(screen.getAllByText(/git\.acme\.fr:8443/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/GitLab/).length).toBeGreaterThan(0);
@@ -30,7 +30,7 @@ describe("OriginGrantDialog", () => {
     render(<OriginGrantDialog />);
     let p!: Promise<boolean>;
     act(() => {
-      p = askOriginGrant("GitLab", "https://git.acme.fr");
+      p = askOriginGrant("gitlab", "GitLab", "https://git.acme.fr");
     });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     await expect(p).resolves.toBe(false);

@@ -27,7 +27,7 @@ export function makeBridgeDeps(manifest: PluginManifest): BridgeDeps {
     openExternal: open,
     requestOrigin: async (origin) => {
       if (await ipc.pluginOriginAllowed(id, origin)) return true;
-      if (!(await askOriginGrant(manifest.name, origin))) return false;
+      if (!(await askOriginGrant(id, manifest.name, origin))) return false;
       await ipc.pluginGrantOrigin(id, origin);
       void usePluginsStore.getState().refreshInstalled();
       return true;
