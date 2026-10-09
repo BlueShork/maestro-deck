@@ -11,6 +11,12 @@ vi.mock("@/lib/ipc", () => ({
     pluginsRegistry: vi.fn(async () => JSON.stringify({ plugins: [] })),
   },
 }));
+// The test build defines __APP_VERSION__ as "test", which is not semver, so
+// every registry entry would read as incompatible. Pin a real app version.
+vi.mock("@/lib/plugins/registry", async (orig) => {
+  const mod = await orig<typeof import("@/lib/plugins/registry")>();
+  return { ...mod, buildCatalog: (r: never, i: never) => mod.buildCatalog(r, i, "9.9.9") };
+});
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -61,5 +67,31 @@ describe("PluginsPage themes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(useSettingsStore.getState().colorTheme).toBe("catppuccin");
     expect(screen.getByRole("button", { name: "Applied" })).toHaveProperty("disabled", true);
+  });
+
+  it("still offers Apply when a newer version is available", () => {
+    usePluginsStore.setState({
+      registry: [
+        {
+          id: "catppuccin",
+          name: "Catppuccin",
+          description: "Soft pastel theme",
+          repo: "o/catppuccin",
+          version: "1.1.0",
+          minAppVersion: "1.0.0",
+          url: "https://example.com/c.zip",
+          sha256: "a".repeat(64),
+          kind: "theme",
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <PluginsPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("button", { name: /Update to v1\.1\.0/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(useSettingsStore.getState().colorTheme).toBe("catppuccin");
   });
 });

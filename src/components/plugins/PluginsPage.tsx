@@ -249,7 +249,7 @@ function PluginCard({ item }: { item: CatalogItem }) {
             Open
           </Button>
         ) : null}
-        {item.status === "installed" && item.installed?.theme ? (
+        {(item.status === "installed" || item.status === "update") && item.installed?.theme ? (
           <Button
             size="sm"
             disabled={colorTheme === item.id}
