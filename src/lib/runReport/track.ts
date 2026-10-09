@@ -70,8 +70,11 @@ export function startRunReportTracking(): () => void {
         ? baseName(s.runTarget?.path ?? folder ?? "Run All")
         : flowTitle(s.runTarget?.path);
     const steps = s.steps;
-    const flows = useRunReportStore.getState().flows;
     const { exitCode, stopRequested } = s;
+    const collected = useRunReportStore.getState();
+    const flows = collected.flows.length
+      ? collected.flows
+      : collected.log.finish({ at: endedAt, exitCode, stopped: stopRequested });
     const branch = folder
       ? ipc.workspaceGitBranch(folder).catch(() => null)
       : Promise.resolve(null);

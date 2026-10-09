@@ -139,4 +139,26 @@ describe("startRunReportTracking", () => {
     await flush();
     expect(useRunReportStore.getState().last!.title).toBe("billy_checkout");
   });
+
+  it("lists Run All flows from the plain output when Maestro prints no suite lines", async () => {
+    await runAll(
+      [
+        "Running on R3CX30GR07Y",
+        " > Flow open_playstore",
+        'Launch app "com.android.vending"... COMPLETED',
+        "Wait for animation to end... COMPLETED",
+      ],
+      0,
+    );
+    expect(useRunReportStore.getState().last!.items).toMatchObject([
+      { name: "open_playstore", status: "passed", error: null },
+    ]);
+  });
+
+  it("prefers Maestro's suite lines when it prints them", async () => {
+    await runAll([" > Flow a", "Back... COMPLETED", "[Passed] a (3s)"], 0);
+    expect(useRunReportStore.getState().last!.items).toEqual([
+      { name: "a", status: "passed", durationMs: 3000, error: null },
+    ]);
+  });
 });
