@@ -52,6 +52,9 @@ function deps(over: Partial<BridgeDeps> = {}): BridgeDeps {
       { path: "a.yaml", status: "added" as const, size: 1, executable: false },
     ]),
     workspaceRead: vi.fn(async () => "aGk="),
+    latestRun: vi.fn(() => ({ id: "r1" })),
+    copyImage: vi.fn(async () => {}),
+    saveFile: vi.fn(async () => true),
     ...over,
   };
 }
@@ -264,5 +267,55 @@ describe("normalizeOrigin", () => {
   it("drops the default port and a trailing slash", () => {
     expect(normalizeOrigin("https://git.acme.fr:443/")).toBe("https://git.acme.fr");
     expect(normalizeOrigin("https://git.acme.fr?x=1")).toBeNull();
+  });
+});
+
+const PNG = "iVBORw0KGgoAAAANSUhEUg==";
+
+describe("run reports and images", () => {
+  const call = (method: string, params: unknown, d: BridgeDeps) =>
+    handleRpc(rpc(method, params), d);
+
+  it("gates runs.latest on the runs permission", async () => {
+    expect(await call("runs.latest", undefined, deps())).toMatchObject({
+      ok: false,
+      error: { code: "forbidden" },
+    });
+    const d = deps();
+    d.manifest = { ...d.manifest, permissions: { ...d.manifest.permissions, runs: true } };
+    expect(await call("runs.latest", undefined, d)).toMatchObject({
+      ok: true,
+      result: { id: "r1" },
+    });
+  });
+
+  it("copies a base64 PNG and refuses anything else", async () => {
+    const d = deps();
+    expect(await call("ui.copyImage", { png: PNG }, d)).toMatchObject({ ok: true });
+    expect(d.copyImage).toHaveBeenCalledWith(PNG);
+    expect(await call("ui.copyImage", { png: "aGVsbG8=" }, d)).toMatchObject({
+      ok: false,
+      error: { code: "bad_request" },
+    });
+    const huge = "iVBORw0KGgo" + "A".repeat(10 * 1024 * 1024);
+    expect(await call("ui.copyImage", { png: huge }, d)).toMatchObject({
+      ok: false,
+      error: { code: "too_large" },
+    });
+  });
+
+  it("saves under a sanitised .png name and reports a cancel", async () => {
+    const d = deps();
+    expect(await call("ui.saveFile", { name: "../../etc/report:1", base64: PNG }, d)).toMatchObject(
+      { ok: true, result: { saved: true } },
+    );
+    expect(d.saveFile).toHaveBeenCalledWith("report_1.png", PNG);
+    d.saveFile = vi.fn(async () => false);
+    expect(await call("ui.saveFile", { name: "a.png", base64: PNG }, d)).toMatchObject({
+      result: { saved: false },
+    });
+    expect(await call("ui.saveFile", { name: "///", base64: PNG }, d)).toMatchObject({
+      error: { code: "bad_request" },
+    });
   });
 });

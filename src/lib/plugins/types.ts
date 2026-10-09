@@ -7,6 +7,7 @@ export interface PluginPermissions {
   secrets: boolean;
   workspace?: boolean;
   userOrigins?: boolean;
+  runs?: boolean;
 }
 export interface PluginManifest {
   id: string;

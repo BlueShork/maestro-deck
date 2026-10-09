@@ -40,6 +40,9 @@ pub struct Permissions {
     /// (`http.requestOrigin`), e.g. a self-hosted server.
     #[serde(rename = "userOrigins")]
     pub user_origins: bool,
+    /// Whether the plugin may read the last run's report (`runs.latest`) and
+    /// receive `run.finished`.
+    pub runs: bool,
 }
 
 pub fn valid_id(id: &str) -> bool {
@@ -204,6 +207,18 @@ impl Allow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runs_permission_defaults_off_and_parses() {
+        let base = r#"{"id":"r","name":"R","version":"1.0.0","minAppVersion":"1.3.0","entry":"index.html"}"#;
+        let m: Manifest = serde_json::from_str(base).unwrap();
+        assert!(!m.permissions.runs);
+        let m: Manifest = serde_json::from_str(
+            &base.replace(r#""entry""#, r#""permissions":{"runs":true},"entry""#),
+        )
+        .unwrap();
+        assert!(m.permissions.runs);
+    }
 
     fn pats(p: &[&str]) -> Vec<String> {
         p.iter().map(|s| s.to_string()).collect()

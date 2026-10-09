@@ -266,6 +266,14 @@ pub async fn plugin_workspace_info(
         .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub async fn plugin_copy_image(plugin_id: String, png: String) -> Result<(), String> {
+    manifest_for(&root()?, &plugin_id)?;
+    tokio::task::spawn_blocking(move || super::clipboard::copy_png(&png))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// The checked-out branch of `workspace`, for run reports. Not plugin-scoped:
 /// the app itself asks, and a branch name is not a file the user must grant.
 #[tauri::command]
