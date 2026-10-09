@@ -266,6 +266,16 @@ pub async fn plugin_workspace_info(
         .map_err(|e| e.to_string())?
 }
 
+/// The checked-out branch of `workspace`, for run reports. Not plugin-scoped:
+/// the app itself asks, and a branch name is not a file the user must grant.
+#[tauri::command]
+pub async fn workspace_git_branch(workspace: String) -> Result<Option<String>, String> {
+    let info = tokio::task::spawn_blocking(move || workspace::info(Path::new(&workspace)))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(info.and_then(|i| i.git).and_then(|g| g.branch))
+}
+
 #[tauri::command]
 pub async fn plugin_workspace_changes(
     allow: tauri::State<'_, WorkspaceAllow>,

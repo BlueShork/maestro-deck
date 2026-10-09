@@ -152,6 +152,7 @@ pub fn run() {
             plugins::commands::plugin_secret_set,
             plugins::commands::plugin_secret_delete,
             plugins::commands::plugin_workspace_info,
+            plugins::commands::workspace_git_branch,
             plugins::commands::plugin_workspace_changes,
             plugins::commands::plugin_workspace_read,
             plugins::commands::plugin_origin_allowed,
