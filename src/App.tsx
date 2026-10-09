@@ -72,6 +72,7 @@ export default function App() {
     return () => setShortcutsSuppressed(false);
   }, [pageOpen]);
   const theme = useSettingsStore((s) => s.theme);
+  const colorThemeCache = useSettingsStore((s) => s.colorThemeCache);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
   const ingestLine = useRunStore((s) => s.ingestLine);
@@ -136,10 +137,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    applyTheme(theme);
+    applyTheme(theme, colorThemeCache);
     if (theme !== "system") return;
-    return watchSystemTheme(() => applyTheme("system"));
-  }, [theme]);
+    return watchSystemTheme(() => applyTheme("system", colorThemeCache));
+  }, [theme, colorThemeCache]);
 
   // React to streamEnabled toggles while a device is connected: spin up or
   // tear down scrcpy live without forcing the user to disconnect/reconnect.
