@@ -25,6 +25,7 @@ import { summarizeBankReport } from "@/lib/bankReport";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
+import { startReportNotifications } from "@/lib/runReport/notify";
 import { startRunReportTracking } from "@/lib/runReport/track";
 import { useFarmStore } from "@/stores/farmStore";
 import { screenName, setScreen, track } from "@/lib/telemetry";
@@ -71,6 +72,7 @@ export default function App() {
 
   // Records the last run as a RunReport for plugins with the `runs` permission.
   useEffect(() => startRunReportTracking(), []);
+  useEffect(() => startReportNotifications(), []);
 
   useEffect(() => {
     setShortcutsSuppressed(pageOpen);

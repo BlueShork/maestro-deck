@@ -8,6 +8,7 @@ import { makeBridgeDeps } from "@/lib/plugins/hostDeps";
 import { readThemeVars } from "@/lib/plugins/theme";
 import type { PluginManifest } from "@/lib/plugins/types";
 import { pluginUrl } from "@/lib/plugins/url";
+import { useRunReportStore } from "@/stores/runReportStore";
 import { useOriginGrantStore } from "@/stores/originGrantStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
@@ -71,6 +72,19 @@ export function PluginHost({ manifest }: { manifest: PluginManifest }) {
       }),
     [],
   );
+
+  const readsRuns = manifest.permissions.runs === true;
+  useEffect(() => {
+    if (!readsRuns) return;
+    return useRunReportStore.subscribe((s, prev) => {
+      if (s.last && s.last !== prev.last && loads.current === 1) {
+        frame.current?.contentWindow?.postMessage(
+          { type: "md-event", name: "run.finished", data: s.last },
+          "*",
+        );
+      }
+    });
+  }, [readsRuns]);
 
   if (stopped) {
     return (
