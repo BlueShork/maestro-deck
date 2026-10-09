@@ -58,4 +58,12 @@ describe("colorTheme", () => {
     expect(root().getPropertyValue("--radius")).toBe("");
     expect(root().getPropertyValue("--muted")).toBe("3 3% 3%");
   });
+
+  it.each(["361 50% 50%", "1 101% 1%", "1e2 50% 50%", "NaN 1% 1%"])(
+    "does not apply the out-of-range or non-numeric value %s",
+    (value) => {
+      applyColorTheme({ light: { brand: value } }, "light");
+      expect(root().getPropertyValue("--brand")).toBe("");
+    },
+  );
 });
