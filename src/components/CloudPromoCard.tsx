@@ -97,7 +97,7 @@ export function CloudPromoCard() {
         />
       </span>
 
-      <span className="flex h-10 items-center justify-between border-t border-border bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90 dark:group-hover:bg-white">
+      <span className="flex h-10 items-center justify-between border-t border-border bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
         {promo.cta}
         <PixelChevron className="transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover:translate-x-[3px]" />
       </span>
