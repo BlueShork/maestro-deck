@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ipc", () => ({ ipc: { workspaceGitBranch: vi.fn(async () => "main") } }));
 
+import { ipc } from "@/lib/ipc";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useRunReportStore } from "@/stores/runReportStore";
@@ -90,5 +91,52 @@ describe("startRunReportTracking", () => {
     useRunStore.getState().startFailed();
     await flush();
     expect(useRunReportStore.getState().last).toBeNull();
+  });
+
+  it("keeps each report's own start and device when the next run starts before the branch lookup", async () => {
+    let resolveFirst: (b: string) => void = () => {};
+    vi.mocked(ipc.workspaceGitBranch).mockImplementationOnce(
+      () => new Promise((r) => (resolveFirst = r)),
+    );
+    const run = useRunStore.getState();
+    run.setStarting();
+    run.setRunTarget({ path: "/Users/me/shop", kind: "all", expectedFlow: null });
+    run.setRunning(1);
+    useRunStore.getState().setStopped(0);
+    // Next run starts on another device before the first lookup resolves.
+    useDeviceStore.setState({
+      current: { ...useDeviceStore.getState().current!, model: "iPhone" },
+    });
+    useRunStore.getState().setStarting();
+    resolveFirst("main");
+    await flush();
+    expect(useRunReportStore.getState().last!.device).toEqual({
+      platform: "android",
+      name: "Pixel 8",
+    });
+    expect(useRunReportStore.getState().last!.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("never lets an older run's late lookup overwrite a newer report", async () => {
+    let resolveFirst: (b: string) => void = () => {};
+    vi.mocked(ipc.workspaceGitBranch).mockImplementationOnce(
+      () => new Promise((r) => (resolveFirst = r)),
+    );
+    await runAll(["[Passed] old (1s)"], 0);
+    await runAll(["[Passed] new (1s)"], 0);
+    resolveFirst("main");
+    await flush();
+    expect(useRunReportStore.getState().last!.items.map((i) => i.name)).toEqual(["new"]);
+  });
+
+  it("titles a run of a file other than the open one after that file", async () => {
+    useFlowStore.setState({ content: "appId: x\n---\n- tapOn: Go\n", filePath: "/f/open.yaml" });
+    const run = useRunStore.getState();
+    run.setStarting();
+    run.setRunTarget({ path: "/f/billy_checkout.yaml", kind: "flow" });
+    run.setRunning(9);
+    useRunStore.getState().setStopped(0);
+    await flush();
+    expect(useRunReportStore.getState().last!.title).toBe("billy_checkout");
   });
 });

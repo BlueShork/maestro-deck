@@ -38,6 +38,15 @@ describe("parseSuiteLine", () => {
     });
   });
 
+  it("keeps a failure whose error continues on the next line", () => {
+    expect(parseSuiteLine("[Failed] boot (3s) (Unable to launch app com.shop:")).toEqual({
+      name: "boot",
+      status: "failed",
+      durationMs: 3000,
+      error: "Unable to launch app com.shop:",
+    });
+  });
+
   it("strips ANSI colours, shard prefix and the warning suffix", () => {
     const raw =
       "\u001b[36m[shard 2] \u001b[39m[Passed] settings (850ms)\u001b[33m (Warning)\u001b[39m";

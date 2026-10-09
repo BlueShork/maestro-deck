@@ -26,6 +26,18 @@ function currentDevice(): RunReport["device"] {
   return d ? { platform: d.platform, name: d.model } : null;
 }
 
+// "Run" on an unsaved buffer and "Run from here" execute this temp copy of the
+// open flow (MainView), so the open flow's name still applies.
+const TEMP_FLOW = "maestro-deck-flow.yaml";
+
+function flowTitle(target: string | undefined): string {
+  const { content, filePath } = useFlowStore.getState();
+  if (target && target !== filePath && baseName(target) !== TEMP_FLOW) {
+    return baseName(target).replace(/\.ya?ml$/i, "");
+  }
+  return flowDisplayName(content, filePath) ?? "Flow";
+}
+
 /**
  * Watches runStore and records a RunReport when a run ends. A run "begins" on
  * the Run click (starting) and "ends" when it was running and no longer is;
@@ -34,6 +46,9 @@ function currentDevice(): RunReport["device"] {
 export function startRunReportTracking(): () => void {
   let startedAt = 0;
   let device: RunReport["device"] = null;
+  // Runs that ended so far; a report whose branch lookup resolves after a
+  // newer run ended is stale and dropped.
+  let ended = 0;
 
   return useRunStore.subscribe((s, prev) => {
     if (s.starting && !prev.starting) {
@@ -45,13 +60,15 @@ export function startRunReportTracking(): () => void {
     if (!(prev.running && !s.running)) return;
 
     const endedAt = Date.now();
+    const run = ++ended;
+    const began = startedAt;
+    const ranOn = device;
     const kind = s.runTarget?.kind ?? "flow";
     const folder = useWorkspaceStore.getState().folderPath;
-    const { content, filePath } = useFlowStore.getState();
     const title =
       kind === "all"
         ? baseName(s.runTarget?.path ?? folder ?? "Run All")
-        : (flowDisplayName(content, filePath) ?? "Flow");
+        : flowTitle(s.runTarget?.path);
     const steps = s.steps;
     const flows = useRunReportStore.getState().flows;
     const { exitCode, stopRequested } = s;
@@ -60,18 +77,19 @@ export function startRunReportTracking(): () => void {
       : Promise.resolve(null);
 
     void branch.then((b) => {
+      if (run !== ended) return;
       useRunReportStore.getState().finish(
         buildRunReport(
           {
             id: crypto.randomUUID(),
             kind,
             title,
-            startedAt,
+            startedAt: began,
             endedAt,
             exitCode,
             stopRequested,
             project: { name: folder ? baseName(folder) : title, branch: b },
-            device,
+            device: ranOn,
           },
           steps,
           flows,

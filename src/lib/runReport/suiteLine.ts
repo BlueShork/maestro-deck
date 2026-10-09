@@ -6,7 +6,8 @@
  * runs (`maestro test <dir>`): `[Passed] login (5s)`, failures add the error
  * in parentheses. Format taken from maestro-cli 2.10.0
  * (TestSuiteStatusView.showFlowCompletion); colours may or may not survive
- * the pipe, so they are stripped first.
+ * the pipe, so they are stripped first. A multi-line error keeps only its
+ * first line: the closing parenthesis is then on a later line.
  */
 
 export interface SuiteFlowResult {
@@ -30,7 +31,7 @@ const TERMINAL: Record<string, SuiteFlowResult["status"]> = {
 };
 const DURATION = "(?:\\d+(?:\\.\\d+)?(?:ms|us|ns|[dhms])\\s*)+";
 const LINE = new RegExp(
-  `^(?:\\[shard \\d+\\]\\s*)?\\[([^\\]]+)\\]\\s+(.+?)\\s+\\((${DURATION})\\)(?:\\s+\\((.*)\\))?$`,
+  `^(?:\\[shard \\d+\\]\\s*)?\\[([^\\]]+)\\]\\s+(.+?)\\s+\\((${DURATION})\\)(?:\\s+\\((.*?)\\)?)?$`,
 );
 const UNIT_MS: Record<string, number> = {
   d: 86_400_000,

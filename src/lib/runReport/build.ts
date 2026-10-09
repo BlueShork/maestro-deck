@@ -26,11 +26,14 @@ export function buildRunReport(
   const items = ctx.kind === "all" ? flows.map((f) => ({ ...f })) : steps.map(stepItem);
   const count = (st: ReportItem["status"]) => items.filter((i) => i.status === st).length;
   const totals = { passed: count("passed"), failed: count("failed"), skipped: count("skipped") };
-  const status = ctx.stopRequested
-    ? "stopped"
-    : ctx.exitCode === 0 && totals.failed === 0
-      ? "passed"
-      : "failed";
+  // No exit code and nothing failed: the outcome is unknown (a cloud run the
+  // app stopped watching, or whose result could not be read), not a failure.
+  const status =
+    ctx.stopRequested || (ctx.exitCode === null && totals.failed === 0)
+      ? "stopped"
+      : ctx.exitCode === 0 && totals.failed === 0
+        ? "passed"
+        : "failed";
   return {
     id: ctx.id,
     kind: ctx.kind,

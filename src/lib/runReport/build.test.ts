@@ -67,7 +67,16 @@ describe("buildRunReport", () => {
 
   it("is failed when the runner exits non-zero even if every item passed", () => {
     expect(buildRunReport(ctx({ exitCode: 1 }), [step({})], []).status).toBe("failed");
-    expect(buildRunReport(ctx({ exitCode: null }), [step({})], []).status).toBe("failed");
+  });
+
+  it("is stopped when the runner gave no exit code and nothing failed (outcome unknown)", () => {
+    // A cloud run the app stopped watching, or whose result was unreadable.
+    expect(buildRunReport(ctx({ exitCode: null }), [step({ status: "pending" })], []).status).toBe(
+      "stopped",
+    );
+    expect(buildRunReport(ctx({ exitCode: null }), [step({ status: "failed" })], []).status).toBe(
+      "failed",
+    );
   });
 
   it("is stopped when the user stopped it, with no items if nothing finished", () => {
