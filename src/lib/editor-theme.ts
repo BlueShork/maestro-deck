@@ -33,16 +33,16 @@ interface Palette {
 }
 
 const DARK: Palette = {
-  bg: "hsl(var(--background))", // == --background (#101013)
-  surface: "hsl(var(--popover))", // == --popover (#1a1a1e)
+  bg: "hsl(var(--background))", // default #101013
+  surface: "hsl(var(--popover))", // default #1a1a1e
   fg: "hsl(60 20% 90%)",
-  fgMuted: "hsl(var(--muted-foreground))", // #a1a1aa
+  fgMuted: "hsl(var(--muted-foreground))", // default #a1a1aa
   selection: "hsl(var(--brand) / 0.24)",
   selectionMatch: "hsl(var(--brand) / 0.12)",
-  caret: "hsl(var(--brand))", // #fa500f
+  caret: "hsl(var(--brand))", // default #fa500f
   activeLine: "hsl(var(--foreground) / 0.025)",
   activeLineGutter: "hsl(var(--foreground) / 0.04)",
-  border: "hsl(var(--border))", // == --border (#27272b)
+  border: "hsl(var(--border))", // default #27272b
   key: "hsl(24 100% 64%)",
   string: "hsl(42 100% 72%)",
   number: "hsl(41 100% 50%)", // #ffaf00
@@ -55,7 +55,7 @@ const DARK: Palette = {
 };
 
 const LIGHT: Palette = {
-  bg: "hsl(var(--background))", // == --background
+  bg: "hsl(var(--background))",
   surface: "hsl(var(--popover))",
   fg: "hsl(240 9% 7%)",
   fgMuted: "hsl(var(--muted-foreground))",
