@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
 import { forcedMode } from "@/lib/colorTheme";
 import { usePluginsStore } from "@/stores/pluginsStore";
-import { useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
+import { activeColorTheme, useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useTourStore } from "@/stores/tourStore";
 
@@ -32,11 +32,11 @@ export function GeneralSettings() {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const colorTheme = useSettingsStore((s) => s.colorTheme);
-  const colorThemeCache = useSettingsStore((s) => s.colorThemeCache);
+  const activeTokens = useSettingsStore(activeColorTheme);
   const setColorTheme = useSettingsStore((s) => s.setColorTheme);
   const installed = usePluginsStore((s) => s.installed);
   const themes = installed.filter((p) => p.theme && p.manifest);
-  const forced = forcedMode(colorThemeCache);
+  const forced = forcedMode(activeTokens);
   const autoCheckUpdatesEnabled = useSettingsStore((s) => s.autoCheckUpdatesEnabled);
   const setAutoCheckUpdatesEnabled = useSettingsStore((s) => s.setAutoCheckUpdatesEnabled);
   const confirmBeforeQuit = useSettingsStore((s) => s.confirmBeforeQuit);

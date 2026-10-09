@@ -58,7 +58,7 @@ import { resolveTheme } from "@/lib/theme";
 import { useAutosave } from "@/lib/useAutosave";
 import { useFlowStore } from "@/stores/flowStore";
 import { useRunStore } from "@/stores/runStore";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { activeColorTheme, useSettingsStore } from "@/stores/settingsStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
@@ -144,7 +144,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
   useAutosave();
 
   const themeMode = useSettingsStore((s) => s.theme);
-  const colorThemeCache = useSettingsStore((s) => s.colorThemeCache);
+  const colorThemeCache = useSettingsStore(activeColorTheme);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
