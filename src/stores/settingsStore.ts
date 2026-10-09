@@ -7,6 +7,12 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { PluginTheme } from "@/lib/plugins/types";
 
 export type ThemeMode = "light" | "dark" | "system";
+/** The tokens to apply: the cache only counts while a theme plugin is chosen. */
+export const activeColorTheme = (s: {
+  colorTheme: string | null;
+  colorThemeCache: PluginTheme | null;
+}) => (s.colorTheme ? s.colorThemeCache : null);
+
 export type ConsoleMode = "simple" | "technical" | "performance";
 
 interface SettingsState {
