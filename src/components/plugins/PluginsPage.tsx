@@ -14,6 +14,7 @@ import type { CatalogItem } from "@/lib/plugins/types";
 import { pluginUrl } from "@/lib/plugins/url";
 import { cn } from "@/lib/utils";
 import { usePluginsStore } from "@/stores/pluginsStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 /** Badge per status. Being listed already means available, so it gets none. */
 const STATUS: Record<CatalogItem["status"], { label: string; className: string } | null> = {
@@ -91,8 +92,9 @@ export function PluginsPage() {
         <div className="mx-auto max-w-5xl px-6 py-8">
           <div className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
             <p className="max-w-xl text-[13px] leading-relaxed text-muted-foreground">
-              Connect Maestro Deck to the tools your team already uses. An installed plugin opens in
-              the right-hand panel, next to your device.
+              Connect Maestro Deck to the tools your team already uses, or give it a new look. An
+              installed plugin opens in the right-hand panel; a theme applies from its card or from
+              Settings.
             </p>
             <span className="mono-label">
               {installedCount} installed · {items.length} in the marketplace
@@ -143,6 +145,8 @@ export function PluginsPage() {
 function PluginCard({ item }: { item: CatalogItem }) {
   const navigate = useNavigate();
   const working = usePluginsStore((s) => s.busy[item.id] ?? false);
+  const colorTheme = useSettingsStore((s) => s.colorTheme);
+  const setColorTheme = useSettingsStore((s) => s.setColorTheme);
   const { install, uninstall, openPluginPanel, revokeOrigin } = usePluginsStore.getState();
   const manifest = item.installed?.manifest;
   const status = STATUS[item.status];
@@ -172,11 +176,18 @@ function PluginCard({ item }: { item: CatalogItem }) {
             item.name.trim()[0]?.toUpperCase()
           )}
         </div>
-        {status ? (
-          <span className={cn("px-2 py-0.5 font-mono text-[10px] uppercase", status.className)}>
-            {status.label}
-          </span>
-        ) : null}
+        <div className="flex items-center gap-1.5">
+          {item.isTheme ? (
+            <span className="border border-border px-2 py-0.5 font-mono text-[10px] uppercase text-muted-foreground">
+              Theme
+            </span>
+          ) : null}
+          {status ? (
+            <span className={cn("px-2 py-0.5 font-mono text-[10px] uppercase", status.className)}>
+              {status.label}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col px-5 py-4">
@@ -236,6 +247,15 @@ function PluginCard({ item }: { item: CatalogItem }) {
             }}
           >
             Open
+          </Button>
+        ) : null}
+        {item.status === "installed" && item.installed?.theme ? (
+          <Button
+            size="sm"
+            disabled={colorTheme === item.id}
+            onClick={() => setColorTheme(item.id, item.installed!.theme ?? null)}
+          >
+            {colorTheme === item.id ? "Applied" : "Apply"}
           </Button>
         ) : null}
         {working ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}

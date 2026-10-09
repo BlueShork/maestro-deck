@@ -9,6 +9,7 @@ export interface SegmentedItem<T extends string> {
   value: T;
   label: ReactNode;
   icon?: ReactNode;
+  disabled?: boolean;
 }
 
 /**
@@ -42,14 +43,15 @@ export function Segmented<T extends string>({
           <button
             key={item.value}
             type="button"
+            disabled={item.disabled}
             onClick={() => onChange(item.value)}
             aria-pressed={active}
             className={cn(
-              "flex items-center justify-center gap-1.5 border-l border-border font-medium transition-colors first:border-l-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+              "flex items-center justify-center gap-1.5 border-l border-border font-medium transition-colors first:border-l-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
               size === "sm" ? "h-6 px-2.5 text-[11px]" : "h-8 px-3 text-xs",
               active
                 ? "bg-accent text-foreground shadow-[inset_0_-2px_0_hsl(var(--brand))]"
-                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                : "text-muted-foreground enabled:hover:bg-accent/60 enabled:hover:text-foreground",
             )}
           >
             {item.icon}
