@@ -53,6 +53,7 @@ import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { StepContextMenu } from "@/components/StepContextMenu";
 import { themeExtensions } from "@/lib/editor-theme";
 import { openFlowFile } from "@/lib/flow-io";
+import { effectiveMode } from "@/lib/colorTheme";
 import { resolveTheme } from "@/lib/theme";
 import { useAutosave } from "@/lib/useAutosave";
 import { useFlowStore } from "@/stores/flowStore";
@@ -143,6 +144,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
   useAutosave();
 
   const themeMode = useSettingsStore((s) => s.theme);
+  const colorThemeCache = useSettingsStore((s) => s.colorThemeCache);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -202,7 +204,9 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
           indentWithTab,
         ]),
         StreamLanguage.define(yaml),
-        themeCompartment.current.of(themeExtensions(resolveTheme(themeMode))),
+        themeCompartment.current.of(
+          themeExtensions(effectiveMode(colorThemeCache, resolveTheme(themeMode))),
+        ),
         activeLineField,
         EditorView.lineWrapping,
         EditorView.updateListener.of((v) => {
@@ -288,7 +292,9 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
     if (!view) return;
     const apply = () =>
       view.dispatch({
-        effects: themeCompartment.current.reconfigure(themeExtensions(resolveTheme(themeMode))),
+        effects: themeCompartment.current.reconfigure(
+          themeExtensions(effectiveMode(colorThemeCache, resolveTheme(themeMode))),
+        ),
       });
     apply();
     if (themeMode !== "system") return;
@@ -296,7 +302,7 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
     const listener = () => apply();
     mq.addEventListener("change", listener);
     return () => mq.removeEventListener("change", listener);
-  }, [themeMode]);
+  }, [themeMode, colorThemeCache]);
 
   const onEditorContextMenu = useCallback(
     (e: MouseEvent<HTMLDivElement>) => {
