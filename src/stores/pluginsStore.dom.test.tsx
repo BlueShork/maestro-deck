@@ -113,6 +113,16 @@ describe("pluginsStore", () => {
     expect(m.pluginsList).toHaveBeenCalled();
   });
 
+  it("marks the installed list as loaded only after a successful refresh", async () => {
+    usePluginsStore.setState({ installedLoaded: false });
+    m.pluginsList.mockRejectedValueOnce(new Error("boom"));
+    await usePluginsStore.getState().refreshInstalled();
+    expect(usePluginsStore.getState().installedLoaded).toBe(false);
+    m.pluginsList.mockResolvedValueOnce([]);
+    await usePluginsStore.getState().refreshInstalled();
+    expect(usePluginsStore.getState().installedLoaded).toBe(true);
+  });
+
   it("toggle closes an open panel", () => {
     usePluginsStore.getState().togglePluginPanel("jira");
     usePluginsStore.getState().togglePluginPanel("jira");

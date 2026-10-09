@@ -29,6 +29,7 @@ import { startReportNotifications } from "@/lib/runReport/notify";
 import { startRunReportTracking } from "@/lib/runReport/track";
 import { useFarmStore } from "@/stores/farmStore";
 import { screenName, setScreen, track } from "@/lib/telemetry";
+import { syncColorTheme } from "@/lib/plugins/colorThemeSync";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { startCloudAuthListener, useCloudAuthStore } from "@/stores/cloudAuthStore";
 import { useCloudInviteStore } from "@/stores/cloudInviteStore";
@@ -38,6 +39,7 @@ import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRe
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { usePanelsStore } from "@/stores/panelsStore";
+import { usePluginsStore } from "@/stores/pluginsStore";
 import { useRunReportStore } from "@/stores/runReportStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -79,6 +81,7 @@ export default function App() {
     return () => setShortcutsSuppressed(false);
   }, [pageOpen]);
   const theme = useSettingsStore((s) => s.theme);
+  const colorTheme = useSettingsStore((s) => s.colorTheme);
   const colorThemeCache = useSettingsStore((s) => s.colorThemeCache);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
@@ -144,10 +147,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    applyTheme(theme, colorThemeCache);
+    const tokens = colorTheme ? colorThemeCache : null;
+    applyTheme(theme, tokens);
     if (theme !== "system") return;
-    return watchSystemTheme(() => applyTheme("system", colorThemeCache));
-  }, [theme, colorThemeCache]);
+    return watchSystemTheme(() => applyTheme("system", tokens));
+  }, [theme, colorTheme, colorThemeCache]);
+
+  // Theme plugins: load the installed list once, then keep the chosen theme's
+  // cached tokens current (or fall back to the default if it disappeared).
+  useEffect(() => {
+    const sync = () => {
+      const p = usePluginsStore.getState();
+      if (!p.installedLoaded) return;
+      const s = useSettingsStore.getState();
+      const next = syncColorTheme(s.colorTheme, s.colorThemeCache, p.installed);
+      if (next) s.setColorTheme(next.id, next.theme);
+    };
+    void usePluginsStore.getState().refreshInstalled();
+    return usePluginsStore.subscribe(sync);
+  }, []);
 
   // React to streamEnabled toggles while a device is connected: spin up or
   // tear down scrcpy live without forcing the user to disconnect/reconnect.
