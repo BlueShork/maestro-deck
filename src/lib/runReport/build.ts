@@ -16,14 +16,20 @@ function stepItem(s: StepRunState): ReportItem {
   };
 }
 
+const followed = (s: StepRunState) => s.status === "done" || s.status === "failed";
+
 /** A single run reports the open flow's steps; Run All reports Maestro's
- *  per-flow results (the steps only ever track the open file). */
+ *  per-flow results (the steps only ever track the open file). A single run
+ *  whose steps were never followed also falls back on the flow result: the
+ *  farm agent runs `maestro test --format JUNIT`, which prints suite lines
+ *  (`[Passed] login (6s)`) and no step lines. */
 export function buildRunReport(
   ctx: ReportContext,
   steps: StepRunState[],
   flows: SuiteFlowResult[],
 ): RunReport {
-  const items = ctx.kind === "all" ? flows.map((f) => ({ ...f })) : steps.map(stepItem);
+  const useFlows = ctx.kind === "all" || (flows.length > 0 && !steps.some(followed));
+  const items = useFlows ? flows.map((f) => ({ ...f })) : steps.map(stepItem);
   const count = (st: ReportItem["status"]) => items.filter((i) => i.status === st).length;
   const totals = { passed: count("passed"), failed: count("failed"), skipped: count("skipped") };
   // No exit code and nothing failed: the outcome is unknown (a cloud run the

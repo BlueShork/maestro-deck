@@ -85,4 +85,27 @@ describe("buildRunReport", () => {
     expect(r.items).toEqual([]);
     expect(r.totals).toEqual({ passed: 0, failed: 0, skipped: 0 });
   });
+
+  it("falls back on Maestro's flow result when no step could be followed (farm runs)", () => {
+    // The farm agent runs `maestro test --format JUNIT`: suite output, no step lines.
+    const r = buildRunReport(
+      ctx({ exitCode: 0 }),
+      [step({ status: "running", durationMs: null }), step({ index: 1, status: "pending" })],
+      [{ name: "open_playstore", status: "passed", durationMs: 6000, error: null }],
+    );
+    expect(r.items).toEqual([
+      { name: "open_playstore", status: "passed", durationMs: 6000, error: null },
+    ]);
+    expect(r.totals).toEqual({ passed: 1, failed: 0, skipped: 0 });
+    expect(r.status).toBe("passed");
+  });
+
+  it("keeps the steps when at least one was followed", () => {
+    const r = buildRunReport(
+      ctx(),
+      [step({}), step({ index: 1, status: "pending" })],
+      [{ name: "login", status: "passed", durationMs: 6000, error: null }],
+    );
+    expect(r.items).toHaveLength(2);
+  });
 });
