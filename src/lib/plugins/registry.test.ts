@@ -96,3 +96,49 @@ describe("buildCatalog", () => {
     expect(items[1].name).toBe("Jira");
   });
 });
+
+describe("theme kind", () => {
+  const base = {
+    id: "catppuccin",
+    name: "Catppuccin",
+    description: "Soothing pastel theme",
+    repo: "BlueShork/maestro-deck-plugin-catppuccin",
+    version: "1.0.0",
+    minAppVersion: "1.3.0",
+    url: "https://example.com/plugin.zip",
+    sha256: "a".repeat(64),
+  };
+
+  it("keeps kind theme and drops unknown kinds to plugin", () => {
+    const [t, p] = parseRegistry(
+      JSON.stringify({
+        plugins: [
+          { ...base, kind: "theme" },
+          { ...base, id: "x", kind: "font" },
+        ],
+      }),
+    );
+    expect(t.kind).toBe("theme");
+    expect(p.kind).toBe("plugin");
+  });
+
+  it("flags catalog items as themes from the registry or the installed manifest", () => {
+    const [entry] = parseRegistry(JSON.stringify({ plugins: [{ ...base, kind: "theme" }] }));
+    expect(buildCatalog([entry], [], "1.3.0")[0].isTheme).toBe(true);
+    const local = {
+      id: "dev-theme",
+      version: "0.1.0",
+      dev: true,
+      error: null,
+      manifest: {
+        id: "dev-theme",
+        name: "Dev",
+        version: "0.1.0",
+        minAppVersion: "1.3.0",
+        theme: "theme.json",
+        permissions: { http: [], open: [], secrets: false },
+      },
+    };
+    expect(buildCatalog([], [local], "1.3.0")[0].isTheme).toBe(true);
+  });
+});
