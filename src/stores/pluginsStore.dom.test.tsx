@@ -82,7 +82,7 @@ describe("pluginsStore", () => {
   it("refreshRegistry parses entries", async () => {
     m.pluginsRegistry.mockResolvedValue(JSON.stringify({ schema: 1, plugins: [entry] }));
     await usePluginsStore.getState().refreshRegistry();
-    expect(usePluginsStore.getState().registry).toEqual([entry]);
+    expect(usePluginsStore.getState().registry).toEqual([{ ...entry, kind: "plugin" }]);
     expect(usePluginsStore.getState().registryError).toBeNull();
   });
 
