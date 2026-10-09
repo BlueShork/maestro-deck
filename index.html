@@ -6,19 +6,69 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Maestro Deck</title>
     <script>
-      // Apply theme before first paint to avoid FOUC. Mirrors lib/theme.ts.
+      // Apply theme before first paint to avoid FOUC. Mirrors lib/theme.ts and
+      // lib/colorTheme.ts (forced mode + cached plugin tokens, same filtering).
       (function () {
         try {
-          var raw = localStorage.getItem("maestro-deck.settings");
           var mode = "system";
+          var cache = null;
+          var raw = localStorage.getItem("maestro-deck.settings");
           if (raw) {
             var parsed = JSON.parse(raw);
             if (parsed && parsed.state && parsed.state.theme) mode = parsed.state.theme;
+            if (parsed && parsed.state && parsed.state.colorTheme)
+              cache = parsed.state.colorThemeCache;
           }
           var dark =
             mode === "dark" ||
             (mode !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (cache && cache.dark && !cache.light) dark = true;
+          if (cache && cache.light && !cache.dark) dark = false;
           document.documentElement.classList.toggle("dark", dark);
+          var vars = cache && (dark ? cache.dark : cache.light);
+          var tokens = [
+            "background",
+            "foreground",
+            "card",
+            "card-foreground",
+            "popover",
+            "popover-foreground",
+            "surface",
+            "muted",
+            "muted-foreground",
+            "border",
+            "input",
+            "primary",
+            "primary-foreground",
+            "secondary",
+            "secondary-foreground",
+            "accent",
+            "accent-foreground",
+            "destructive",
+            "destructive-foreground",
+            "ring",
+            "brand",
+            "brand-foreground",
+            "success",
+            "warning",
+          ];
+          var hsl = /^\d+(\.\d+)? \d+(\.\d+)?% \d+(\.\d+)?%$/;
+          if (vars) {
+            for (var k in vars) {
+              if (tokens.indexOf(k) !== -1 && typeof vars[k] === "string" && hsl.test(vars[k])) {
+                var p = vars[k].split(" ").map(parseFloat);
+                if (p[0] <= 360 && p[1] <= 100 && p[2] <= 100)
+                  document.documentElement.style.setProperty("--" + k, vars[k]);
+              }
+            }
+          }
+          if (
+            cache &&
+            typeof cache.radius === "string" &&
+            /^\d+(\.\d+)?rem$/.test(cache.radius) &&
+            parseFloat(cache.radius) <= 1
+          )
+            document.documentElement.style.setProperty("--radius", cache.radius);
         } catch (e) {
           document.documentElement.classList.add("dark");
         }

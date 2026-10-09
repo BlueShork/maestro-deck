@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::manifest::{self, Manifest};
+use super::theme::{self, Theme};
 
 const MAX_UNCOMPRESSED: u64 = 50 * 1024 * 1024;
 const MAX_ENTRIES: usize = 2000;
@@ -45,6 +46,8 @@ pub struct InstalledPlugin {
     pub dev: bool,
     pub manifest: Option<Manifest>,
     pub error: Option<String>,
+    /// The validated theme of a theme plugin.
+    pub theme: Option<Theme>,
     /// Origins the user allowed this plugin to reach (see `grants`).
     pub granted_origins: Vec<String>,
 }
@@ -95,8 +98,13 @@ pub fn load_manifest(dir: &Path) -> Result<Manifest, String> {
     let m: Manifest =
         serde_json::from_slice(&bytes).map_err(|e| format!("manifest.json invalid: {e}"))?;
     manifest::validate(&m)?;
-    if !dir.join(&m.entry).is_file() {
-        return Err(format!("entry file missing: {}", m.entry));
+    if let Some(entry) = &m.entry {
+        if !dir.join(entry).is_file() {
+            return Err(format!("entry file missing: {entry}"));
+        }
+    }
+    if let Some(t) = &m.theme {
+        theme::load_theme(dir, t)?;
     }
     Ok(m)
 }
@@ -276,10 +284,17 @@ pub fn list(root: &Path, app_version: &str) -> Vec<InstalledPlugin> {
         .into_iter()
         .map(|e| {
             let loaded = entry_manifest(root, &e)
-                .and_then(|m| check_compat(&m, app_version, e.dev_path.is_some()).map(|()| m));
-            let (manifest, error) = match loaded {
-                Ok(m) => (Some(m), None),
-                Err(err) => (None, Some(err)),
+                .and_then(|m| check_compat(&m, app_version, e.dev_path.is_some()).map(|()| m))
+                .and_then(|m| {
+                    let t = match &m.theme {
+                        Some(rel) => Some(theme::load_theme(&plugin_dir(root, &e), rel)?),
+                        None => None,
+                    };
+                    Ok((m, t))
+                });
+            let (manifest, theme, error) = match loaded {
+                Ok((m, t)) => (Some(m), t, None),
+                Err(err) => (None, None, Some(err)),
             };
             let granted_origins = super::grants::granted(root, &e.id);
             InstalledPlugin {
@@ -288,6 +303,7 @@ pub fn list(root: &Path, app_version: &str) -> Vec<InstalledPlugin> {
                 dev: e.dev_path.is_some(),
                 manifest,
                 error,
+                theme,
                 granted_origins,
             }
         })
@@ -514,5 +530,65 @@ mod tests {
         assert!(listed[0].dev && listed[0].manifest.is_some());
         uninstall(root.path(), "jira").unwrap();
         assert!(dev.path().join("index.html").exists());
+    }
+
+    const THEME_MANIFEST: &str = r#"{"id":"catppuccin","name":"Catppuccin","version":"1.0.0","minAppVersion":"1.3.0","theme":"theme.json"}"#;
+    const THEME_JSON: &str = r#"{"light":{"brand":"266 85% 58%"},"dark":{"brand":"267 84% 81%"}}"#;
+
+    fn theme_pin(bytes: &[u8]) -> RegistryPin {
+        RegistryPin {
+            id: "catppuccin".into(),
+            version: "1.0.0".into(),
+            url: "https://x/plugin.zip".into(),
+            sha256: sha256_hex(bytes),
+        }
+    }
+
+    #[test]
+    fn installs_a_theme_only_plugin_and_lists_its_theme() {
+        let root = tempfile::tempdir().unwrap();
+        let zip = make_zip(&[
+            ("manifest.json", THEME_MANIFEST.as_bytes()),
+            ("theme.json", THEME_JSON.as_bytes()),
+        ]);
+        install_bytes(root.path(), &theme_pin(&zip), &zip, "1.3.0").unwrap();
+        let listed = list(root.path(), "1.3.0");
+        assert_eq!(listed[0].error, None);
+        let theme = listed[0].theme.as_ref().unwrap();
+        assert_eq!(theme.dark.as_ref().unwrap()["brand"], "267 84% 81%");
+    }
+
+    #[test]
+    fn refuses_a_theme_plugin_with_an_invalid_theme() {
+        let root = tempfile::tempdir().unwrap();
+        let zip = make_zip(&[
+            ("manifest.json", THEME_MANIFEST.as_bytes()),
+            ("theme.json", br#"{"light":{"brand":"url(https://x)"}}"#),
+        ]);
+        let err = install_bytes(root.path(), &theme_pin(&zip), &zip, "1.3.0").unwrap_err();
+        assert!(err.contains("brand"), "{err}");
+        assert!(no_tmp_left(root.path()));
+    }
+
+    #[test]
+    fn a_theme_broken_after_install_lists_as_error() {
+        let root = tempfile::tempdir().unwrap();
+        let zip = make_zip(&[
+            ("manifest.json", THEME_MANIFEST.as_bytes()),
+            ("theme.json", THEME_JSON.as_bytes()),
+        ]);
+        install_bytes(root.path(), &theme_pin(&zip), &zip, "1.3.0").unwrap();
+        std::fs::write(root.path().join("catppuccin/theme.json"), b"{}").unwrap();
+        let listed = list(root.path(), "1.3.0");
+        assert!(listed[0].error.is_some());
+        assert!(listed[0].theme.is_none());
+    }
+
+    #[test]
+    fn regular_plugins_list_no_theme() {
+        let root = tempfile::tempdir().unwrap();
+        let zip = good_zip();
+        install_bytes(root.path(), &pin_for(&zip), &zip, "1.1.0").unwrap();
+        assert!(list(root.path(), "1.1.0")[0].theme.is_none());
     }
 }

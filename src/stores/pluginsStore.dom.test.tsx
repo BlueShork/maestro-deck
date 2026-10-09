@@ -82,7 +82,7 @@ describe("pluginsStore", () => {
   it("refreshRegistry parses entries", async () => {
     m.pluginsRegistry.mockResolvedValue(JSON.stringify({ schema: 1, plugins: [entry] }));
     await usePluginsStore.getState().refreshRegistry();
-    expect(usePluginsStore.getState().registry).toEqual([entry]);
+    expect(usePluginsStore.getState().registry).toEqual([{ ...entry, kind: "plugin" }]);
     expect(usePluginsStore.getState().registryError).toBeNull();
   });
 
@@ -111,6 +111,16 @@ describe("pluginsStore", () => {
     await usePluginsStore.getState().revokeOrigin("gitlab", "https://git.acme.fr");
     expect(m.pluginRevokeOrigin).toHaveBeenCalledWith("gitlab", "https://git.acme.fr");
     expect(m.pluginsList).toHaveBeenCalled();
+  });
+
+  it("marks the installed list as loaded only after a successful refresh", async () => {
+    usePluginsStore.setState({ installedLoaded: false });
+    m.pluginsList.mockRejectedValueOnce(new Error("boom"));
+    await usePluginsStore.getState().refreshInstalled();
+    expect(usePluginsStore.getState().installedLoaded).toBe(false);
+    m.pluginsList.mockResolvedValueOnce([]);
+    await usePluginsStore.getState().refreshInstalled();
+    expect(usePluginsStore.getState().installedLoaded).toBe(true);
   });
 
   it("toggle closes an open panel", () => {

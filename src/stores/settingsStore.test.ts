@@ -19,7 +19,7 @@ vi.hoisted(() => {
   } as Storage;
 });
 
-import { useSettingsStore } from "./settingsStore";
+import { activeColorTheme, useSettingsStore } from "./settingsStore";
 
 const INITIAL = useSettingsStore.getState();
 
@@ -105,5 +105,13 @@ describe("settingsStore setters", () => {
     expect(useSettingsStore.getState().appId).toBe("com.example.app");
     useSettingsStore.getState().setAppId("");
     expect(useSettingsStore.getState().appId).toBe("");
+  });
+});
+
+describe("activeColorTheme", () => {
+  it("is null when no theme is chosen, even if a cache is left over", () => {
+    const cache = { dark: { brand: "267 84% 81%" } };
+    expect(activeColorTheme({ colorTheme: null, colorThemeCache: cache })).toBeNull();
+    expect(activeColorTheme({ colorTheme: "x", colorThemeCache: cache })).toBe(cache);
   });
 });

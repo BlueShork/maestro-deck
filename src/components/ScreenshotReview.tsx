@@ -88,7 +88,7 @@ function ImageFrame({
       className={cn(
         "flex min-h-[12rem] flex-1 items-center justify-center overflow-auto rounded-md border",
         CHECKERBOARD,
-        accent === "warning" ? "border-amber-500/40" : "border-border",
+        accent === "warning" ? "border-warning/40" : "border-border",
       )}
     >
       {src ? (
@@ -237,7 +237,7 @@ export function ScreenshotReview() {
 
         <div className="grid flex-1 grid-cols-2 gap-4 overflow-auto p-5">
           <figure className="flex flex-col gap-2">
-            <PanelLabel dot="bg-green-500" title="Bank" hint="current source of truth" />
+            <PanelLabel dot="bg-success" title="Bank" hint="current source of truth" />
             <ImageFrame
               src={comp.bank_b64}
               alt="bank reference"
@@ -249,7 +249,7 @@ export function ScreenshotReview() {
           </figure>
           <figure className="flex flex-col gap-2">
             <PanelLabel
-              dot="bg-amber-500"
+              dot="bg-warning"
               title="New capture"
               hint={overlayOn ? "changes highlighted in red" : "this run"}
               trailing={

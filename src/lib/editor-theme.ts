@@ -33,47 +33,47 @@ interface Palette {
 }
 
 const DARK: Palette = {
-  bg: "hsl(240 9% 7%)", // == --background (#101013)
-  surface: "hsl(240 7% 11%)", // == --popover (#1a1a1e)
+  bg: "hsl(var(--background))", // default #101013
+  surface: "hsl(var(--popover))", // default #1a1a1e
   fg: "hsl(60 20% 90%)",
-  fgMuted: "hsl(240 5% 65%)", // #a1a1aa
-  selection: "hsl(17 96% 52% / 0.24)",
-  selectionMatch: "hsl(17 96% 52% / 0.12)",
-  caret: "hsl(17 96% 52%)", // #fa500f
-  activeLine: "hsl(240 6% 9.5%)",
-  activeLineGutter: "hsl(240 6% 11%)",
-  border: "hsl(240 5% 16%)", // == --border (#27272b)
+  fgMuted: "hsl(var(--muted-foreground))", // default #a1a1aa
+  selection: "hsl(var(--brand) / 0.24)",
+  selectionMatch: "hsl(var(--brand) / 0.12)",
+  caret: "hsl(var(--brand))", // default #fa500f
+  activeLine: "hsl(var(--foreground) / 0.025)",
+  activeLineGutter: "hsl(var(--foreground) / 0.04)",
+  border: "hsl(var(--border))", // default #27272b
   key: "hsl(24 100% 64%)",
   string: "hsl(42 100% 72%)",
   number: "hsl(41 100% 50%)", // #ffaf00
   bool: "hsl(6 100% 66%)",
   punct: "hsl(240 4% 46%)",
   comment: "hsl(240 5% 34%)",
-  activeRunBg: "hsl(17 96% 52% / 0.12)",
-  activeRunBorder: "hsl(17 96% 52%)",
-  completionSelected: "hsl(17 96% 52% / 0.20)",
+  activeRunBg: "hsl(var(--brand) / 0.12)",
+  activeRunBorder: "hsl(var(--brand))",
+  completionSelected: "hsl(var(--brand) / 0.20)",
 };
 
 const LIGHT: Palette = {
-  bg: "hsl(48 30% 97%)", // == --background
-  surface: "hsl(0 0% 100%)",
+  bg: "hsl(var(--background))",
+  surface: "hsl(var(--popover))",
   fg: "hsl(240 9% 7%)",
-  fgMuted: "hsl(240 4% 40%)",
-  selection: "hsl(17 96% 52% / 0.18)",
-  selectionMatch: "hsl(17 96% 52% / 0.10)",
-  caret: "hsl(17 96% 48%)",
-  activeLine: "hsl(45 22% 93%)",
-  activeLineGutter: "hsl(45 22% 90%)",
-  border: "hsl(40 9% 85%)",
+  fgMuted: "hsl(var(--muted-foreground))",
+  selection: "hsl(var(--brand) / 0.18)",
+  selectionMatch: "hsl(var(--brand) / 0.10)",
+  caret: "hsl(var(--brand))",
+  activeLine: "hsl(var(--surface))",
+  activeLineGutter: "hsl(var(--foreground) / 0.06)",
+  border: "hsl(var(--border))",
   key: "hsl(17 90% 40%)",
   string: "hsl(32 90% 30%)",
   number: "hsl(1 80% 42%)",
   bool: "hsl(345 75% 40%)",
   punct: "hsl(240 4% 46%)",
   comment: "hsl(240 4% 58%)",
-  activeRunBg: "hsl(17 96% 52% / 0.10)",
-  activeRunBorder: "hsl(17 96% 48%)",
-  completionSelected: "hsl(17 96% 52% / 0.14)",
+  activeRunBg: "hsl(var(--brand) / 0.10)",
+  activeRunBorder: "hsl(var(--brand))",
+  completionSelected: "hsl(var(--brand) / 0.14)",
 };
 
 function buildTheme(c: Palette, dark: boolean): Extension {
@@ -223,7 +223,7 @@ function buildTheme(c: Palette, dark: boolean): Extension {
         border: `1px solid ${c.border}`,
         borderRadius: "6px",
         boxShadow: dark
-          ? "0 10px 30px -12px rgba(0,0,0,0.5), 0 0 0 1px hsl(240 5% 16%)"
+          ? "0 10px 30px -12px rgba(0,0,0,0.5), 0 0 0 1px hsl(var(--border))"
           : "0 10px 30px -12px rgba(15,23,42,0.18)",
       },
       ".cm-panel.cm-search br": {

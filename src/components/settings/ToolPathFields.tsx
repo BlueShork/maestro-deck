@@ -75,7 +75,7 @@ export function ToolPathsSaveBar({ paths }: { paths: ToolPaths }) {
         Applies on the next adb / Maestro call — no restart needed.
       </span>
       <div className="flex items-center gap-2">
-        {saved && <span className="text-xs text-green-600 dark:text-green-400">Saved</span>}
+        {saved && <span className="text-xs text-success">Saved</span>}
         {error && <span className="text-xs text-destructive">{error}</span>}
         <Button size="sm" disabled={!dirty || busy} onClick={() => void save()}>
           {busy ? "Saving…" : "Save"}

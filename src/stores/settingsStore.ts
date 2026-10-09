@@ -4,13 +4,26 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+import type { PluginTheme } from "@/lib/plugins/types";
+
 export type ThemeMode = "light" | "dark" | "system";
+/** The tokens to apply: the cache only counts while a theme plugin is chosen. */
+export const activeColorTheme = (s: {
+  colorTheme: string | null;
+  colorThemeCache: PluginTheme | null;
+}) => (s.colorTheme ? s.colorThemeCache : null);
+
 export type ConsoleMode = "simple" | "technical" | "performance";
 
 interface SettingsState {
   inspectKey: string;
   showFps: boolean;
   theme: ThemeMode;
+  /** Installed theme plugin in use, or null for the built-in Maestro Deck look. */
+  colorTheme: string | null;
+  /** Last validated tokens of `colorTheme`, applied before the plugin list
+   *  loads (and by index.html before first paint). */
+  colorThemeCache: PluginTheme | null;
   streamEnabled: boolean;
   /**
    * When enabled, inspect mode spawns a `maestro mcp` keeper once at startup
@@ -45,6 +58,7 @@ interface SettingsState {
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
+  setColorTheme: (id: string | null, theme: PluginTheme | null) => void;
   setStreamEnabled: (v: boolean) => void;
   setFastHierarchyEnabled: (v: boolean) => void;
   setAutoSaveEnabled: (v: boolean) => void;
@@ -61,6 +75,8 @@ export const useSettingsStore = create<SettingsState>()(
       inspectKey: "i",
       showFps: false,
       theme: "system",
+      colorTheme: null,
+      colorThemeCache: null,
       streamEnabled: true,
       fastHierarchyEnabled: true,
       autoSaveEnabled: true,
@@ -72,6 +88,8 @@ export const useSettingsStore = create<SettingsState>()(
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
+      setColorTheme: (colorTheme, colorThemeCache) =>
+        set({ colorTheme, colorThemeCache: colorTheme ? colorThemeCache : null }),
       setStreamEnabled: (streamEnabled) => set({ streamEnabled }),
       setFastHierarchyEnabled: (fastHierarchyEnabled) => set({ fastHierarchyEnabled }),
       setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
@@ -87,6 +105,8 @@ export const useSettingsStore = create<SettingsState>()(
       partialize: (s) => ({
         inspectKey: s.inspectKey,
         theme: s.theme,
+        colorTheme: s.colorTheme,
+        colorThemeCache: s.colorThemeCache,
         streamEnabled: s.streamEnabled,
         fastHierarchyEnabled: s.fastHierarchyEnabled,
         autoSaveEnabled: s.autoSaveEnabled,

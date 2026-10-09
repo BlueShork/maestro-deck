@@ -52,14 +52,14 @@ describe("ToolCallCard", () => {
       <ToolCallCard use={use("get_screen")} result={result("{}", { isError: true })} />,
     );
     expect(errHtml).toMatch(/✗/);
-    expect(errHtml).toMatch(/text-red-/);
+    expect(errHtml).toMatch(/text-destructive/);
     expect(errHtml).not.toMatch(/animate-pulse/);
 
     const okHtml = renderToStaticMarkup(
       <ToolCallCard use={use("get_screen")} result={result("{}")} />,
     );
     expect(okHtml).toMatch(/✓/);
-    expect(okHtml).toMatch(/text-green-/);
+    expect(okHtml).toMatch(/text-success/);
     expect(okHtml).not.toMatch(/animate-pulse/);
   });
 

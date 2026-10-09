@@ -12,7 +12,12 @@ pub struct Manifest {
     pub name: String,
     pub version: String,
     pub min_app_version: String,
-    pub entry: String,
+    /// The panel page. Optional: a theme plugin has no UI.
+    #[serde(default)]
+    pub entry: Option<String>,
+    /// `theme.json` with design-token values (see `theme`).
+    #[serde(default)]
+    pub theme: Option<String>,
     #[serde(default)]
     pub icon: Option<String>,
     #[serde(default)]
@@ -113,8 +118,18 @@ pub fn validate(m: &Manifest) -> Result<(), String> {
     if parse_version(&m.min_app_version).is_none() {
         return Err(format!("invalid minAppVersion: {}", m.min_app_version));
     }
-    if !safe_relative(&m.entry) {
-        return Err(format!("invalid entry path: {}", m.entry));
+    if m.entry.is_none() && m.theme.is_none() {
+        return Err("manifest needs an \"entry\" or a \"theme\"".into());
+    }
+    if m.panel.is_some() && m.entry.is_none() {
+        return Err("a panel needs an \"entry\" page".into());
+    }
+    for (field, p) in [("entry", &m.entry), ("theme", &m.theme)] {
+        if let Some(p) = p {
+            if !safe_relative(p) {
+                return Err(format!("invalid {field} path: {p}"));
+            }
+        }
     }
     if let Some(icon) = &m.icon {
         if !safe_relative(icon) {
@@ -216,6 +231,31 @@ mod tests {
                 "permissions":{"http":["https://*.atlassian.net"],"open":["https://id.atlassian.com"],"secrets":true}}"#,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn theme_only_manifest_is_valid() {
+        let m: Manifest = serde_json::from_str(
+            r#"{"id":"catppuccin","name":"Catppuccin","version":"1.0.0","minAppVersion":"1.3.0",
+                "theme":"theme.json"}"#,
+        )
+        .unwrap();
+        assert_eq!(m.entry, None);
+        assert_eq!(m.theme.as_deref(), Some("theme.json"));
+        assert!(validate(&m).is_ok());
+    }
+
+    #[test]
+    fn needs_entry_or_theme_and_panel_needs_entry() {
+        let mut m = sample();
+        m.entry = None;
+        assert!(validate(&m).is_err(), "panel without entry");
+        m.panel = None;
+        assert!(validate(&m).is_err(), "neither entry nor theme");
+        m.theme = Some("theme.json".into());
+        assert!(validate(&m).is_ok());
+        m.theme = Some("../theme.json".into());
+        assert!(validate(&m).is_err());
     }
 
     #[test]
@@ -323,7 +363,7 @@ mod tests {
     fn validates_sample_and_rejects_bad_fields() {
         assert!(validate(&sample()).is_ok());
         let mut m = sample();
-        m.entry = "../index.html".into();
+        m.entry = Some("../index.html".into());
         assert!(validate(&m).is_err());
         let mut m = sample();
         m.permissions.http = pats(&["http://*.atlassian.net"]);

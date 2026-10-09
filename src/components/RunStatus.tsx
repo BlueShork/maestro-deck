@@ -28,9 +28,9 @@ const RUNNING_HINT: Record<CloudJobPlatform, string> = {
 };
 
 const VERDICT_COLOR: Record<Verdict, string> = {
-  passed: "text-green-600 dark:text-green-400",
-  failed: "text-red-600 dark:text-red-400",
-  stopped: "text-amber-600 dark:text-amber-400",
+  passed: "text-success",
+  failed: "text-destructive",
+  stopped: "text-warning",
 };
 
 /**
