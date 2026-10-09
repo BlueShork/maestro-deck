@@ -9,6 +9,7 @@ import { AccountPage } from "@/components/AccountPage";
 import { CloudInviteDialog } from "@/components/CloudInviteDialog";
 import { DevicePicker } from "@/components/devices/DevicePicker";
 import { ImageBankPage } from "@/components/ImageBankPage";
+import { OriginGrantDialog } from "@/components/plugins/OriginGrantDialog";
 import { PluginsPage } from "@/components/plugins/PluginsPage";
 import { isFullPage } from "@/lib/fullPage";
 import { MainView } from "@/components/MainView";
@@ -397,6 +398,7 @@ export default function App() {
       <UpdateDialog />
       <CloudInviteDialog />
       <QuitConfirmDialog />
+      <OriginGrantDialog />
       <TourOverlay />
       <OnboardingOverlay />
       <SetupPopup />

@@ -4,6 +4,8 @@
 import { ipc } from "@/lib/ipc";
 import type { BridgeDeps } from "@/lib/plugins/bridge";
 import type { PluginManifest } from "@/lib/plugins/types";
+import { askOriginGrant } from "@/stores/originGrantStore";
+import { usePluginsStore } from "@/stores/pluginsStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
@@ -23,6 +25,13 @@ export function makeBridgeDeps(manifest: PluginManifest): BridgeDeps {
     secretDelete: (key) => ipc.pluginSecretDelete(id, key),
     httpFetch: (req) => ipc.pluginHttpFetch(id, req),
     openExternal: open,
+    requestOrigin: async (origin) => {
+      if (await ipc.pluginOriginAllowed(id, origin)) return true;
+      if (!(await askOriginGrant(id, manifest.name, origin))) return false;
+      await ipc.pluginGrantOrigin(id, origin);
+      void usePluginsStore.getState().refreshInstalled();
+      return true;
+    },
     toast: ({ kind, message, action }) => {
       const act = action
         ? {

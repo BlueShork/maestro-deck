@@ -8,6 +8,7 @@ import { makeBridgeDeps } from "@/lib/plugins/hostDeps";
 import { readThemeVars } from "@/lib/plugins/theme";
 import type { PluginManifest } from "@/lib/plugins/types";
 import { pluginUrl } from "@/lib/plugins/url";
+import { useOriginGrantStore } from "@/stores/originGrantStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 /**
@@ -26,6 +27,9 @@ export function PluginHost({ manifest }: { manifest: PluginManifest }) {
   const loads = useRef(0);
   const [stopped, setStopped] = useState(false);
   const deps = useMemo(() => makeBridgeDeps(manifest), [manifest]);
+
+  // A refusal holds until the panel is reopened.
+  useEffect(() => useOriginGrantStore.getState().forgetRefusal(manifest.id), [manifest.id]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {

@@ -36,6 +36,10 @@ pub struct Permissions {
     pub secrets: bool,
     /// Whether the plugin may read the workspace through `workspace.*`.
     pub workspace: bool,
+    /// Whether the plugin may ask the user to allow extra https origins
+    /// (`http.requestOrigin`), e.g. a self-hosted server.
+    #[serde(rename = "userOrigins")]
+    pub user_origins: bool,
 }
 
 pub fn valid_id(id: &str) -> bool {
@@ -156,6 +160,47 @@ pub fn origin_allowed(patterns: &[String], url: &str) -> bool {
     })
 }
 
+/// `https://host[:port]` with nothing else (a trailing `/` is fine), as the
+/// canonical origin string: lowercase host, default port dropped.
+pub fn normalize_origin(s: &str) -> Option<String> {
+    let u = reqwest::Url::parse(s.trim()).ok()?;
+    if u.scheme() != "https"
+        || !u.username().is_empty()
+        || u.password().is_some()
+        || u.query().is_some()
+        || u.fragment().is_some()
+        || u.path() != "/"
+    {
+        return None;
+    }
+    u.host_str()?;
+    Some(u.origin().ascii_serialization())
+}
+
+/// Everything a plugin may reach: its manifest patterns plus the exact
+/// origins its user granted (which, unlike patterns, may carry a port).
+#[derive(Debug, Clone, Default)]
+pub struct Allow {
+    pub patterns: Vec<String>,
+    pub origins: Vec<String>,
+}
+
+impl Allow {
+    pub fn allows(&self, url: &str) -> bool {
+        if origin_allowed(&self.patterns, url) {
+            return true;
+        }
+        let Ok(u) = reqwest::Url::parse(url) else {
+            return false;
+        };
+        if u.scheme() != "https" || !u.username().is_empty() || u.password().is_some() {
+            return false;
+        }
+        let origin = u.origin().ascii_serialization();
+        self.origins.contains(&origin)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +227,52 @@ mod tests {
         )
         .unwrap();
         assert!(m.permissions.workspace);
+    }
+
+    #[test]
+    fn user_origins_permission_defaults_to_false() {
+        assert!(!sample().permissions.user_origins);
+        let m: Manifest = serde_json::from_str(
+            r#"{"id":"gitlab","name":"GitLab","version":"1.0.0","minAppVersion":"1.3.0",
+                "entry":"index.html","permissions":{"userOrigins":true}}"#,
+        )
+        .unwrap();
+        assert!(m.permissions.user_origins);
+    }
+
+    #[test]
+    fn normalizes_origins() {
+        assert_eq!(
+            normalize_origin("https://GitLab.Acme.fr/").as_deref(),
+            Some("https://gitlab.acme.fr")
+        );
+        assert_eq!(
+            normalize_origin("https://gitlab.acme.fr:8443").as_deref(),
+            Some("https://gitlab.acme.fr:8443")
+        );
+        assert_eq!(
+            normalize_origin("https://gitlab.acme.fr:443").as_deref(),
+            Some("https://gitlab.acme.fr")
+        );
+        assert_eq!(normalize_origin("http://gitlab.acme.fr"), None);
+        assert_eq!(normalize_origin("https://gitlab.acme.fr/api"), None);
+        assert_eq!(normalize_origin("https://me@gitlab.acme.fr"), None);
+        assert_eq!(normalize_origin("https://gitlab.acme.fr/?a=1"), None);
+        assert_eq!(normalize_origin("gitlab.acme.fr"), None);
+    }
+
+    #[test]
+    fn allows_granted_origin_with_port() {
+        let a = Allow {
+            patterns: pats(&["https://gitlab.com"]),
+            origins: vec!["https://gitlab.acme.fr:8443".into()],
+        };
+        assert!(a.allows("https://gitlab.com/api/v4/user"));
+        assert!(a.allows("https://gitlab.acme.fr:8443/api/v4/user"));
+        assert!(!a.allows("https://gitlab.acme.fr/api/v4/user"));
+        assert!(!a.allows("http://gitlab.acme.fr:8443/api/v4/user"));
+        assert!(!a.allows("https://u:p@gitlab.acme.fr:8443/"));
+        assert!(!a.allows("https://evil.fr/"));
     }
 
     #[test]

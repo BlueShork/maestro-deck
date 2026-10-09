@@ -143,7 +143,7 @@ export function PluginsPage() {
 function PluginCard({ item }: { item: CatalogItem }) {
   const navigate = useNavigate();
   const working = usePluginsStore((s) => s.busy[item.id] ?? false);
-  const { install, uninstall, openPluginPanel } = usePluginsStore.getState();
+  const { install, uninstall, openPluginPanel, revokeOrigin } = usePluginsStore.getState();
   const manifest = item.installed?.manifest;
   const status = STATUS[item.status];
   const version = item.installed?.version ?? item.registry?.version;
@@ -192,6 +192,24 @@ function PluginCard({ item }: { item: CatalogItem }) {
           ) : null}
         </div>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+        {item.installed?.grantedOrigins?.length ? (
+          <ul className="mt-3 flex flex-col gap-1">
+            {item.installed.grantedOrigins.map((o) => (
+              <li key={o} className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                <span className="truncate text-muted-foreground" title={o}>
+                  {new URL(o).host}
+                </span>
+                <button
+                  type="button"
+                  className="text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={() => void revokeOrigin(item.id, o)}
+                >
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {item.registry?.repo ? (
           <span className="mono-label mt-auto truncate pt-4">{item.registry.repo}</span>
         ) : null}

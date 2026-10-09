@@ -8,6 +8,7 @@ import {
   errorCode,
   handleRpc,
   isRpcRequest,
+  normalizeOrigin,
   storageKey,
   type BridgeDeps,
 } from "./bridge";
@@ -41,6 +42,7 @@ function deps(over: Partial<BridgeDeps> = {}): BridgeDeps {
     secretDelete: vi.fn(async () => {}),
     httpFetch: vi.fn(async () => ({ status: 200, headers: {}, body: "{}" })),
     openExternal: vi.fn(async () => {}),
+    requestOrigin: vi.fn(async () => true),
     toast: vi.fn(),
     appInfo: () => ({ appVersion: "1.1.0", platform: "macos" }),
     storage: memoryStorage(),
@@ -218,5 +220,49 @@ describe("workspace methods", () => {
       ok: false,
       error: { code: "bad_request" },
     });
+  });
+});
+
+describe("http.requestOrigin", () => {
+  const withUserOrigins = (over: Partial<BridgeDeps> = {}) => {
+    const d = deps(over);
+    d.manifest = { ...d.manifest, permissions: { ...d.manifest.permissions, userOrigins: true } };
+    return d;
+  };
+
+  it("needs the userOrigins permission", async () => {
+    const d = deps();
+    const res = await handleRpc(rpc("http.requestOrigin", { origin: "https://git.acme.fr" }), d);
+    expect(res).toMatchObject({ ok: false, error: { code: "forbidden" } });
+    expect(d.requestOrigin).not.toHaveBeenCalled();
+  });
+
+  it("rejects anything but a bare https origin", async () => {
+    for (const origin of [
+      "http://git.acme.fr",
+      "https://git.acme.fr/api",
+      "git.acme.fr",
+      "https://u@git.acme.fr",
+    ]) {
+      const res = await handleRpc(rpc("http.requestOrigin", { origin }), withUserOrigins());
+      expect(res).toMatchObject({ ok: false, error: { code: "bad_request" } });
+    }
+  });
+
+  it("passes the normalised origin and returns the user's answer", async () => {
+    const d = withUserOrigins({ requestOrigin: vi.fn(async () => false) });
+    const res = await handleRpc(
+      rpc("http.requestOrigin", { origin: "https://Git.Acme.fr:8443/" }),
+      d,
+    );
+    expect(d.requestOrigin).toHaveBeenCalledWith("https://git.acme.fr:8443");
+    expect(res).toMatchObject({ ok: true, result: false });
+  });
+});
+
+describe("normalizeOrigin", () => {
+  it("drops the default port and a trailing slash", () => {
+    expect(normalizeOrigin("https://git.acme.fr:443/")).toBe("https://git.acme.fr");
+    expect(normalizeOrigin("https://git.acme.fr?x=1")).toBeNull();
   });
 });

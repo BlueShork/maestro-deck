@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use super::manifest::origin_allowed;
+use super::manifest::Allow;
 
 const RESPONSE_CAP: usize = 5 * 1024 * 1024;
 const METHODS: [&str; 5] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -44,8 +44,8 @@ pub fn header_blocked(name: &str) -> bool {
     )
 }
 
-pub fn check_request(patterns: &[String], req: &HttpRequest) -> Result<reqwest::Method, String> {
-    if !origin_allowed(patterns, &req.url) {
+pub fn check_request(allow: &Allow, req: &HttpRequest) -> Result<reqwest::Method, String> {
+    if !allow.allows(&req.url) {
         return Err(format!(
             "forbidden: {} is not allowed by this plugin's permissions",
             req.url
@@ -81,15 +81,15 @@ pub fn send_error(e: reqwest::Error) -> String {
     }
 }
 
-pub async fn fetch(patterns: Vec<String>, req: HttpRequest) -> Result<HttpResponse, String> {
-    let method = check_request(&patterns, &req)?;
-    let redirect_patterns = patterns.clone();
+pub async fn fetch(allow: Allow, req: HttpRequest) -> Result<HttpResponse, String> {
+    let method = check_request(&allow, &req)?;
+    let redirect_allow = allow.clone();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::custom(move |attempt| {
             if attempt.previous().len() >= 5 {
                 attempt.error("too many redirects")
-            } else if origin_allowed(&redirect_patterns, attempt.url().as_str()) {
+            } else if redirect_allow.allows(attempt.url().as_str()) {
                 attempt.follow()
             } else {
                 attempt.stop()
@@ -140,13 +140,17 @@ mod tests {
 
     #[test]
     fn checks_origin_and_method() {
-        let p = vec!["https://*.atlassian.net".to_string()];
-        assert!(check_request(&p, &req("https://acme.atlassian.net/rest", "get")).is_ok());
-        assert!(check_request(&p, &req("https://evil.com/", "GET"))
+        let a = Allow {
+            patterns: vec!["https://*.atlassian.net".to_string()],
+            origins: vec!["https://git.acme.fr:8443".to_string()],
+        };
+        assert!(check_request(&a, &req("https://acme.atlassian.net/rest", "get")).is_ok());
+        assert!(check_request(&a, &req("https://git.acme.fr:8443/api/v4", "GET")).is_ok());
+        assert!(check_request(&a, &req("https://evil.com/", "GET"))
             .unwrap_err()
             .starts_with("forbidden:"));
         assert!(
-            check_request(&p, &req("https://acme.atlassian.net/", "TRACE"))
+            check_request(&a, &req("https://acme.atlassian.net/", "TRACE"))
                 .unwrap_err()
                 .starts_with("bad_request:")
         );

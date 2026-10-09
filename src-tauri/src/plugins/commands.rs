@@ -14,8 +14,9 @@ use base64::Engine as _;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
+use super::grants;
 use super::http::{self, HttpRequest, HttpResponse};
-use super::manifest::{origin_allowed, valid_id, valid_key, Manifest};
+use super::manifest::{normalize_origin, valid_id, valid_key, Allow, Manifest};
 use super::store::{self, InstalledPlugin, RegistryPin};
 use super::workspace::{self, Change, Status, WorkspaceInfo};
 use super::{plugins_root, secrets, APP_VERSION, REGISTRY_URL};
@@ -43,6 +44,27 @@ fn secret_manifest(root: &Path, plugin_id: &str, key: &str) -> Result<(), String
         return Err(format!("bad_request: invalid key {key:?}"));
     }
     Ok(())
+}
+
+/// What `m` may reach: manifest patterns plus, when it asked for them, the
+/// origins its user granted.
+fn allow_for(root: &Path, m: &Manifest) -> Allow {
+    Allow {
+        patterns: m.permissions.http.clone(),
+        origins: if m.permissions.user_origins {
+            grants::granted(root, &m.id)
+        } else {
+            Vec::new()
+        },
+    }
+}
+
+fn require_user_origins(m: &Manifest) -> Result<(), String> {
+    if m.permissions.user_origins {
+        Ok(())
+    } else {
+        Err("forbidden: this plugin did not request user-granted origins".into())
+    }
 }
 
 async fn download(url: &str, cap: usize, timeout: Duration) -> Result<Vec<u8>, String> {
@@ -91,6 +113,7 @@ pub async fn plugins_uninstall(id: String) -> Result<(), String> {
     let root = root()?;
     tokio::task::spawn_blocking(move || {
         secrets::delete_all(&root, &id);
+        grants::remove_plugin(&root, &id)?;
         store::uninstall(&root, &id)
     })
     .await
@@ -113,8 +136,9 @@ pub async fn plugin_http_fetch(
     plugin_id: String,
     request: HttpRequest,
 ) -> Result<HttpResponse, String> {
-    let m = manifest_for(&root()?, &plugin_id)?;
-    http::fetch(m.permissions.http, request).await
+    let root = root()?;
+    let m = manifest_for(&root, &plugin_id)?;
+    http::fetch(allow_for(&root, &m), request).await
 }
 
 #[tauri::command]
@@ -123,15 +147,11 @@ pub async fn plugin_open_external(
     plugin_id: String,
     url: String,
 ) -> Result<(), String> {
-    let m = manifest_for(&root()?, &plugin_id)?;
-    let allowed: Vec<String> = m
-        .permissions
-        .http
-        .iter()
-        .chain(&m.permissions.open)
-        .cloned()
-        .collect();
-    if !origin_allowed(&allowed, &url) {
+    let root = root()?;
+    let m = manifest_for(&root, &plugin_id)?;
+    let mut allow = allow_for(&root, &m);
+    allow.patterns.extend(m.permissions.open.iter().cloned());
+    if !allow.allows(&url) {
         return Err(format!(
             "forbidden: {url} is not allowed by this plugin's permissions"
         ));
@@ -139,6 +159,35 @@ pub async fn plugin_open_external(
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())
+}
+
+/// Whether `origin` is already reachable (manifest or grant): the bridge only
+/// shows the grant dialog when it is not.
+#[tauri::command]
+pub async fn plugin_origin_allowed(plugin_id: String, origin: String) -> Result<bool, String> {
+    let root = root()?;
+    let m = manifest_for(&root, &plugin_id)?;
+    require_user_origins(&m)?;
+    let o = normalize_origin(&origin)
+        .ok_or_else(|| format!("bad_request: {origin:?} is not an https origin"))?;
+    Ok(allow_for(&root, &m).allows(&o))
+}
+
+/// Called by the app after the user clicked Allow — never routed from a
+/// plugin RPC.
+#[tauri::command]
+pub async fn plugin_grant_origin(plugin_id: String, origin: String) -> Result<String, String> {
+    let root = root()?;
+    require_user_origins(&manifest_for(&root, &plugin_id)?)?;
+    grants::grant(&root, &plugin_id, &origin)
+}
+
+#[tauri::command]
+pub async fn plugin_revoke_origin(plugin_id: String, origin: String) -> Result<(), String> {
+    if !valid_id(&plugin_id) {
+        return Err(format!("forbidden: invalid plugin id {plugin_id:?}"));
+    }
+    grants::revoke(&root()?, &plugin_id, &origin)
 }
 
 #[tauri::command]

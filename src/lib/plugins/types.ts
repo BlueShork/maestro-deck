@@ -6,6 +6,7 @@ export interface PluginPermissions {
   open: string[];
   secrets: boolean;
   workspace?: boolean;
+  userOrigins?: boolean;
 }
 export interface PluginManifest {
   id: string;
@@ -23,6 +24,7 @@ export interface InstalledPlugin {
   dev: boolean;
   manifest: PluginManifest | null;
   error: string | null;
+  grantedOrigins?: string[];
 }
 export interface RegistryEntry {
   id: string;
@@ -60,6 +62,7 @@ export interface PluginWorkspaceInfo {
     branch: string | null;
     head: string | null;
     github: { owner: string; repo: string } | null;
+    remote: { host: string; path: string } | null;
   } | null;
 }
 export interface PluginWorkspaceChange {
