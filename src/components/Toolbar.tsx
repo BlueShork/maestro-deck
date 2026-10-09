@@ -431,7 +431,10 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
 
           <div data-tour="run-controls" className="flex items-stretch">
             {starting ? (
-              <ToolbarCell disabled className="min-w-[7.5rem] bg-destructive text-white">
+              <ToolbarCell
+                disabled
+                className="min-w-[7.5rem] bg-destructive text-destructive-foreground"
+              >
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Starting…
               </ToolbarCell>
@@ -440,7 +443,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                 <TooltipTrigger asChild>
                   <ToolbarCell
                     onClick={onStop}
-                    className="min-w-[7.5rem] bg-destructive text-white hover:bg-destructive/90"
+                    className="min-w-[7.5rem] bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     <Square className="h-3.5 w-3.5" fill="currentColor" />
                     {cloudRun ? "Stop watching" : "Stop"}
@@ -478,7 +481,7 @@ export function Toolbar({ onRun, onRunAll, onStop }: ToolbarProps) {
                     <ToolbarCell
                       onClick={onRun}
                       disabled={cloudTarget !== null ? !cloudApk : localToolsMissing}
-                      className="group/run min-w-[7.5rem] bg-primary text-primary-foreground hover:bg-primary/90 dark:hover:bg-white"
+                      className="group/run min-w-[7.5rem] bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                       {cloudTarget ? (
                         <Cloud className="h-4 w-4" />

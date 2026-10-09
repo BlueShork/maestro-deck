@@ -113,7 +113,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
                 <tr
                   key={idx}
                   className={cn(
-                    line.op === "add" && "bg-green-500/10",
+                    line.op === "add" && "bg-success/10",
                     line.op === "del" && "bg-destructive/10",
                   )}
                 >
@@ -124,7 +124,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
                     {line.newNo ?? ""}
                   </td>
                   <td className="select-none border-r border-border/40 px-1 text-center align-top w-6">
-                    {line.op === "add" && <Plus className="inline h-3 w-3 text-green-500" />}
+                    {line.op === "add" && <Plus className="inline h-3 w-3 text-success" />}
                     {line.op === "del" && <Minus className="inline h-3 w-3 text-destructive" />}
                   </td>
                   <td className="whitespace-pre px-2 py-0.5 align-top">{line.text || " "}</td>
