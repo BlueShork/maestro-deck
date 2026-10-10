@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/ipc", () => ({ ipc: {} }));
 
 import type { PluginManifest } from "@/lib/plugins/types";
+import type { RunReport } from "@/lib/runReport/types";
+import { useRunReportStore } from "@/stores/runReportStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 import { PluginHost } from "./PluginHost";
@@ -62,5 +64,22 @@ describe("PluginHost", () => {
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
     act(() => useWorkspaceStore.getState().setFolder("/other"));
     expect(post).toHaveBeenCalledWith({ type: "md-event", name: "workspace" }, "*");
+  });
+
+  it("forwards run.finished only to plugins with the runs permission", () => {
+    for (const runs of [false, true]) {
+      const { unmount } = render(
+        <PluginHost manifest={{ ...manifest, permissions: { ...manifest.permissions, runs } }} />,
+      );
+      const frame = screen.getByTitle("Jira") as HTMLIFrameElement;
+      fireEvent.load(frame);
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      const report = { id: `r-${runs}` } as RunReport;
+      act(() => useRunReportStore.getState().finish(report));
+      expect(post.mock.calls).toEqual(
+        runs ? [[{ type: "md-event", name: "run.finished", data: report }, "*"]] : [],
+      );
+      unmount();
+    }
   });
 });

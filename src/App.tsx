@@ -25,6 +25,8 @@ import { summarizeBankReport } from "@/lib/bankReport";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
+import { startReportNotifications } from "@/lib/runReport/notify";
+import { startRunReportTracking } from "@/lib/runReport/track";
 import { useFarmStore } from "@/stores/farmStore";
 import { screenName, setScreen, track } from "@/lib/telemetry";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
@@ -36,6 +38,7 @@ import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRe
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { usePanelsStore } from "@/stores/panelsStore";
+import { useRunReportStore } from "@/stores/runReportStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useStreamStore } from "@/stores/streamStore";
@@ -66,6 +69,10 @@ export default function App() {
   useEffect(() => {
     void useFarmStore.getState().start();
   }, []);
+
+  // Records the last run as a RunReport for plugins with the `runs` permission.
+  useEffect(() => startRunReportTracking(), []);
+  useEffect(() => startReportNotifications(), []);
 
   useEffect(() => {
     setShortcutsSuppressed(pageOpen);
@@ -191,8 +198,12 @@ export default function App() {
       events.onRunnerStdout((line) => {
         appendLog("stdout", line);
         ingestLine(line);
+        useRunReportStore.getState().ingest(line);
       }),
-      events.onRunnerStderr((line) => appendLog("stderr", line)),
+      events.onRunnerStderr((line) => {
+        appendLog("stderr", line);
+        useRunReportStore.getState().ingest(line);
+      }),
       events.onRunnerExit(({ code }) => {
         const wasStopped = useRunStore.getState().stopRequested;
         const exitedPid = useRunStore.getState().pid;

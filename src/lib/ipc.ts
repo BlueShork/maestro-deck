@@ -259,6 +259,10 @@ export const ipc = {
     call<void>("plugin_secret_set", { pluginId, key, value }),
   pluginSecretDelete: (pluginId: string, key: string) =>
     call<void>("plugin_secret_delete", { pluginId, key }),
+  pluginCopyImage: (pluginId: string, png: string) =>
+    call<void>("plugin_copy_image", { pluginId, png }),
+  workspaceGitBranch: (workspace: string) =>
+    call<string | null>("workspace_git_branch", { workspace }),
   pluginWorkspaceInfo: (pluginId: string, workspace: string | null) =>
     call<PluginWorkspaceInfo | null>("plugin_workspace_info", { pluginId, workspace }),
   pluginWorkspaceChanges: (pluginId: string, workspace: string) =>

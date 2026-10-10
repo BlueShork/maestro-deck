@@ -1,11 +1,15 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
+
 import { ipc } from "@/lib/ipc";
 import type { BridgeDeps } from "@/lib/plugins/bridge";
 import type { PluginManifest } from "@/lib/plugins/types";
 import { askOriginGrant } from "@/stores/originGrantStore";
 import { usePluginsStore } from "@/stores/pluginsStore";
+import { useRunReportStore } from "@/stores/runReportStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
@@ -50,5 +54,19 @@ export function makeBridgeDeps(manifest: PluginManifest): BridgeDeps {
     workspaceInfo: (root) => ipc.pluginWorkspaceInfo(id, root),
     workspaceChanges: (root) => ipc.pluginWorkspaceChanges(id, root),
     workspaceRead: (root, path) => ipc.pluginWorkspaceRead(id, root, path),
+    latestRun: () => useRunReportStore.getState().last,
+    copyImage: (png) => ipc.pluginCopyImage(id, png),
+    saveFile: async (name, base64) => {
+      const path = await save({
+        defaultPath: name,
+        filters: [{ name: "PNG image", extensions: ["png"] }],
+      });
+      if (!path) return false;
+      await writeFile(
+        path,
+        Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)),
+      );
+      return true;
+    },
   };
 }

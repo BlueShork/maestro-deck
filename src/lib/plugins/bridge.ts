@@ -48,6 +48,11 @@ export interface BridgeDeps {
   workspaceInfo(root: string | null): Promise<unknown>;
   workspaceChanges(root: string): Promise<unknown[]>;
   workspaceRead(root: string, path: string): Promise<string>;
+  /** The last run's report, or null. Plain JSON. */
+  latestRun(): unknown;
+  copyImage(pngBase64: string): Promise<void>;
+  /** Asks the user where to save; false when they cancel. */
+  saveFile(name: string, base64: string): Promise<boolean>;
 }
 
 const KEY_RE = /^[a-z0-9_-]{1,64}$/;
@@ -162,6 +167,34 @@ function toastRequest(p: Record<string, unknown>): ToastRequest {
   return { kind, message, action: { label: str(a, "label").slice(0, 40), url } };
 }
 
+const IMAGE_MAX = 10 * 1024 * 1024;
+const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+
+function requireRuns(deps: BridgeDeps): void {
+  if (!deps.manifest.permissions.runs) {
+    throw new RpcError("forbidden", "this plugin did not request run reports");
+  }
+}
+
+function pngParam(p: Record<string, unknown>, name: string): string {
+  const v = str(p, name);
+  if (v.length > IMAGE_MAX) throw new RpcError("too_large", "image is over 10 MB");
+  if (!v.startsWith("iVBORw0KGgo") || !B64_RE.test(v))
+    throw new RpcError("bad_request", `${name} must be a base64 PNG`);
+  return v;
+}
+
+function pngName(p: Record<string, unknown>): string {
+  const base = (str(p, "name").split(/[\\/]/).pop() ?? "")
+    .replace(/\.png$/i, "")
+    .replace(/[^\w.\- ]/g, "_")
+    .replace(/^[._ ]+/, "")
+    .slice(0, 100)
+    .trim();
+  if (!base) throw new RpcError("bad_request", "invalid file name");
+  return `${base}.png`;
+}
+
 async function dispatch(req: RpcRequest, deps: BridgeDeps): Promise<unknown> {
   const id = deps.manifest.id;
   switch (req.method) {
@@ -222,6 +255,16 @@ async function dispatch(req: RpcRequest, deps: BridgeDeps): Promise<unknown> {
       requireWorkspace(deps);
       const path = str(obj(req.params), "path");
       return { base64: await deps.workspaceRead(openRoot(deps), path) };
+    }
+    case "runs.latest":
+      requireRuns(deps);
+      return deps.latestRun();
+    case "ui.copyImage":
+      await deps.copyImage(pngParam(obj(req.params), "png"));
+      return null;
+    case "ui.saveFile": {
+      const p = obj(req.params);
+      return { saved: await deps.saveFile(pngName(p), pngParam(p, "base64")) };
     }
     default:
       throw new RpcError("unknown_method", `unknown method: ${req.method}`);

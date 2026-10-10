@@ -8,6 +8,7 @@
 //! plugin's manifest from disk each time, so a compromised webview cannot widen
 //! a plugin's permissions.
 
+pub mod clipboard;
 pub mod commands;
 pub mod grants;
 pub mod http;
