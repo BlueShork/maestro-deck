@@ -131,6 +131,19 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
         url,
       );
       if (seq !== connectSeq) return;
+      // The canvas still holds the previous device's last frame. iOS and web
+      // repaint from a steady screenshot feed, so drop it rather than show it
+      // under the new device's name until the first capture lands. (Not for
+      // Android: scrcpy only sends frames on change, and its first ones may
+      // already be on screen.)
+      const previous = get().current;
+      if (
+        previous &&
+        previous.platform !== connected.platform &&
+        connected.platform !== "android"
+      ) {
+        useStreamStore.getState().reset();
+      }
       // Connecting a device is the gesture for "run here now": it takes the
       // run target back from the cloud, so the two can never both look chosen.
       useCloudTargetStore.getState().clear();
@@ -148,7 +161,11 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
     } catch (err) {
       if (seq !== connectSeq) return;
       const message = err instanceof Error ? err.message : String(err);
+      // The backend retires the previous device before connecting the new
+      // one, so a failed connect leaves nothing connected.
+      if (get().current) useStreamStore.getState().reset();
       set({
+        current: null,
         connecting: false,
         pendingSerial: null,
         pendingAction: null,

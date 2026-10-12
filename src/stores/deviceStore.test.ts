@@ -281,3 +281,45 @@ describe("disconnect", () => {
     expect(useStreamStore.getState().hasFrame).toBe(false);
   });
 });
+
+describe("switching platforms", () => {
+  it("drops the Android frame when an iOS device takes over the canvas", async () => {
+    useDeviceStore.setState({ current: PIXEL as never, devices: [PIXEL, IPHONE] as never });
+    useStreamStore.getState().pushFrame({ width: 1080, height: 2400 });
+    connectDevice.mockResolvedValue(IPHONE);
+    await useDeviceStore.getState().connect("SIM-1");
+    expect(useStreamStore.getState()).toMatchObject({ hasFrame: false, width: 0 });
+  });
+
+  it("keeps frames already painted by a newly connected Android stream", async () => {
+    useDeviceStore.setState({ current: IPHONE as never, devices: [PIXEL, IPHONE] as never });
+    connectDevice.mockImplementation(async () => {
+      useStreamStore.getState().pushFrame({ width: 1080, height: 2400 });
+      return PIXEL;
+    });
+    await useDeviceStore.getState().connect("emulator-5554");
+    expect(useStreamStore.getState().hasFrame).toBe(true);
+  });
+
+  it("keeps the stream when reconnecting the same platform", async () => {
+    useDeviceStore.setState({ current: IPHONE as never, devices: [IPHONE] as never });
+    useStreamStore.getState().pushFrame({ width: 1179, height: 2556 });
+    connectDevice.mockResolvedValue(IPHONE);
+    await useDeviceStore.getState().connect("SIM-1");
+    expect(useStreamStore.getState().hasFrame).toBe(true);
+  });
+});
+
+describe("failed switch", () => {
+  it("leaves nothing connected, since the previous device was already retired", async () => {
+    useDeviceStore.setState({ current: PIXEL as never, devices: [PIXEL, IPHONE] as never });
+    useStreamStore.getState().pushFrame({ width: 1080, height: 2400 });
+    connectDevice.mockRejectedValue(new Error("simulator failed to boot"));
+    await useDeviceStore.getState().connect("SIM-1");
+    expect(useDeviceStore.getState()).toMatchObject({
+      current: null,
+      error: "simulator failed to boot",
+    });
+    expect(useStreamStore.getState().hasFrame).toBe(false);
+  });
+});

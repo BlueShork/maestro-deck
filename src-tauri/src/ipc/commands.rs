@@ -85,12 +85,13 @@ pub async fn connect_device(
     state: State<'_, AppState>,
 ) -> AppResult<Device> {
     use crate::device::Platform;
-    // Picking a local device ends any farm session first (it bills, and its
-    // branches would otherwise take over the local device's commands).
-    if let Some(session) = state.farm_session.lock().await.take() {
-        session.release().await;
-        *state.control_tx.lock().await = None;
-    }
+    // Retire the device being replaced exactly as a disconnect would: its
+    // stream must stop before the new one starts, or both emit frames and
+    // fight over the canvas (an Android scrcpy feed kept painting under a
+    // freshly connected iOS simulator). A farm session is released here too
+    // (it bills, and its branches would take over the local device's
+    // commands); a simulator keeper stays warm for a quick reconnect.
+    teardown_all_sessions(state.inner(), true).await;
     // A previous disconnect may have left a simulator keeper warm for fast
     // reconnect. If we're now connecting something that isn't an iOS device,
     // retire it — it still holds :22087 and a JVM. (iOS→iOS reuse or

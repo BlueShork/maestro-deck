@@ -23,7 +23,7 @@ import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { Logo } from "@/components/Logo";
 import LatticeLoader from "@/components/ui/LatticeLoader";
 import { H264Decoder } from "@/lib/decoder";
-import { registerDeviceCanvas } from "@/lib/deviceFrame";
+import { frameSourceFor, registerDeviceCanvas, type FrameSource } from "@/lib/deviceFrame";
 import {
   findSmallestAt,
   fitScale,
@@ -124,7 +124,11 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: 
   }, [canvasRef, pushFrame]);
 }
 
-function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
+function useScreenshotStream(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  paused: boolean,
+  source: FrameSource | null,
+) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   // Hold the decoded bitmap plus the frame's *reported* dimensions. For iOS the
   // reported dims equal the bitmap's natural size, but for web the PNG is at
@@ -136,6 +140,8 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
   const rafRef = useRef<number | null>(null);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
 
   useEffect(() => {
     const unlistens: Array<() => void> = [];
@@ -168,8 +174,11 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
 
     // iOS and web both deliver PNG screenshots; only the connected platform's
     // poller emits, so subscribing to both events is safe.
-    const onShot = async (payload: { data: Uint8Array; width: number; height: number }) => {
-      if (pausedRef.current) return;
+    const onShot = async (
+      from: FrameSource,
+      payload: { data: Uint8Array; width: number; height: number },
+    ) => {
+      if (pausedRef.current || sourceRef.current !== from) return;
       try {
         // Copy the exact view region into a fresh buffer: robust if `data`
         // is ever a subarray, and yields a concrete-buffer typed array that
@@ -180,7 +189,8 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
           type: isJpeg ? "image/jpeg" : "image/png",
         });
         const bmp = await createImageBitmap(blob);
-        if (cancelled) {
+        // Decoding is async: the connected device may have changed meanwhile.
+        if (cancelled || sourceRef.current !== from) {
           bmp.close();
           return;
         }
@@ -200,8 +210,8 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
 
     const subscribe = (fn: Promise<() => void>) =>
       void fn.then((un) => (cancelled ? un() : unlistens.push(un)));
-    subscribe(events.onIosFrame(onShot));
-    subscribe(events.onWebFrame(onShot));
+    subscribe(events.onIosFrame((p) => onShot("ios", p)));
+    subscribe(events.onWebFrame((p) => onShot("web", p)));
 
     return () => {
       cancelled = true;
@@ -354,11 +364,15 @@ export function DeviceView() {
 
   // Dark-mode toggle is an Android-only `adb` feature; hidden for iOS and web.
   const noDarkMode = current?.platform !== "android";
-  // Both hooks mount unconditionally (Rules of Hooks). They listen to
-  // different events (`frame` / `ios_frame` / `web_frame`), so only the
-  // connected platform actually paints — the Android H.264 hook is unchanged.
+  // Both hooks mount unconditionally (Rules of Hooks) and listen to different
+  // events (`frame` / `ios_frame` / `web_frame`). Screenshot frames only paint
+  // for the connected platform, so a poller still winding down after a switch
+  // can't fight the new device over the canvas. H.264 is not filtered: scrcpy
+  // sends its config packet once, while `connect` is still in flight (current
+  // = the previous device or none), and dropping it would leave the stream
+  // black — the backend stops the old scrcpy feed before connecting instead.
   useFrameStream(canvasRef, mirrorPaused);
-  useScreenshotStream(canvasRef, mirrorPaused);
+  useScreenshotStream(canvasRef, mirrorPaused, frameSourceFor(current?.platform));
   useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled, mirrorPaused);
 
   // Register this canvas in the module-level registry so non-React code
