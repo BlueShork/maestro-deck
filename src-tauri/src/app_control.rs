@@ -38,6 +38,21 @@ pub struct ToolCmd {
 /// path passed in (so tests can pass `"adb"` without reading the global cache).
 /// Returns `Err` for physical iOS (ask the user to do it manually) and Web
 /// (no supported mechanism).
+/// An Android package name or iOS bundle id: letters, digits, `.`, `_`, `-`.
+///
+/// `adb shell` joins its arguments into ONE command line run by the device's
+/// shell, so an unchecked id (which Billy's `launch_app` takes straight from
+/// the model, itself reading arbitrary screen text) like `com.x;pm uninstall
+/// com.bank` would run extra commands on the phone.
+pub fn valid_app_id(app_id: &str) -> bool {
+    !app_id.is_empty()
+        && app_id.len() <= 255
+        && app_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+        && !app_id.starts_with(['.', '-'])
+}
+
 pub fn build_cmd(
     platform: Platform,
     serial: &str,
@@ -46,6 +61,9 @@ pub fn build_cmd(
     action: Action,
     adb: &str,
 ) -> AppResult<ToolCmd> {
+    if !valid_app_id(app_id) {
+        return Err(AppError::Other(format!("invalid app id: {app_id:?}")));
+    }
     match platform {
         Platform::Android => {
             let args = match action {
@@ -287,5 +305,42 @@ mod tests {
             "adb",
         );
         assert!(result.is_err(), "expected Err for web stop");
+    }
+
+    #[test]
+    fn app_ids_that_could_reach_the_device_shell_are_refused() {
+        for bad in [
+            "com.x;pm uninstall com.bank",
+            "com.x && reboot",
+            "com.x|id",
+            "$(id)",
+            "`id`",
+            "com.x\nreboot",
+            "com x",
+            "-n",
+            ".hidden",
+            "",
+        ] {
+            assert!(!valid_app_id(bad), "{bad:?} must be refused");
+            assert!(
+                build_cmd(Platform::Android, "s1", false, bad, Action::Launch, "adb").is_err(),
+                "{bad:?} reached adb"
+            );
+            assert!(build_cmd(Platform::Ios, "u1", false, bad, Action::Stop, "adb").is_err());
+        }
+        assert!(!valid_app_id(&"a".repeat(256)));
+    }
+
+    #[test]
+    fn real_package_names_and_bundle_ids_pass() {
+        for ok in [
+            "com.example.app",
+            "com.android.chrome",
+            "dev.blueshork.maestro_deck",
+            "com.apple.Preferences",
+            "io.my-company.App2",
+        ] {
+            assert!(valid_app_id(ok), "{ok:?} must pass");
+        }
     }
 }
