@@ -440,7 +440,11 @@ pub struct ToolPathsView {
 }
 
 #[tauri::command]
-pub fn get_tool_paths() -> ToolPathsView {
+pub async fn get_tool_paths() -> AppResult<ToolPathsView> {
+    crate::process_ext::blocking(tool_paths_view).await
+}
+
+fn tool_paths_view() -> ToolPathsView {
     ToolPathsView {
         overrides: load_overrides(),
         resolved_adb: adb_bin(),
@@ -454,7 +458,20 @@ pub fn get_tool_paths() -> ToolPathsView {
 /// next `*_bin()` call picks up the new value. Empty / blank strings mean
 /// "clear the override".
 #[tauri::command]
-pub fn set_tool_paths(
+pub async fn set_tool_paths(
+    adb: Option<String>,
+    maestro: Option<String>,
+    iproxy: Option<String>,
+    apple_team_id: Option<String>,
+    maestro_ios_device: Option<String>,
+) -> AppResult<ToolPathsView> {
+    crate::process_ext::blocking(move || {
+        save_tool_paths(adb, maestro, iproxy, apple_team_id, maestro_ios_device)
+    })
+    .await?
+}
+
+fn save_tool_paths(
     adb: Option<String>,
     maestro: Option<String>,
     iproxy: Option<String>,
@@ -473,7 +490,7 @@ pub fn set_tool_paths(
     };
     save_overrides(&new)?;
     invalidate_cache();
-    Ok(get_tool_paths())
+    Ok(tool_paths_view())
 }
 
 // ---------------------------------------------------------------------------

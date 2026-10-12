@@ -168,22 +168,16 @@ pub fn spawn_server(serial: &str, scid: &str) -> AppResult<Child> {
             }
         })?;
 
-    use tokio::io::{AsyncBufReadExt, BufReader};
+    use crate::process_ext::pump_lines;
     if let Some(stdout) = child.stdout.take() {
-        let mut lines = BufReader::new(stdout).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = lines.next_line().await {
-                info!(target: "scrcpy::stdout", "{line}");
-            }
-        });
+        tokio::spawn(pump_lines(stdout, |line| {
+            info!(target: "scrcpy::stdout", "{line}");
+        }));
     }
     if let Some(stderr) = child.stderr.take() {
-        let mut lines = BufReader::new(stderr).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = lines.next_line().await {
-                tracing::warn!(target: "scrcpy::stderr", "{line}");
-            }
-        });
+        tokio::spawn(pump_lines(stderr, |line| {
+            tracing::warn!(target: "scrcpy::stderr", "{line}");
+        }));
     }
 
     Ok(child)

@@ -197,7 +197,6 @@ pub async fn environment_status() -> AppResult<EnvStatus> {
 }
 
 use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::error::AppError;
 
@@ -261,34 +260,28 @@ pub async fn install_tool(app: AppHandle, id: String) -> AppResult<()> {
     if let Some(stdout) = child.stdout.take() {
         let app = app.clone();
         let id = id.clone();
-        let mut reader = BufReader::new(stdout).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                let _ = app.emit(
-                    EVT_INSTALL_OUTPUT,
-                    InstallOutput {
-                        id: id.clone(),
-                        line,
-                    },
-                );
-            }
-        });
+        tokio::spawn(crate::process_ext::pump_lines(stdout, move |line| {
+            let _ = app.emit(
+                EVT_INSTALL_OUTPUT,
+                InstallOutput {
+                    id: id.clone(),
+                    line,
+                },
+            );
+        }));
     }
     if let Some(stderr) = child.stderr.take() {
         let app = app.clone();
         let id = id.clone();
-        let mut reader = BufReader::new(stderr).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                let _ = app.emit(
-                    EVT_INSTALL_OUTPUT,
-                    InstallOutput {
-                        id: id.clone(),
-                        line,
-                    },
-                );
-            }
-        });
+        tokio::spawn(crate::process_ext::pump_lines(stderr, move |line| {
+            let _ = app.emit(
+                EVT_INSTALL_OUTPUT,
+                InstallOutput {
+                    id: id.clone(),
+                    line,
+                },
+            );
+        }));
     }
 
     let status = match child.wait().await {

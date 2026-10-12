@@ -17,6 +17,7 @@ use crate::hierarchy::{self, HierarchyTree, UINode};
 use crate::input::{self, InputEvent};
 use crate::maestro_health::{self, HealthReport, KillReport};
 use crate::metrics;
+use crate::process_ext::blocking;
 use crate::runner;
 use crate::scrcpy;
 use crate::selector::{self, Selector, SpatialIndex};
@@ -38,7 +39,11 @@ pub fn app_version() -> &'static str {
 }
 
 #[tauri::command]
-pub fn list_devices() -> AppResult<Vec<Device>> {
+pub async fn list_devices() -> AppResult<Vec<Device>> {
+    blocking(discover_devices).await?
+}
+
+fn discover_devices() -> AppResult<Vec<Device>> {
     // Each platform's discovery degrades independently — a failure in one
     // must not blank out the other's devices.
     let mut devices = match adb::list_devices() {
@@ -946,8 +951,8 @@ pub async fn get_dark_mode(state: State<'_, AppState>) -> AppResult<bool> {
 /// frontend uses this to decide whether to offer the one-click auto-install for
 /// physical iOS support.
 #[tauri::command]
-pub fn ios_device_bridge_installed() -> bool {
-    crate::tool_paths::maestro_ios_device_installed()
+pub async fn ios_device_bridge_installed() -> AppResult<bool> {
+    blocking(crate::tool_paths::maestro_ios_device_installed).await
 }
 
 /// Auto-install the `maestro-ios-device` bridge (Option A): download the release
@@ -1210,8 +1215,8 @@ pub async fn stop_flow(pid: u32) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
-    workspace::list_workspace(std::path::Path::new(&path))
+pub async fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
+    blocking(move || workspace::list_workspace(std::path::Path::new(&path))).await?
 }
 
 #[tauri::command]
@@ -1233,13 +1238,13 @@ pub async fn stop_metrics() -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn check_device_health(serial: String) -> AppResult<HealthReport> {
-    maestro_health::detect::check_device_health(&serial)
+pub async fn check_device_health(serial: String) -> AppResult<HealthReport> {
+    blocking(move || maestro_health::detect::check_device_health(&serial)).await?
 }
 
 #[tauri::command]
-pub fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult<KillReport> {
-    maestro_health::kill::kill_maestro_processes(&serial, report)
+pub async fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult<KillReport> {
+    blocking(move || maestro_health::kill::kill_maestro_processes(&serial, report)).await?
 }
 
 /// Extract the first `x.y.z` semver from arbitrary `maestro --version` output.

@@ -152,6 +152,7 @@ objc2-av-foundation = { version = "0.3", features = [
 ] }
 
 [dev-dependencies]
+tauri = { version = "2.1", features = ["test"] }
 tempfile = "3.13"
 pretty_assertions = "1.4"
 mockall = "0.14"
