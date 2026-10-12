@@ -61,3 +61,11 @@ Changes from the 2026-10-12 performance / stability pass (branch
 - [ ] Inspect mode: hover highlight, right-click menu inserts once per click.
 - [ ] Device healthcheck button.
 - [ ] Settings → tool paths: open and save.
+
+## 7. Security fixes
+
+- [ ] Billy `launch_app` / `stop_app` still work with a real package name
+      (Android) and bundle id (iOS simulator).
+- [ ] Screenshot bank with a nested name (`takeScreenshot: screens/home`):
+      seeded, compared and "Replace baseline" still work.
+- [ ] Billy `write_flow` into a new sub-folder of the workspace still works.
