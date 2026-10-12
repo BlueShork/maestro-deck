@@ -170,6 +170,9 @@ test.describe("visual", { tag: "@visual" }, () => {
     await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.48, { button: "right" });
     await expect(page.getByRole("menu").first()).toBeVisible();
     await snap(page, "inspect-menu");
+    await page.getByRole("menuitem", { name: /^Tap/ }).hover();
+    await expect(page.getByText("recommended")).toBeVisible();
+    await snap(page, "inspect-menu-selectors");
   });
 
   test("settings, general", async ({ app, page }) => {

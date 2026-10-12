@@ -193,7 +193,9 @@ export function InspectActionMenu({ x, y, node, selectors, onClose }: InspectAct
     <div
       ref={ref}
       role="menu"
-      className="menu-surface fixed z-50 overflow-hidden"
+      // No overflow-hidden: the selector flyout sits outside this box and
+      // would be clipped away (it was, unseen, since the redesign).
+      className="menu-surface fixed z-50"
       style={{ ...style, width: MENU_W }}
       // The menu floats over the device view, whose container drives the inspector
       // (hover on pointer-move, tap on pointer-down, swipe on wheel). Because this

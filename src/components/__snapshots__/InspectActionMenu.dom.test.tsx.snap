@@ -2,7 +2,7 @@
 
 exports[`InspectActionMenu > snapshot 1`] = `
 <div
-  class="menu-surface fixed z-50 overflow-hidden"
+  class="menu-surface fixed z-50"
   role="menu"
   style="left: 20px; top: 30px; width: 232px;"
 >

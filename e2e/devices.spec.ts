@@ -174,6 +174,51 @@ test.describe("inspect mode", () => {
     });
   });
 
+  test("hovering an action shows every selector, and picking one inserts with it", async ({
+    app,
+    page,
+  }) => {
+    await app.launch({
+      devices: [IPHONE_SIM],
+      responses: {
+        enter_inspect_mode: HIERARCHY,
+        query_element: HIERARCHY.root.children[0],
+        suggest_selectors: [
+          { kind: "resourceId", value: "login_button" },
+          { kind: "text", value: "Log in" },
+        ],
+      },
+    });
+    await connectSim(app);
+    await pushIosFrame(app);
+    await page.getByRole("button", { name: "Toggle inspect mode" }).click();
+    await expect(page.getByRole("button", { name: "Toggle inspect mode" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const box = (await page.locator("canvas").boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.48, { button: "right" });
+    await page.getByRole("menuitem", { name: /^Tap/ }).hover();
+
+    const option = page.getByRole("menuitem", { name: /text "Log in"/ });
+    await expect(option).toBeVisible();
+    // Present in the DOM is not enough: it must be what the user actually sees
+    // at that spot (a clipping parent once hid it while it stayed "visible").
+    const b = (await option.boundingBox())!;
+    const onTop = await page.evaluate(
+      ([x, y]) =>
+        document.elementFromPoint(x, y)?.closest('[role="menuitem"]')?.textContent ?? null,
+      [b.x + b.width / 2, b.y + b.height / 2] as const,
+    );
+    expect(onTop).toContain('text "Log in"');
+
+    await option.click();
+    await app.waitForCall("generate_command");
+    expect((await app.calls("generate_command"))[0].args).toEqual({
+      action: { kind: "tapOn", selector: { kind: "text", value: "Log in" } },
+    });
+  });
+
   test("a failed dump leaves inspect mode off and says why", async ({ app, page }) => {
     await app.launch({
       devices: [IPHONE_SIM],
