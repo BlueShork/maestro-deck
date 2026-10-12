@@ -1,5 +1,16 @@
 # Manual checks before the release
 
+Run the automated suites first, on a Mac:
+
+```bash
+pnpm test          # unit + component tests (Vitest)
+pnpm test:e2e      # end-to-end + visual references (Playwright, WebKit)
+```
+
+A visual failure opens a diff in `test-results/`. If the change is intended,
+refresh the references with `pnpm test:e2e:update` and review the new PNGs in
+`e2e/visual.spec.ts-snapshots/` before committing.
+
 Changes from the 2026-10-12 performance / stability pass (branch
 `chore/improve-performances`) that automated tests can't cover. Run them in
 `pnpm tauri:dev` with real devices.
