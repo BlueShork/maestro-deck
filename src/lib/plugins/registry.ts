@@ -52,7 +52,9 @@ export function parseRegistry(raw: string): RegistryEntry[] {
   }
   if (!doc || !Array.isArray(doc.plugins))
     throw new Error("The plugin registry has no plugin list.");
-  return doc.plugins.filter(isEntry);
+  return doc.plugins
+    .filter(isEntry)
+    .map((e) => ({ ...e, kind: e.kind === "theme" ? ("theme" as const) : ("plugin" as const) }));
 }
 
 export function buildCatalog(
@@ -77,6 +79,7 @@ export function buildCatalog(
       registry: r,
       installed: inst,
       status,
+      isTheme: r.kind === "theme" || !!inst?.manifest?.theme,
     };
   });
   const listed = new Set(registry.map((r) => r.id));
@@ -89,6 +92,7 @@ export function buildCatalog(
       registry: null,
       installed: inst,
       status: inst.error ? "broken" : "installed",
+      isTheme: !!inst.manifest?.theme,
     });
   }
   return items;

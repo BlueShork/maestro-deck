@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ipc", () => ({ ipc: {} }));
@@ -81,5 +81,25 @@ describe("PluginHost", () => {
       );
       unmount();
     }
+  });
+
+  it("re-sends the theme when <html> inline style changes", async () => {
+    render(<PluginHost manifest={manifest} />);
+    const frame = screen.getByTitle("Jira") as HTMLIFrameElement;
+    fireEvent.load(frame);
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    document.documentElement.style.setProperty("--brand", "266 85% 58%");
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "md-event", name: "theme" }),
+        "*",
+      ),
+    );
+    document.documentElement.style.removeProperty("--brand");
+  });
+
+  it("renders nothing for an entry-less (theme) plugin", () => {
+    const { container } = render(<PluginHost manifest={{ ...manifest, entry: null }} />);
+    expect(container.firstChild).toBeNull();
   });
 });

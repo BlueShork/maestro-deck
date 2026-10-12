@@ -149,7 +149,7 @@ function Thumb({
         className={cn(
           "absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[10px] uppercase transition-all focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           confirming
-            ? "bg-destructive text-white opacity-100"
+            ? "bg-destructive text-destructive-foreground opacity-100"
             : "border border-border bg-background text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100",
         )}
       >

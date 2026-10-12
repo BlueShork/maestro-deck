@@ -106,7 +106,7 @@ function GlyphEl({ glyph }: { glyph: StatusGlyph }): ReactElement {
   if (glyph.kind === "error") {
     return (
       <span
-        className="text-red-600 motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200 dark:text-red-400"
+        className="text-destructive motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200"
         aria-label="Erreur"
       >
         ✗
@@ -115,7 +115,7 @@ function GlyphEl({ glyph }: { glyph: StatusGlyph }): ReactElement {
   }
   return (
     <span
-      className="text-green-600 motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200 dark:text-green-400"
+      className="text-success motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-200"
       aria-label="Succès"
     >
       ✓

@@ -12,7 +12,9 @@ import {
 } from "@/components/settings/SettingsPrimitives";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
-import { useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
+import { forcedMode } from "@/lib/colorTheme";
+import { usePluginsStore } from "@/stores/pluginsStore";
+import { activeColorTheme, useSettingsStore, type ThemeMode } from "@/stores/settingsStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useTourStore } from "@/stores/tourStore";
 
@@ -29,6 +31,12 @@ export function GeneralSettings() {
 
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const colorTheme = useSettingsStore((s) => s.colorTheme);
+  const activeTokens = useSettingsStore(activeColorTheme);
+  const setColorTheme = useSettingsStore((s) => s.setColorTheme);
+  const installed = usePluginsStore((s) => s.installed);
+  const themes = installed.filter((p) => p.theme && p.manifest);
+  const forced = forcedMode(activeTokens);
   const autoCheckUpdatesEnabled = useSettingsStore((s) => s.autoCheckUpdatesEnabled);
   const setAutoCheckUpdatesEnabled = useSettingsStore((s) => s.setAutoCheckUpdatesEnabled);
   const confirmBeforeQuit = useSettingsStore((s) => s.confirmBeforeQuit);
@@ -40,15 +48,44 @@ export function GeneralSettings() {
       description="How Maestro Deck looks and behaves as an app. Every preference on these pages is saved on this machine and applies immediately."
     >
       <SettingsSubgroup title="Appearance">
-        <SettingsRow label="Theme" description="System follows your OS light / dark setting.">
+        <SettingsRow
+          label="Color theme"
+          description="Install more themes from the Plugins marketplace."
+        >
+          <select
+            aria-label="Color theme"
+            value={colorTheme ?? ""}
+            onChange={(e) => {
+              const p = themes.find((t) => t.id === e.target.value);
+              setColorTheme(p ? p.id : null, p?.theme ?? null);
+            }}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          >
+            <option value="">Maestro Deck (default)</option>
+            {themes.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.manifest!.name}
+              </option>
+            ))}
+          </select>
+        </SettingsRow>
+        <SettingsRow
+          label="Theme"
+          description={
+            forced
+              ? `This theme is ${forced} only.`
+              : "System follows your OS light / dark setting."
+          }
+        >
           <Segmented
             aria-label="Theme"
             items={THEME_OPTIONS.map(({ value, label, icon: Icon }) => ({
               value,
               label,
               icon: <Icon className="h-3.5 w-3.5" />,
+              disabled: forced !== null,
             }))}
-            value={theme}
+            value={forced ?? theme}
             onChange={setTheme}
           />
         </SettingsRow>

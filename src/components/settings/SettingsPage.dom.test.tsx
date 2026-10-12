@@ -55,6 +55,7 @@ const { useTelemetryStore } = await import("@/stores/telemetryStore");
 const { useCloudAuthStore } = await import("@/stores/cloudAuthStore");
 const { useChatStore } = await import("@/stores/chatStore");
 const { useVisualRegressionStore } = await import("@/stores/visualRegressionStore");
+const { usePluginsStore } = await import("@/stores/pluginsStore");
 
 function Where() {
   return <div data-testid="where">{useLocation().pathname}</div>;
@@ -260,5 +261,46 @@ describe("SettingsPage", () => {
     renderAt("ai");
     expect(screen.getByText("me@example.com")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Used by the chat" })).toBeTruthy();
+  });
+
+  it("picks an installed theme plugin and locks the mode it forces", () => {
+    const theme = { dark: { brand: "267 84% 81%" } };
+    usePluginsStore.setState({
+      installedLoaded: true,
+      installed: [
+        {
+          id: "mocha",
+          version: "1.0.0",
+          dev: false,
+          error: null,
+          theme,
+          manifest: {
+            id: "mocha",
+            name: "Mocha",
+            version: "1.0.0",
+            minAppVersion: "1.3.0",
+            theme: "theme.json",
+            permissions: { http: [], open: [], secrets: false },
+          },
+        },
+      ],
+    });
+    try {
+      renderAt("general");
+      fireEvent.change(screen.getByRole("combobox", { name: "Color theme" }), {
+        target: { value: "mocha" },
+      });
+      expect(useSettingsStore.getState().colorTheme).toBe("mocha");
+      expect(useSettingsStore.getState().colorThemeCache).toEqual(theme);
+      expect(screen.getByText("This theme is dark only.")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Light" })).toHaveProperty("disabled", true);
+      fireEvent.change(screen.getByRole("combobox", { name: "Color theme" }), {
+        target: { value: "" },
+      });
+      expect(useSettingsStore.getState().colorTheme).toBeNull();
+    } finally {
+      useSettingsStore.getState().setColorTheme(null, null);
+      usePluginsStore.setState({ installed: [] });
+    }
   });
 });

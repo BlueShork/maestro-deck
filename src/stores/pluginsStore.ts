@@ -16,6 +16,8 @@ const message = (err: unknown) =>
 
 interface PluginsState {
   installed: InstalledPlugin[];
+  /** True once `plugins_list` answered; before that `installed` is just empty. */
+  installedLoaded: boolean;
   registry: RegistryEntry[];
   registryError: string | null;
   registryLoading: boolean;
@@ -40,6 +42,7 @@ export const usePluginsStore = create<PluginsState>()(
       const setBusy = (id: string, on: boolean) => set((s) => ({ busy: { ...s.busy, [id]: on } }));
       return {
         installed: [],
+        installedLoaded: false,
         registry: [],
         registryError: null,
         registryLoading: false,
@@ -47,7 +50,7 @@ export const usePluginsStore = create<PluginsState>()(
         openPanel: null,
         refreshInstalled: async () => {
           try {
-            set({ installed: await ipc.pluginsList() });
+            set({ installed: await ipc.pluginsList(), installedLoaded: true });
           } catch (err) {
             toast.error("Could not read installed plugins", message(err));
           }

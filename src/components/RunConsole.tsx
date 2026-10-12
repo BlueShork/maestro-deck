@@ -138,7 +138,7 @@ export function RunConsole() {
                   key={l.id}
                   className={cn(
                     "whitespace-pre-wrap font-mono",
-                    l.stream === "stderr" && "text-red-600 dark:text-red-400",
+                    l.stream === "stderr" && "text-destructive",
                     l.stream === "system" && "text-muted-foreground italic",
                   )}
                 >

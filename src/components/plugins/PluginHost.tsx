@@ -59,7 +59,10 @@ export function PluginHost({ manifest }: { manifest: PluginManifest }) {
 
   useEffect(() => {
     const obs = new MutationObserver(sendTheme);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
     return () => obs.disconnect();
   }, [sendTheme]);
 
@@ -85,6 +88,8 @@ export function PluginHost({ manifest }: { manifest: PluginManifest }) {
       }
     });
   }, [readsRuns]);
+
+  if (!manifest.entry) return null;
 
   if (stopped) {
     return (
