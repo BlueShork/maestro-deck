@@ -2,40 +2,33 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
-import { AccountPage } from "@/components/AccountPage";
 import { CloudInviteDialog } from "@/components/CloudInviteDialog";
 import { DevicePicker } from "@/components/devices/DevicePicker";
-import { ImageBankPage } from "@/components/ImageBankPage";
 import { OriginGrantDialog } from "@/components/plugins/OriginGrantDialog";
-import { PluginsPage } from "@/components/plugins/PluginsPage";
 import { isFullPage } from "@/lib/fullPage";
 import { MainView } from "@/components/MainView";
 import { OnboardingOverlay } from "@/components/OnboardingOverlay";
 import { QuitConfirmDialog } from "@/components/QuitConfirmDialog";
-import { SettingsPage } from "@/components/settings/SettingsPage";
 import { SetupPopup } from "@/components/SetupPopup";
 import { TelemetryConsentDialog } from "@/components/TelemetryConsentDialog";
 import { TourOverlay } from "@/components/TourOverlay";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { Toaster } from "@/components/ui/Toast";
-import { summarizeBankReport } from "@/lib/bankReport";
 import { openFlowFile } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { setShortcutsSuppressed } from "@/lib/keyboard";
 import { startReportNotifications } from "@/lib/runReport/notify";
+import { handleRunnerExit } from "@/lib/runExit";
 import { startRunReportTracking } from "@/lib/runReport/track";
 import { useFarmStore } from "@/stores/farmStore";
 import { screenName, setScreen, track } from "@/lib/telemetry";
 import { startColorThemeSync } from "@/lib/plugins/colorThemeStartup";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
-import { startCloudAuthListener, useCloudAuthStore } from "@/stores/cloudAuthStore";
-import { useCloudInviteStore } from "@/stores/cloudInviteStore";
+import { startCloudAuthListener } from "@/stores/cloudAuthStore";
 import { useDeviceStore } from "@/stores/deviceStore";
-import { useReviewStore } from "@/stores/reviewStore";
-import { effectiveThresholds, useVisualRegressionStore } from "@/stores/visualRegressionStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { usePanelsStore } from "@/stores/panelsStore";
@@ -50,6 +43,20 @@ import { useEnvStore } from "@/stores/envStore";
 import { useTourStore } from "@/stores/tourStore";
 import { useUpdateStore } from "@/stores/updateStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+
+// Full pages open on demand: kept out of the startup bundle.
+const AccountPage = lazy(() =>
+  import("@/components/AccountPage").then((m) => ({ default: m.AccountPage })),
+);
+const ImageBankPage = lazy(() =>
+  import("@/components/ImageBankPage").then((m) => ({ default: m.ImageBankPage })),
+);
+const PluginsPage = lazy(() =>
+  import("@/components/plugins/PluginsPage").then((m) => ({ default: m.PluginsPage })),
+);
+const SettingsPage = lazy(() =>
+  import("@/components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
 
 /**
  * App shell. Owns the app-wide, route-independent effects (runner event
@@ -83,8 +90,8 @@ export default function App() {
   const activeTokens = useSettingsStore(activeColorTheme);
   const markDisconnected = useDeviceStore((s) => s.markDisconnected);
   const appendLog = useRunStore((s) => s.appendLog);
+  const queueLog = useRunStore((s) => s.queueLog);
   const ingestLine = useRunStore((s) => s.ingestLine);
-  const setStopped = useRunStore((s) => s.setStopped);
 
   // Restore the last opened file from the previous session. The workspace
   // store hydrates synchronously from localStorage, so the path is available
@@ -202,87 +209,15 @@ export default function App() {
     let cancelled = false;
     Promise.all([
       events.onRunnerStdout((line) => {
-        appendLog("stdout", line);
+        queueLog("stdout", line);
         ingestLine(line);
         useRunReportStore.getState().ingest(line);
       }),
       events.onRunnerStderr((line) => {
-        appendLog("stderr", line);
+        queueLog("stderr", line);
         useRunReportStore.getState().ingest(line);
       }),
-      events.onRunnerExit(({ code }) => {
-        const wasStopped = useRunStore.getState().stopRequested;
-        const exitedPid = useRunStore.getState().pid;
-        appendLog(
-          "system",
-          wasStopped ? "[runner stopped by user]" : `[runner exited with code ${code}]`,
-        );
-        setStopped(code);
-        const ranOn = useDeviceStore.getState().current;
-        track("flow_run_finished", {
-          platform: ranOn?.platform ?? "unknown",
-          physical: ranOn?.physical ?? false,
-          scope: useRunStore.getState().runTarget?.kind ?? "unknown",
-          outcome: wasStopped ? "stopped" : code === 0 ? "passed" : "failed",
-        });
-        if (wasStopped) toast.success("Flow stopped");
-        else if (code === 0) toast.success("Flow completed");
-        else toast.error("Flow failed", `exit code ${code}`);
-
-        // First run that actually worked, and only for signed-out users: the
-        // one moment the cloud offer is worth hearing. Delayed so the success
-        // toast lands first — the ask should follow the win, not cover it.
-        if (code === 0 && !wasStopped && !useCloudAuthStore.getState().user) {
-          setTimeout(() => {
-            if (!useCloudAuthStore.getState().user) useCloudInviteStore.getState().offer();
-          }, 1600);
-        }
-        if (code === 0 && !wasStopped && useVisualRegressionStore.getState().enabled) {
-          const target = useRunStore.getState().runTarget;
-          const ws = useWorkspaceStore.getState().folderPath;
-          const device = useDeviceStore.getState().current;
-          if ((target?.kind === "all" || target?.kind === "flow") && ws && device) {
-            const { tolerance, threshold } = effectiveThresholds();
-            const runId = String(exitedPid ?? Date.now());
-            const bankToastId = toast.loading(
-              "Checking screenshot bank…",
-              "Comparing captures against their baselines",
-            );
-            appendLog("system", "[bank] verifying screenshots against the bank…");
-            const common = {
-              workspace: ws,
-              model: device.model,
-              width: device.screen_width,
-              height: device.screen_height,
-              tolerance,
-              threshold,
-              runId,
-              platform: device.platform,
-              ignoreStatusBar: useVisualRegressionStore.getState().ignoreStatusBar,
-            };
-            track("screenshot_bank_checked", { scope: target.kind });
-            const compare =
-              target.kind === "all"
-                ? ipc.compareScreenshotsAll(common)
-                : ipc.compareScreenshots({ ...common, flowPath: target.path });
-            void compare
-              .then((report) => {
-                toast.dismiss(bankToastId);
-                const summary = summarizeBankReport(report);
-                summary.logLines.forEach((l) => appendLog("system", l));
-                if (summary.toast.kind === "info")
-                  toast.info(summary.toast.title, summary.toast.detail);
-                else toast.success(summary.toast.title, summary.toast.detail);
-                useReviewStore.getState().setReport(report);
-              })
-              .catch((err) => {
-                toast.dismiss(bankToastId);
-                toast.error("Screenshot bank check failed", String(err));
-                appendLog("system", `[bank] échec comparaison: ${String(err)}`);
-              });
-          }
-        }
-      }),
+      events.onRunnerExit(({ code }) => handleRunnerExit(code)),
       events.onDeviceDisconnected(() => markDisconnected()),
       events.onWebStatus((p) => {
         if (p.stage === "error") toast.error("Web browser", p.message);
@@ -320,11 +255,12 @@ export default function App() {
     return () => {
       cancelled = true;
       cleanups.forEach((fn) => fn());
+      useRunStore.getState().flushLogs();
     };
   }, [
     appendLog,
+    queueLog,
     ingestLine,
-    setStopped,
     markDisconnected,
     appendSample,
     onTargetChanged,
@@ -402,15 +338,17 @@ export default function App() {
       <div className={pageOpen ? "hidden" : "contents"}>
         <MainView />
       </div>
-      <Routes>
-        <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-        <Route path="/settings/:section" element={<SettingsPage />} />
-        <Route path="/image-bank" element={<ImageBankPage />} />
-        <Route path="/plugins" element={<PluginsPage />} />
-        <Route path="/account" element={<AccountPage />} />
-        {/* MainView already covers "/"; redirect any other unknown path there. */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+          <Route path="/settings/:section" element={<SettingsPage />} />
+          <Route path="/image-bank" element={<ImageBankPage />} />
+          <Route path="/plugins" element={<PluginsPage />} />
+          <Route path="/account" element={<AccountPage />} />
+          {/* MainView already covers "/"; redirect any other unknown path there. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
       <TelemetryConsentDialog />
       <UpdateDialog />
       <CloudInviteDialog />

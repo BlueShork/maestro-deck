@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/Dialog";
+import { lineDiff } from "@/lib/lineDiff";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flowStore";
 
@@ -21,59 +22,17 @@ interface Props {
   proposed: string;
 }
 
-type Op = "same" | "add" | "del";
-interface DiffLine {
-  op: Op;
-  oldNo: number | null;
-  newNo: number | null;
-  text: string;
-}
-
-/**
- * Tiny LCS-based line diff. Good enough for human-sized YAML flows.
- * Not optimised — runs in O(n*m) with O(n*m) memory, fine up to ~1k
- * lines per side. A Maestro flow that big would have other problems.
- */
-function computeDiff(a: string[], b: string[]): DiffLine[] {
-  const n = a.length;
-  const m = b.length;
-  // dp[i][j] = LCS length of a[0..i] and b[0..j]
-  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      if (a[i] === b[j]) dp[i][j] = dp[i + 1][j + 1] + 1;
-      else dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-  const out: DiffLine[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      out.push({ op: "same", oldNo: i + 1, newNo: j + 1, text: a[i] });
-      i++;
-      j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      out.push({ op: "del", oldNo: i + 1, newNo: null, text: a[i] });
-      i++;
-    } else {
-      out.push({ op: "add", oldNo: null, newNo: j + 1, text: b[j] });
-      j++;
-    }
-  }
-  while (i < n) out.push({ op: "del", oldNo: i + 1, newNo: null, text: a[i++] });
-  while (j < m) out.push({ op: "add", oldNo: null, newNo: j + 1, text: b[j++] });
-  return out;
-}
-
 export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
   const current = useFlowStore((s) => s.content);
   const filePath = useFlowStore((s) => s.filePath);
   const setContent = useFlowStore((s) => s.setContent);
 
-  const diff = useMemo(() => {
-    return computeDiff(current.split("\n"), proposed.split("\n"));
-  }, [current, proposed]);
+  // Every YAML block in the chat mounts one of these; only an open dialog
+  // pays for the diff (it would otherwise rerun on each editor keystroke).
+  const diff = useMemo(
+    () => (open ? lineDiff(current.split("\n"), proposed.split("\n")) : []),
+    [open, current, proposed],
+  );
 
   const stats = useMemo(() => {
     let added = 0;

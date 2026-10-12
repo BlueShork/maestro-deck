@@ -1,16 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { initializeApp, getApps } from "firebase/app";
-import {
-  getAuth,
-  onAuthStateChanged as onFirebaseAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  type Auth,
-  type User,
-} from "firebase/auth";
+import type { Auth, User } from "firebase/auth";
 
 /**
  * Same Firebase project the Maestro Deck Cloud dashboard uses
@@ -24,11 +15,30 @@ const FIREBASE_CONFIG = {
   projectId: "maestrodecknightly",
 };
 
-if (!getApps().length) {
-  initializeApp(FIREBASE_CONFIG);
-}
+type FirebaseAuthModule = typeof import("firebase/auth");
 
-const auth: Auth = getAuth();
+let firebase: Promise<{ auth: Auth; fb: FirebaseAuthModule }> | null = null;
+// Mirrors `auth.currentUser` for the one synchronous reader (isCloudSignedIn).
+let currentUser: User | null = null;
+
+/**
+ * Firebase, loaded on first use. Sign-in is optional and the SDK is the
+ * largest dependency the app has, so it stays out of the startup bundle; the
+ * auth listener App starts on mount is what normally loads it, right after
+ * the first paint.
+ */
+function loadFirebase(): Promise<{ auth: Auth; fb: FirebaseAuthModule }> {
+  firebase ??= Promise.all([import("firebase/app"), import("firebase/auth")]).then(([app, fb]) => {
+    if (!app.getApps().length) app.initializeApp(FIREBASE_CONFIG);
+    const auth = fb.getAuth();
+    currentUser = auth.currentUser;
+    fb.onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+    });
+    return { auth, fb };
+  });
+  return firebase;
+}
 
 /** Same dashboard the login lives on (maestro-nightly/dashboard/lib/site.ts). */
 const DASHBOARD_URL = "https://dashboard.maestrodeck.cloud";
@@ -39,6 +49,7 @@ export const CLOUD_DASHBOARD_URL = DASHBOARD_URL;
 /** The bearer token every authed dashboard route expects. Throws rather than
  *  returning null: a caller with no session has nothing useful to do next. */
 export async function getCloudIdToken(): Promise<string> {
+  const { auth } = await loadFirebase();
   const user = auth.currentUser;
   if (!user) throw new Error("Not signed in");
   try {
@@ -125,20 +136,37 @@ export async function fetchCloudBilling(): Promise<CloudBillingInfo> {
 }
 
 export function isCloudSignedIn(): boolean {
-  return auth.currentUser !== null;
+  return currentUser !== null;
 }
 
-export function onCloudAuthStateChanged(callback: (user: CloudUser | null) => void) {
-  return onFirebaseAuthStateChanged(auth, callback);
+/** Calls `callback` with the signed-in user (or null) now and on every
+ *  change, once Firebase has loaded. Returns an unsubscribe. */
+export function onCloudAuthStateChanged(callback: (user: CloudUser | null) => void): () => void {
+  let unsubscribe: (() => void) | null = null;
+  let cancelled = false;
+  void loadFirebase().then(({ auth, fb }) => {
+    if (!cancelled) unsubscribe = fb.onAuthStateChanged(auth, callback);
+  });
+  return () => {
+    cancelled = true;
+    unsubscribe?.();
+  };
 }
 
-export const loginWithEmail = (email: string, password: string) =>
-  signInWithEmailAndPassword(auth, email, password);
+export async function loginWithEmail(email: string, password: string) {
+  const { auth, fb } = await loadFirebase();
+  return fb.signInWithEmailAndPassword(auth, email, password);
+}
 
-export const createAccountWithEmail = (email: string, password: string) =>
-  createUserWithEmailAndPassword(auth, email, password);
+export async function createAccountWithEmail(email: string, password: string) {
+  const { auth, fb } = await loadFirebase();
+  return fb.createUserWithEmailAndPassword(auth, email, password);
+}
 
-export const logout = () => signOut(auth);
+export async function logout(): Promise<void> {
+  const { auth, fb } = await loadFirebase();
+  return fb.signOut(auth);
+}
 
 /** Mirrors the dashboard's own mapping (maestro-nightly/dashboard/app/login/LoginClient.tsx). */
 export function getCloudAuthErrorMessage(error: unknown): string {

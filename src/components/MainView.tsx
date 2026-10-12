@@ -1,9 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { writeTextFile } from "@tauri-apps/plugin-fs";
-import { tempDir } from "@tauri-apps/api/path";
-import { useCallback, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 
 import { CloudLivePreview } from "@/components/CloudLivePreview";
 import { DeviceSelector } from "@/components/DeviceSelector";
@@ -17,27 +15,26 @@ import { RunConsole } from "@/components/RunConsole";
 import { ScreenshotReview } from "@/components/ScreenshotReview";
 import { Toolbar } from "@/components/Toolbar";
 import { WorkspaceTree } from "@/components/WorkspaceTree";
-import { ChatPanel } from "@/components/chat/ChatPanel";
 import { PluginPanel } from "@/components/plugins/PluginPanel";
-import { ipc } from "@/lib/ipc";
-import { flowDisplayName, parseFlow } from "@/lib/flowAst";
-import { buildPartialFlow } from "@/lib/partialFlow";
 import { useAppMenu } from "@/lib/appMenu";
+import { runAllFlows, runFromLine, runOpenFlow, stopRun } from "@/lib/runLauncher";
 import { IS_MAC, useShortcuts } from "@/lib/keyboard";
 import { useChatStore } from "@/stores/chatStore";
 import { useDevicePickerStore } from "@/stores/devicePickerStore";
 import { useDeviceStore } from "@/stores/deviceStore";
-import { useFlowStore } from "@/stores/flowStore";
 import { useInspectorStore } from "@/stores/inspectorStore";
 import { usePanelsStore } from "@/stores/panelsStore";
 import { usePluginsStore } from "@/stores/pluginsStore";
 import { useRunStore } from "@/stores/runStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { startCloudRun, stopWatchingCloudRun } from "@/lib/cloudRunner";
 import { useCloudTargetStore } from "@/stores/cloudTargetStore";
-import { toast } from "@/stores/toastStore";
-import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+
+// Mounted only while the assistant is open; its markdown stack stays out of
+// the startup bundle.
+const ChatPanel = lazy(() =>
+  import("@/components/chat/ChatPanel").then((m) => ({ default: m.ChatPanel })),
+);
 
 /**
  * The primary workspace screen — toolbar plus the resizable panel layout
@@ -50,12 +47,6 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 export function MainView() {
   const inspectKey = useSettingsStore((s) => s.inspectKey);
   const toggleInspect = useInspectorStore((s) => s.toggle);
-  const appendLog = useRunStore((s) => s.appendLog);
-  const initSteps = useRunStore((s) => s.initSteps);
-  const resetSteps = useRunStore((s) => s.resetSteps);
-  const setRunning = useRunStore((s) => s.setRunning);
-  const setStarting = useRunStore((s) => s.setStarting);
-  const startFailed = useRunStore((s) => s.startFailed);
 
   const streamEnabled = useSettingsStore((s) => s.streamEnabled);
   const panels = usePanelsStore((s) => s.visible);
@@ -92,134 +83,10 @@ export function MainView() {
   const mainTopSize = bottomVisible ? 100 - BOTTOM_MIN : 100;
   const mainBottomSize = 100 - mainTopSize;
 
-  const onRun = useCallback(async () => {
-    const { running, starting } = useRunStore.getState();
-    if (running || starting) return;
-    const { content, filePath } = useFlowStore.getState();
-    let path = filePath;
-    setStarting();
-    try {
-      if (!path) {
-        const dir = await tempDir();
-        path = `${dir.replace(/\/$/, "")}/maestro-deck-flow.yaml`;
-        await writeTextFile(path, content);
-      } else {
-        await writeTextFile(path, content);
-      }
-      resetSteps();
-      initSteps(parseFlow(content).steps);
-      useRunStore.getState().setRunTarget({ path, kind: "flow" });
-      const cloudTarget = useCloudTargetStore.getState().target;
-      if (cloudTarget) {
-        await startCloudRun(cloudTarget, [path]);
-        return;
-      }
-      const pid = await ipc.runFlow(
-        path,
-        useSettingsStore.getState().appId,
-        useWorkspaceStore.getState().folderPath,
-      );
-      setRunning(pid);
-      appendLog("system", `[runner started pid ${pid} · ${path}]`);
-    } catch (err) {
-      startFailed();
-      toast.error("Run failed", err instanceof Error ? err.message : String(err));
-    }
-  }, [setRunning, setStarting, startFailed, appendLog, initSteps, resetSteps]);
-
-  const onRunAll = useCallback(async () => {
-    const folder = useWorkspaceStore.getState().folderPath;
-    if (!folder) return;
-    const { running, starting } = useRunStore.getState();
-    if (running || starting) return;
-    setStarting();
-    try {
-      // Persist any unsaved edits to the current file so they're part of the run.
-      const { content, filePath, dirty } = useFlowStore.getState();
-      if (dirty && filePath) {
-        await writeTextFile(filePath, content);
-        useFlowStore.getState().saved(filePath);
-      }
-      const { content: c2, filePath: fp2 } = useFlowStore.getState();
-      resetSteps();
-      initSteps(parseFlow(c2).steps);
-      // Run All executes every flow in the folder through one runner process;
-      // only the open file's flow may drive the editor/console step states.
-      useRunStore.getState().setRunTarget({
-        path: folder,
-        kind: "all",
-        expectedFlow: flowDisplayName(c2, fp2),
-      });
-      const pid = await ipc.runFlow(
-        folder,
-        useSettingsStore.getState().appId,
-        useWorkspaceStore.getState().folderPath,
-      );
-      setRunning(pid);
-      appendLog("system", `[runner started pid ${pid} · all flows in ${folder}]`);
-    } catch (err) {
-      startFailed();
-      toast.error("Run all failed", err instanceof Error ? err.message : String(err));
-    }
-  }, [setRunning, setStarting, startFailed, appendLog, initSteps, resetSteps]);
-
-  const onRunFrom = useCallback(
-    async (line: number) => {
-      const { content } = useFlowStore.getState();
-      const partial = buildPartialFlow(content, line);
-      if (!partial) return;
-      const { running, starting } = useRunStore.getState();
-      if (running || starting) return;
-      setStarting();
-      try {
-        const dir = await tempDir();
-        const tempPath = `${dir.replace(/\/$/, "")}/maestro-deck-flow.yaml`;
-        await writeTextFile(tempPath, partial.content);
-        const truncatedAst = parseFlow(partial.content);
-        const remappedSteps = truncatedAst.steps.map((s) => ({
-          ...s,
-          line: partial.lineMap.get(s.line) ?? s.line,
-        }));
-        resetSteps();
-        initSteps(remappedSteps);
-        useRunStore.getState().setRunTarget({ path: tempPath, kind: "flow" });
-        const pid = await ipc.runFlow(
-          tempPath,
-          useSettingsStore.getState().appId,
-          useWorkspaceStore.getState().folderPath,
-        );
-        setRunning(pid);
-        appendLog(
-          "system",
-          `[runner started pid ${pid} · from line ${partial.firstStepOriginalLine}]`,
-        );
-      } catch (err) {
-        startFailed();
-        toast.error("Run from here failed", err instanceof Error ? err.message : String(err));
-      }
-    },
-    [setRunning, setStarting, startFailed, appendLog, initSteps, resetSteps],
-  );
-
-  const onStop = useCallback(async () => {
-    // Read the pid at call time (via getState) rather than subscribing to it,
-    // so MainView — which owns the whole panel layout — doesn't re-render on
-    // every run start/stop.
-    // A cloud run has no local process and no cancel endpoint: the most the
-    // app can do is stop watching, which stopWatchingCloudRun says out loud.
-    if (useRunStore.getState().cloud) {
-      stopWatchingCloudRun();
-      return;
-    }
-    const pid = useRunStore.getState().pid;
-    if (pid === null) return;
-    useRunStore.getState().requestStop();
-    try {
-      await ipc.stopFlow(pid);
-    } catch (err) {
-      toast.error("Stop failed", err instanceof Error ? err.message : String(err));
-    }
-  }, []);
+  const onRun = runOpenFlow;
+  const onRunAll = runAllFlows;
+  const onRunFrom = runFromLine;
+  const onStop = stopRun;
 
   const shortcuts = useMemo(
     () => [
@@ -362,7 +229,13 @@ export function MainView() {
               <>
                 <PanelResizeHandle className={RESIZE_HANDLE_H} />
                 <Panel id="chat" order={4} defaultSize={CHAT_SIZE} minSize={20} maxSize={50}>
-                  {chatOpen ? <ChatPanel /> : <PluginPanel />}
+                  {chatOpen ? (
+                    <Suspense fallback={null}>
+                      <ChatPanel />
+                    </Suspense>
+                  ) : (
+                    <PluginPanel />
+                  )}
                 </Panel>
               </>
             ) : null}

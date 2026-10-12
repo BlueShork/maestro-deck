@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { Activity, Eraser, List, Terminal } from "lucide-react";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, type RefObject } from "react";
 
 import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { RunStatus } from "@/components/RunStatus";
@@ -10,8 +10,8 @@ import { MetricsBody } from "@/components/MetricsPanel";
 import { renderAnsi } from "@/lib/ansi";
 import { humanLabel, formatDuration } from "@/lib/stepRenderer";
 import { cn } from "@/lib/utils";
-import { useRunStore } from "@/stores/runStore";
-import type { StepRunState } from "@/stores/runStore";
+import { MAX_LOG_LINES, useRunStore } from "@/stores/runStore";
+import type { LogLine, StepRunState } from "@/stores/runStore";
 import { useSettingsStore, type ConsoleMode } from "@/stores/settingsStore";
 
 /** Plain-language outcome of the last run instead of a raw `exit N` code,
@@ -47,8 +47,8 @@ const CONSOLE_TABS: Array<{ id: ConsoleMode; label: string; icon: typeof List }>
 export function RunConsole() {
   const running = useRunStore((s) => s.running);
   const exitCode = useRunStore((s) => s.exitCode);
-  const logs = useRunStore((s) => s.logs);
-  const truncatedCount = useRunStore((s) => s.truncatedCount);
+  // A boolean, not the array: only the Technical view re-renders per line.
+  const hasLogs = useRunStore((s) => s.logs.length > 0);
   const clearConsole = useRunStore((s) => s.clearConsole);
 
   const consoleMode = useSettingsStore((s) => s.consoleMode);
@@ -58,14 +58,6 @@ export function RunConsole() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (stickRef.current) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [logs]);
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-background">
@@ -102,7 +94,7 @@ export function RunConsole() {
           onClick={clearConsole}
           // Disabled while running: clearing `steps` mid-run would wipe the
           // live step list and incoming events can't repopulate it.
-          disabled={running || (logs.length === 0 && steps.length === 0)}
+          disabled={running || (!hasLogs && steps.length === 0)}
         >
           <Eraser className="h-3 w-3" />
           Clear
@@ -122,31 +114,7 @@ export function RunConsole() {
         {consoleMode === "performance" ? (
           <MetricsBody />
         ) : consoleMode === "technical" ? (
-          logs.length === 0 ? (
-            <div className="text-muted-foreground">
-              No output yet. Press Run to execute the current flow.
-            </div>
-          ) : (
-            <>
-              {truncatedCount > 0 ? (
-                <div className="italic text-muted-foreground">
-                  [{truncatedCount} older lines dropped — console keeps the last 2000]
-                </div>
-              ) : null}
-              {logs.map((l) => (
-                <div
-                  key={l.id}
-                  className={cn(
-                    "whitespace-pre-wrap font-mono",
-                    l.stream === "stderr" && "text-destructive",
-                    l.stream === "system" && "text-muted-foreground italic",
-                  )}
-                >
-                  {renderAnsi(l.text)}
-                </div>
-              ))}
-            </>
-          )
+          <TechnicalLog scrollRef={scrollRef} stickRef={stickRef} />
         ) : (
           <SimpleConsoleBody
             steps={steps}
@@ -159,6 +127,60 @@ export function RunConsole() {
     </section>
   );
 }
+
+/** The raw runner output. Owns the `logs` subscription so streaming lines
+ *  re-render this list alone, and only the new rows in it. */
+function TechnicalLog({
+  scrollRef,
+  stickRef,
+}: {
+  scrollRef: RefObject<HTMLDivElement | null>;
+  stickRef: RefObject<boolean>;
+}) {
+  const logs = useRunStore((s) => s.logs);
+  const truncatedCount = useRunStore((s) => s.truncatedCount);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [logs, scrollRef, stickRef]);
+
+  if (logs.length === 0) {
+    return (
+      <div className="text-muted-foreground">
+        No output yet. Press Run to execute the current flow.
+      </div>
+    );
+  }
+  return (
+    <>
+      {truncatedCount > 0 ? (
+        <div className="italic text-muted-foreground">
+          [{truncatedCount} older lines dropped — console keeps the last {MAX_LOG_LINES}]
+        </div>
+      ) : null}
+      {logs.map((l) => (
+        <LogRow key={l.id} line={l} />
+      ))}
+    </>
+  );
+}
+
+// Log entries are immutable, so a row never needs to re-render (or re-parse
+// its ANSI codes) once mounted.
+const LogRow = memo(function LogRow({ line }: { line: LogLine }) {
+  return (
+    <div
+      className={cn(
+        "whitespace-pre-wrap font-mono",
+        line.stream === "stderr" && "text-destructive",
+        line.stream === "system" && "text-muted-foreground italic",
+      )}
+    >
+      {renderAnsi(line.text)}
+    </div>
+  );
+});
 
 // Memoized so log lines streaming into the store (which re-render RunConsole)
 // don't re-render the whole step list — only an actual step change does.

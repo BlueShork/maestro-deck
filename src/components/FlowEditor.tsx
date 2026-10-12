@@ -40,7 +40,6 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { FileDown, FileUp, Save } from "lucide-react";
 import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -52,7 +51,7 @@ import { parseFlow, type Step } from "@/lib/flowAst";
 import { PanelAction, PanelHeader } from "@/components/PanelHeader";
 import { StepContextMenu } from "@/components/StepContextMenu";
 import { themeExtensions } from "@/lib/editor-theme";
-import { openFlowFile } from "@/lib/flow-io";
+import { openFlowFile, writeFlow } from "@/lib/flow-io";
 import { effectiveMode } from "@/lib/colorTheme";
 import { resolveTheme } from "@/lib/theme";
 import { useAutosave } from "@/lib/useAutosave";
@@ -140,7 +139,6 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
   const steps = useRunStore((s) => s.steps);
   const setContent = useFlowStore((s) => s.setContent);
   const setCursor = useFlowStore((s) => s.setCursor);
-  const saved = useFlowStore((s) => s.saved);
   useAutosave();
 
   const themeMode = useSettingsStore((s) => s.theme);
@@ -346,14 +344,13 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
         filters: [{ name: "Maestro flow", extensions: ["yaml", "yml"] }],
       });
       if (!picked) return;
-      await writeTextFile(picked, content);
-      saved(picked);
+      await writeFlow(picked);
       useWorkspaceStore.getState().setLastOpenFile(picked);
       toast.success("Saved", picked);
     } catch (err) {
       toast.error("Save failed", err instanceof Error ? err.message : String(err));
     }
-  }, [content, saved]);
+  }, []);
 
   const onSave = useCallback(async () => {
     if (!filePath) {
@@ -361,14 +358,13 @@ export function FlowEditor({ onRunFrom }: { onRunFrom?: (line: number) => void }
       return;
     }
     try {
-      await writeTextFile(filePath, content);
-      saved(filePath);
+      await writeFlow(filePath);
       useWorkspaceStore.getState().setLastOpenFile(filePath);
       toast.success("Saved", filePath);
     } catch (err) {
       toast.error("Save failed", err instanceof Error ? err.message : String(err));
     }
-  }, [filePath, content, saved, onSaveAs]);
+  }, [filePath, onSaveAs]);
 
   useEffect(() => {
     const handler = (e: Event) => {

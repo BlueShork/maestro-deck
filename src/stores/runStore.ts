@@ -70,6 +70,12 @@ interface RunState {
     expectedFlow?: string | null;
   }) => void;
   appendLog: (stream: LogStream, text: string) => void;
+  /** Buffers a runner output line; queued lines reach `logs` together on the
+   *  next flush (~one frame later) instead of one store update per line. */
+  queueLog: (stream: LogStream, text: string) => void;
+  /** Moves queued lines into `logs` now. appendLog flushes first, so a line
+   *  appended directly never jumps ahead of queued output. */
+  flushLogs: () => void;
   /** Clears the visible console — both the technical `logs` and the Simple
    *  view's `steps`, plus the run-result badge — so "Clear" empties whichever
    *  mode is active rather than just the (often hidden) log buffer. */
@@ -88,6 +94,31 @@ interface RunState {
 }
 
 let nextId = 1;
+
+/** Lines the console keeps; older ones are counted in `truncatedCount`. */
+export const MAX_LOG_LINES = 2000;
+const LOG_FLUSH_MS = 16;
+let queued: Array<{ stream: LogStream; text: string }> = [];
+let queueTimer: ReturnType<typeof setTimeout> | null = null;
+
+function dropQueued(): void {
+  queued = [];
+  if (queueTimer !== null) {
+    clearTimeout(queueTimer);
+    queueTimer = null;
+  }
+}
+
+function withLines(
+  s: Pick<RunState, "logs" | "truncatedCount">,
+  lines: Array<{ stream: LogStream; text: string }>,
+): Pick<RunState, "logs" | "truncatedCount"> {
+  const timestamp = Date.now();
+  const all = s.logs.concat(lines.map((l) => ({ id: nextId++, ...l, timestamp })));
+  const overflow = all.length - MAX_LOG_LINES;
+  if (overflow <= 0) return { logs: all, truncatedCount: s.truncatedCount };
+  return { logs: all.slice(overflow), truncatedCount: s.truncatedCount + overflow };
+}
 
 const asPending = (s: StepRunState): StepRunState => ({
   ...s,
@@ -124,15 +155,16 @@ function promoteNext(steps: StepRunState[], from: number, now: number): void {
 // a later step (the historical "wrong lines turn green" bug: inner steps were
 // indistinguishable from top-level ones once the indentation was trimmed away,
 // and exact-matched later parent steps).
+// Returns null when the event changes nothing, so callers can skip the update.
 function applyStepEvent(
   state: Pick<RunState, "steps" | "flowGateOpen" | "pendingErrorIdx">,
   e: StepEvent,
-): Partial<RunState> | Record<string, never> {
-  if (!state.flowGateOpen) return {};
+): Partial<RunState> | null {
+  if (!state.flowGateOpen) return null;
+  const cursor = state.steps.findIndex((s) => !isSettled(s));
+  if (cursor === -1) return null;
   const next = state.steps.slice();
   const now = performance.now();
-  const cursor = next.findIndex((s) => !isSettled(s));
-  if (cursor === -1) return {};
 
   // Inner step of a container (runFlow/repeat/retry) — the cursor step IS the
   // container; keep it blue while its children execute, consume nothing.
@@ -141,7 +173,7 @@ function applyStepEvent(
       next[cursor] = { ...next[cursor], status: "running", startedAt: now };
       return { steps: next };
     }
-    return {};
+    return null;
   }
 
   // Depth-0 events map 1:1 onto top-level steps, in order → default target is
@@ -199,7 +231,7 @@ function applyStepEvent(
   return { steps: next, pendingErrorIdx };
 }
 
-export const useRunStore = create<RunState>((set) => ({
+export const useRunStore = create<RunState>((set, get) => ({
   running: false,
   starting: false,
   pid: null,
@@ -216,8 +248,10 @@ export const useRunStore = create<RunState>((set) => ({
   // Posted immediately on the Run click so the toolbar reacts instantly,
   // before the (potentially slow) backend round-trip returns the PID. Clears
   // logs here — the earliest point — so early runner stdout isn't dropped.
-  setStarting: () =>
-    set({ starting: true, exitCode: null, stopRequested: false, logs: [], truncatedCount: 0 }),
+  setStarting: () => {
+    dropQueued();
+    set({ starting: true, exitCode: null, stopRequested: false, logs: [], truncatedCount: 0 });
+  },
   startFailed: () => set({ starting: false }),
   setRunning: (pid) =>
     set({ running: true, starting: false, pid, exitCode: null, stopRequested: false }),
@@ -246,18 +280,28 @@ export const useRunStore = create<RunState>((set) => ({
       flowGateOpen: kind !== "all",
       pendingErrorIdx: null,
     }),
-  appendLog: (stream, text) =>
-    set((s) => {
-      const entry = { id: nextId++, stream, text, timestamp: Date.now() };
-      const MAX = 2000;
-      if (s.logs.length < MAX) return { logs: [...s.logs, entry] };
-      return {
-        logs: [...s.logs.slice(s.logs.length - MAX + 1), entry],
-        truncatedCount: s.truncatedCount + (s.logs.length - MAX + 1),
-      };
-    }),
-  clearConsole: () =>
-    set({ logs: [], steps: [], exitCode: null, stopRequested: false, truncatedCount: 0 }),
+  appendLog: (stream, text) => {
+    get().flushLogs();
+    set((s) => withLines(s, [{ stream, text }]));
+  },
+  queueLog: (stream, text) => {
+    queued.push({ stream, text });
+    if (queueTimer === null) queueTimer = setTimeout(() => get().flushLogs(), LOG_FLUSH_MS);
+  },
+  flushLogs: () => {
+    if (queueTimer !== null) {
+      clearTimeout(queueTimer);
+      queueTimer = null;
+    }
+    if (queued.length === 0) return;
+    const batch = queued;
+    queued = [];
+    set((s) => withLines(s, batch));
+  },
+  clearConsole: () => {
+    dropQueued();
+    set({ logs: [], steps: [], exitCode: null, stopRequested: false, truncatedCount: 0 });
+  },
   initSteps: (steps) =>
     set({
       steps: steps.map((s) => ({
@@ -282,7 +326,7 @@ export const useRunStore = create<RunState>((set) => ({
         // (`Assertion is false: ...` arrives a few lines after `... FAILED`).
         if (state.pendingErrorIdx !== null) {
           const text = raw.trim();
-          if (!text) return {};
+          if (!text) return state;
           const idx = state.pendingErrorIdx;
           const steps = state.steps.slice();
           if (steps[idx] && steps[idx].status === "failed" && steps[idx].error === null) {
@@ -290,7 +334,7 @@ export const useRunStore = create<RunState>((set) => ({
           }
           return { steps, pendingErrorIdx: null };
         }
-        return {};
+        return state;
       }
 
       if (parsed.type === "flow") {
@@ -308,8 +352,8 @@ export const useRunStore = create<RunState>((set) => ({
         return { flowGateOpen: true, steps, pendingErrorIdx: null };
       }
 
-      return applyStepEvent(state, parsed.event);
+      return applyStepEvent(state, parsed.event) ?? state;
     }),
-  applyEvent: (e) => set((state) => applyStepEvent(state, e)),
+  applyEvent: (e) => set((state) => applyStepEvent(state, e) ?? state),
   resetSteps: () => set({ steps: [], pendingErrorIdx: null }),
 }));

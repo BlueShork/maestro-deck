@@ -24,6 +24,13 @@ import { Logo } from "@/components/Logo";
 import LatticeLoader from "@/components/ui/LatticeLoader";
 import { H264Decoder } from "@/lib/decoder";
 import { registerDeviceCanvas } from "@/lib/deviceFrame";
+import {
+  findSmallestAt,
+  fitScale,
+  hierarchyExtent,
+  toDevicePoint,
+  wheelSwipeEndY,
+} from "@/lib/deviceGeometry";
 import { events, ipc } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
@@ -35,55 +42,6 @@ import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { Selector, UINode } from "@/types";
-
-function nodeArea(n: UINode): number {
-  const w = n.bounds.right - n.bounds.left;
-  const h = n.bounds.bottom - n.bounds.top;
-  return Math.max(0, w) * Math.max(0, h);
-}
-
-function contains(n: UINode, x: number, y: number): boolean {
-  const { bounds } = n;
-  return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
-}
-
-function isTargetable(n: UINode): boolean {
-  return !!n.text?.trim() || !!n.resource_id?.trim() || !!n.content_desc?.trim() || n.clickable;
-}
-
-/**
- * Walk the full tree and return the best node containing (x, y). "Best" = the
- * smallest-area node, but with a preference for nodes that have a usable
- * selector (text / resource-id / content-desc / clickable). Falls back to the
- * smallest raw match if no targetable candidate exists.
- *
- * We walk unconditionally instead of pruning on "does parent contain point"
- * because Maestro 2.0 returns the root with empty attributes → bounds parse
- * to [0,0][0,0], which would cut the descent and return null.
- */
-function findSmallestAt(root: UINode, x: number, y: number): UINode | null {
-  let bestTargetable: UINode | null = null;
-  let bestTargetableArea = Infinity;
-  let bestAny: UINode | null = null;
-  let bestAnyArea = Infinity;
-  const stack: UINode[] = [root];
-  while (stack.length) {
-    const n = stack.pop()!;
-    if (contains(n, x, y)) {
-      const area = nodeArea(n);
-      if (area > 0 && area < bestAnyArea) {
-        bestAny = n;
-        bestAnyArea = area;
-      }
-      if (area > 0 && area < bestTargetableArea && isTargetable(n)) {
-        bestTargetable = n;
-        bestTargetableArea = area;
-      }
-    }
-    for (const c of n.children) stack.push(c);
-  }
-  return bestTargetable ?? bestAny;
-}
 
 function useFrameStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
@@ -424,10 +382,7 @@ export function DeviceView() {
     return () => ro.disconnect();
   }, []);
 
-  const scale = Math.min(
-    canvasRect.width / deviceWidth || 0,
-    canvasRect.height / deviceHeight || 0,
-  );
+  const scale = fitScale(canvasRect, { width: deviceWidth, height: deviceHeight });
   const displayW = deviceWidth * scale;
   const displayH = deviceHeight * scale;
 
@@ -445,17 +400,7 @@ export function DeviceView() {
   const isWeb = current?.platform === "web";
   const hierarchyDims = useMemo(() => {
     if (isWeb) return streamW > 0 && streamH > 0 ? { w: streamW, h: streamH } : null;
-    if (!tree?.root) return null;
-    let w = 0;
-    let h = 0;
-    const stack: UINode[] = [tree.root];
-    while (stack.length) {
-      const n = stack.pop()!;
-      if (n.bounds.right > w) w = n.bounds.right;
-      if (n.bounds.bottom > h) h = n.bounds.bottom;
-      for (const c of n.children) stack.push(c);
-    }
-    return w > 0 && h > 0 ? { w, h } : null;
+    return hierarchyExtent(tree?.root ?? null);
   }, [tree, isWeb, streamW, streamH]);
 
   const overlayScaleX = hierarchyDims ? displayW / hierarchyDims.w : scale;
@@ -470,18 +415,13 @@ export function DeviceView() {
       const el = containerRef.current;
       if (!el) return null;
       const rect = el.getBoundingClientRect();
-      const offsetX = (rect.width - displayW) / 2;
-      const offsetY = (rect.height - displayH) / 2;
-      const localX = clientX - rect.left - offsetX;
-      const localY = clientY - rect.top - offsetY;
-      if (localX < 0 || localY < 0 || localX > displayW || localY > displayH || scale === 0) {
-        return null;
-      }
-      return {
-        // Stream-space pixels — what scrcpy expects for input events.
-        x: Math.round(localX / scale),
-        y: Math.round(localY / scale),
-      };
+      // Stream-space pixels — what scrcpy expects for input events.
+      return toDevicePoint(
+        { x: clientX - rect.left, y: clientY - rect.top },
+        rect,
+        { width: displayW, height: displayH },
+        scale,
+      );
     },
     [displayW, displayH, scale],
   );
@@ -721,12 +661,10 @@ export function DeviceView() {
     // pixels as a tap-cancel rather than a fling.
     if (!cursor || Math.abs(delta) < 4 || scale === 0) return;
 
-    // `delta` is in display-space pixels; convert to stream-space (which
-    // is what scrcpy expects). `deviceDelta` ends up negative when the
-    // user scrolls down — i.e. finger should move *up* on the device
-    // to reveal content below. That matches Android's natural scroll.
-    const deviceDelta = delta / scale;
-    const y2 = Math.max(0, Math.min(deviceHeight - 1, cursor.y - Math.round(deviceDelta)));
+    // `delta` is in display-space pixels; wheelSwipeEndY converts it to
+    // stream space (what scrcpy expects) and moves the finger *up* when the
+    // user scrolls down, matching Android's natural scroll.
+    const y2 = wheelSwipeEndY(cursor.y, delta, scale, deviceHeight);
 
     void ipc
       .sendInput(
@@ -750,6 +688,13 @@ export function DeviceView() {
         // via `deviceStore`.
       });
   }, [scale, deviceHeight, deviceWidth]);
+
+  useEffect(
+    () => () => {
+      if (wheelTimer.current !== null) window.clearTimeout(wheelTimer.current);
+    },
+    [],
+  );
 
   const onWheel = useCallback(
     (e: ReactWheelEvent) => {
