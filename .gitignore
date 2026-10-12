@@ -31,7 +31,6 @@ dist-ssr
 # Rust / Tauri
 src-tauri/target/
 src-tauri/gen/
-src-tauri/Cargo.lock
 
 # Build output
 build/

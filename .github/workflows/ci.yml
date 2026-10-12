@@ -63,8 +63,8 @@ jobs:
         run: mkdir -p dist && touch dist/index.html
 
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-      - run: cargo check --manifest-path src-tauri/Cargo.toml
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
 
   sonarcloud:
     runs-on: ubuntu-latest
