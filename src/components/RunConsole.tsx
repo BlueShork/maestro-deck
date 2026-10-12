@@ -16,7 +16,7 @@ import { useSettingsStore, type ConsoleMode } from "@/stores/settingsStore";
 
 /** Plain-language outcome of the last run instead of a raw `exit N` code,
  *  as a square Space Mono chip like the landing's status tags. */
-function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: boolean }) {
+function RunStatusBadge({ exitCode, stopped }: { exitCode: number | null; stopped: boolean }) {
   const kind = stopped ? "stopped" : exitCode === 0 ? "passed" : "failed";
   const { label, className } = {
     passed: { label: "Passed", className: "bg-success/15 text-success" },
@@ -26,7 +26,11 @@ function RunStatusBadge({ exitCode, stopped }: { exitCode: number; stopped: bool
   return (
     <span
       className={cn("px-1.5 py-0.5 font-mono text-[10px] uppercase leading-none", className)}
-      title={`Flow ${label.toLowerCase()} — exit code ${exitCode}`}
+      title={
+        exitCode === null
+          ? `Flow ${label.toLowerCase()}`
+          : `Flow ${label.toLowerCase()} — exit code ${exitCode}`
+      }
     >
       {label}
     </span>
@@ -69,7 +73,8 @@ export function RunConsole() {
               <span className="h-1.5 w-1.5 animate-pulse bg-brand" />
               running
             </span>
-          ) : exitCode !== null ? (
+          ) : exitCode !== null || stopRequested ? (
+            // A stopped runner is killed by a signal: no exit code, still ended.
             <RunStatusBadge exitCode={exitCode} stopped={stopRequested} />
           ) : null
         }
@@ -209,7 +214,7 @@ const SimpleConsoleBody = memo(function SimpleConsoleBody({
       {steps.map((s) => (
         <SimpleStepLine key={s.index} step={s} />
       ))}
-      {!running && exitCode !== null && (
+      {!running && (exitCode !== null || stopRequested) && (
         <SimpleSummary
           exitCode={exitCode}
           stopRequested={stopRequested}
@@ -267,7 +272,7 @@ function SimpleSummary({
   totalMs,
   failedAt,
 }: {
-  exitCode: number;
+  exitCode: number | null;
   stopRequested: boolean;
   totalSteps: number;
   totalMs: number;

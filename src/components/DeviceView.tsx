@@ -136,7 +136,12 @@ function useScreenshotStream(
   // viewport (1200×766) — the coordinate space the hierarchy bounds live in.
   // We paint at the bitmap's native resolution (crisp) but report the CSS size
   // so overlay scaling and hit-testing use the right space.
-  const pendingRef = useRef<{ bmp: ImageBitmap; w: number; h: number } | null>(null);
+  const pendingRef = useRef<{
+    bmp: ImageBitmap;
+    w: number;
+    h: number;
+    from: FrameSource;
+  } | null>(null);
   const rafRef = useRef<number | null>(null);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
@@ -153,8 +158,11 @@ function useScreenshotStream(
       const pending = pendingRef.current;
       pendingRef.current = null;
       if (!pending) return;
-      const { bmp, w, h } = pending;
-      if (!canvas) {
+      const { bmp, w, h, from } = pending;
+      // Checked again at paint time: a device switch or unplug can land
+      // between the decode and this frame, and the stale capture must not
+      // reappear after the stream was reset.
+      if (!canvas || sourceRef.current !== from) {
         bmp.close();
         return;
       }
@@ -201,6 +209,7 @@ function useScreenshotStream(
           bmp,
           w: payload.width || bmp.width,
           h: payload.height || bmp.height,
+          from,
         };
         if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
       } catch {
@@ -653,6 +662,8 @@ export function DeviceView() {
           mod: true,
           shift: true,
           handler: () => void takeScreenshot(),
+          // Works from the editor too (it holds focus from startup).
+          allowInInput: true,
         },
       ],
       [takeScreenshot],

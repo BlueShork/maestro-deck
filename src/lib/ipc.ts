@@ -28,12 +28,14 @@ import type {
 } from "@/lib/plugins/types";
 import type { BankGroup, RunReport } from "@/types/visualRegression";
 
+/** A failed backend command. The message is the backend's own (it ends up in
+ *  toasts verbatim); which command failed stays on `command` for debugging. */
 export class IpcError extends Error {
   constructor(
     public readonly command: string,
     cause: unknown,
   ) {
-    super(`IPC ${command} failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
     this.name = "IpcError";
   }
 }

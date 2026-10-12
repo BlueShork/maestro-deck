@@ -78,6 +78,17 @@ describe("RunConsole — simple view", () => {
     expect(screen.getByText(/2 steps in/)).toBeTruthy();
   });
 
+  it("says stopped when the killed runner reported no exit code", () => {
+    useRunStore.setState({
+      exitCode: null,
+      stopRequested: true,
+      steps: [step(0, { status: "done", durationMs: 1 })],
+    });
+    render(<RunConsole />);
+    expect(screen.getByText("Test stopped")).toBeTruthy();
+    expect(screen.getByText("Stopped")).toBeTruthy();
+  });
+
   it("says stopped, not failed, when the user stopped the run", () => {
     useRunStore.setState({
       exitCode: 137,

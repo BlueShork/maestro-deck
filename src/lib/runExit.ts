@@ -40,7 +40,11 @@ export function handleRunnerExit(code: number | null): void {
   });
   if (wasStopped) toast.success("Flow stopped");
   else if (code === 0) toast.success("Flow completed");
-  else toast.error("Flow failed", `exit code ${code}`);
+  else
+    toast.error(
+      "Flow failed",
+      code === null ? "maestro was terminated before it finished" : `exit code ${code}`,
+    );
 
   const passed = code === 0 && !wasStopped;
   // First run that actually worked, and only for signed-out users: the one

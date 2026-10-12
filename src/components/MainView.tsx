@@ -110,6 +110,8 @@ export function MainView() {
         mod: true,
         shift: true,
         handler: () => useDevicePickerStore.getState().setOpen(true),
+        // The editor holds focus from startup; a modifier chord never types.
+        allowInInput: true,
       },
     ],
     [onRun, toggleInspect, inspectKey],

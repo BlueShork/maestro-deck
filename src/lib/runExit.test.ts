@@ -114,6 +114,14 @@ describe("handleRunnerExit — outcome", () => {
     expect(h.track.mock.calls[0][1].outcome).toBe("failed");
   });
 
+  it("a runner killed without an exit code and not by the user reads as terminated", () => {
+    handleRunnerExit(null);
+    expect(spies.error).toHaveBeenCalledWith(
+      "Flow failed",
+      "maestro was terminated before it finished",
+    );
+  });
+
   it("a run the user stopped says so, whatever the exit code", () => {
     useRunStore.setState({ stopRequested: true });
     handleRunnerExit(143);

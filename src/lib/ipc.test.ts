@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), Channel: class {} }));
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/api/core", () => ({ invoke, Channel: class {} }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 
-import { toUint8Array } from "./ipc";
+import { ipc, IpcError, toUint8Array } from "./ipc";
 
 describe("toUint8Array", () => {
   it("decodes base64 frame payloads byte for byte", () => {
@@ -25,5 +26,16 @@ describe("toUint8Array", () => {
     expect(toUint8Array(u8)).toBe(u8);
     expect([...toUint8Array(new Uint8Array([3, 4]).buffer)]).toEqual([3, 4]);
     expect([...toUint8Array([5, 6])]).toEqual([5, 6]);
+  });
+});
+
+describe("IPC errors", () => {
+  it("carry the backend's message as is, and the failed command separately", async () => {
+    invoke.mockRejectedValueOnce("device unauthorized");
+    const err = (await ipc.listDevices().catch((e: unknown) => e)) as IpcError;
+    expect(err).toBeInstanceOf(IpcError);
+    expect(err.message).toBe("device unauthorized");
+    expect(err.command).toBe("list_devices");
+    expect(err.cause).toBe("device unauthorized");
   });
 });
