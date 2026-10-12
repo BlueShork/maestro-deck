@@ -1,0 +1,858 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Toolbar snapshots > idle, signed out 1`] = `
+<header
+  class="flex h-12 shrink-0 items-stretch border-b border-border bg-background"
+>
+  <div
+    class="flex w-12 shrink-0 items-center justify-center border-r border-border"
+  >
+    <svg
+      aria-label="Maestro Deck"
+      class="block shrink-0"
+      height="26"
+      role="img"
+      shape-rendering="crispEdges"
+      viewBox="0 0 9 9"
+      width="26"
+    >
+      <path
+        d="M1 0h1v1h-1zM2 0h1v1h-1zM3 0h1v1h-1zM4 0h1v1h-1zM5 0h1v1h-1zM6 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM1 1h1v1h-1zM2 1h1v1h-1zM3 1h1v1h-1zM4 1h1v1h-1zM5 1h1v1h-1zM6 1h1v1h-1zM7 1h1v1h-1zM8 1h1v1h-1z"
+        fill="#FFD800"
+      />
+      <path
+        d="M0 2h1v1h-1zM1 2h1v1h-1zM7 2h1v1h-1zM8 2h1v1h-1zM0 3h1v1h-1zM1 3h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM5 3h1v1h-1zM7 3h1v1h-1zM8 3h1v1h-1z"
+        fill="#FFAF00"
+      />
+      <path
+        d="M0 4h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM4 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM8 4h1v1h-1zM0 5h1v1h-1zM1 5h1v1h-1zM3 5h1v1h-1zM4 5h1v1h-1zM5 5h1v1h-1zM7 5h1v1h-1zM8 5h1v1h-1z"
+        fill="#FF8205"
+      />
+      <path
+        d="M0 6h1v1h-1zM1 6h1v1h-1zM7 6h1v1h-1zM8 6h1v1h-1zM0 7h1v1h-1zM1 7h1v1h-1zM2 7h1v1h-1zM3 7h1v1h-1zM4 7h1v1h-1zM5 7h1v1h-1zM6 7h1v1h-1zM7 7h1v1h-1zM8 7h1v1h-1z"
+        fill="#FA500F"
+      />
+      <path
+        d="M1 8h1v1h-1zM2 8h1v1h-1zM3 8h1v1h-1zM4 8h1v1h-1zM5 8h1v1h-1zM6 8h1v1h-1zM7 8h1v1h-1z"
+        fill="#E10500"
+      />
+    </svg>
+  </div>
+  <div
+    class="flex items-center gap-3 border-r border-border px-4"
+  >
+    <span
+      class="font-display text-[15px] font-medium tracking-[-0.02em] text-foreground"
+    >
+      Maestro Deck
+    </span>
+    <button
+      aria-label="Sign in to Maestro Deck Cloud"
+      class="inline-flex items-center gap-1 px-1.5 py-0.5 font-mono text-[10px] uppercase leading-4 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring bg-surface text-muted-foreground hover:text-foreground"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-sparkle h-3 w-3"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+        />
+      </svg>
+      Free Tier
+    </button>
+  </div>
+  <button
+    class="relative flex shrink-0 items-center justify-center gap-2 border-border font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 px-4 border-l-0 border-r font-mono text-[11px] uppercase text-muted-foreground"
+    data-state="closed"
+    type="button"
+  >
+    vtest
+  </button>
+  <div
+    class="ml-auto flex items-stretch"
+  >
+    <button
+      aria-label="Choose a device"
+      class="relative flex shrink-0 items-center justify-center border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 px-4 group/dev max-w-[16rem] gap-2.5"
+      data-state="closed"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+        class="h-2 w-2 shrink-0 border border-muted-foreground"
+      />
+      <span
+        class="min-w-0 truncate"
+      >
+        Choose a device
+      </span>
+      <svg
+        aria-hidden="true"
+        class="shrink-0 text-muted-foreground"
+        height="10"
+        shape-rendering="crispEdges"
+        style="transform: rotate(90deg);"
+        viewBox="0 0 6 6"
+        width="10"
+      >
+        <path
+          d="M1 0h1v1H1zM2 1h1v1H2zM3 2h1v2H3zM2 4h1v1H2zM1 5h1v1H1z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+    <button
+      aria-busy="false"
+      aria-label="Toggle inspect mode"
+      aria-pressed="false"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-mouse-pointer2 lucide-mouse-pointer-2 h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"
+        />
+      </svg>
+    </button>
+    <button
+      aria-expanded="false"
+      aria-haspopup="menu"
+      aria-label="Toggle panels"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      id="radix-_r_id_"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-layout-panel-left h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <rect
+          height="18"
+          rx="1"
+          width="7"
+          x="3"
+          y="3"
+        />
+        <rect
+          height="7"
+          rx="1"
+          width="7"
+          x="14"
+          y="3"
+        />
+        <rect
+          height="7"
+          rx="1"
+          width="7"
+          x="14"
+          y="14"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Toggle AI assistant"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      data-tour="chat-toggle"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-sparkles h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+        />
+        <path
+          d="M20 2v4"
+        />
+        <path
+          d="M22 4h-4"
+        />
+        <circle
+          cx="4"
+          cy="20"
+          r="2"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Open documentation"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-book-open h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M12 7v14"
+        />
+        <path
+          d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Open image bank"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      data-tour="image-bank"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-images h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="m22 11-1.296-1.296a2.4 2.4 0 0 0-3.408 0L11 16"
+        />
+        <path
+          d="M4 8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2"
+        />
+        <circle
+          cx="13"
+          cy="7"
+          fill="currentColor"
+          r="1"
+        />
+        <rect
+          height="14"
+          rx="2"
+          width="14"
+          x="8"
+          y="2"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Open plugins"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-puzzle h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Maestro Deck Cloud account"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-user h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"
+        />
+        <circle
+          cx="12"
+          cy="7"
+          r="4"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Settings"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-settings h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"
+        />
+        <circle
+          cx="12"
+          cy="12"
+          r="3"
+        />
+      </svg>
+    </button>
+    <div
+      class="flex items-stretch"
+      data-tour="run-controls"
+    >
+      <button
+        class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 px-4"
+        data-state="closed"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-list-checks h-4 w-4"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M13 5h8"
+          />
+          <path
+            d="M13 12h8"
+          />
+          <path
+            d="M13 19h8"
+          />
+          <path
+            d="m3 17 2 2 4-4"
+          />
+          <path
+            d="m3 7 2 2 4-4"
+          />
+        </svg>
+        Run all
+      </button>
+      <button
+        class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 px-4 group/run min-w-[7.5rem] bg-primary text-primary-foreground hover:bg-primary/90"
+        data-state="closed"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-play h-3.5 w-3.5"
+          fill="currentColor"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"
+          />
+        </svg>
+        Run
+        <svg
+          aria-hidden="true"
+          class="shrink-0 transition-transform duration-150 [transition-timing-function:steps(2,end)] group-hover/run:translate-x-[3px]"
+          height="12"
+          shape-rendering="crispEdges"
+          viewBox="0 0 6 6"
+          width="12"
+        >
+          <path
+            d="M1 0h1v1H1zM2 1h1v1H2zM3 2h1v2H3zM2 4h1v1H2zM1 5h1v1H1z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+`;
+
+exports[`Toolbar snapshots > running a cloud job 1`] = `
+<header
+  class="flex h-12 shrink-0 items-stretch border-b border-border bg-background"
+>
+  <div
+    class="flex w-12 shrink-0 items-center justify-center border-r border-border"
+  >
+    <svg
+      aria-label="Maestro Deck"
+      class="block shrink-0"
+      height="26"
+      role="img"
+      shape-rendering="crispEdges"
+      viewBox="0 0 9 9"
+      width="26"
+    >
+      <path
+        d="M1 0h1v1h-1zM2 0h1v1h-1zM3 0h1v1h-1zM4 0h1v1h-1zM5 0h1v1h-1zM6 0h1v1h-1zM7 0h1v1h-1zM0 1h1v1h-1zM1 1h1v1h-1zM2 1h1v1h-1zM3 1h1v1h-1zM4 1h1v1h-1zM5 1h1v1h-1zM6 1h1v1h-1zM7 1h1v1h-1zM8 1h1v1h-1z"
+        fill="#FFD800"
+      />
+      <path
+        d="M0 2h1v1h-1zM1 2h1v1h-1zM7 2h1v1h-1zM8 2h1v1h-1zM0 3h1v1h-1zM1 3h1v1h-1zM3 3h1v1h-1zM4 3h1v1h-1zM5 3h1v1h-1zM7 3h1v1h-1zM8 3h1v1h-1z"
+        fill="#FFAF00"
+      />
+      <path
+        d="M0 4h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM4 4h1v1h-1zM5 4h1v1h-1zM7 4h1v1h-1zM8 4h1v1h-1zM0 5h1v1h-1zM1 5h1v1h-1zM3 5h1v1h-1zM4 5h1v1h-1zM5 5h1v1h-1zM7 5h1v1h-1zM8 5h1v1h-1z"
+        fill="#FF8205"
+      />
+      <path
+        d="M0 6h1v1h-1zM1 6h1v1h-1zM7 6h1v1h-1zM8 6h1v1h-1zM0 7h1v1h-1zM1 7h1v1h-1zM2 7h1v1h-1zM3 7h1v1h-1zM4 7h1v1h-1zM5 7h1v1h-1zM6 7h1v1h-1zM7 7h1v1h-1zM8 7h1v1h-1z"
+        fill="#FA500F"
+      />
+      <path
+        d="M1 8h1v1h-1zM2 8h1v1h-1zM3 8h1v1h-1zM4 8h1v1h-1zM5 8h1v1h-1zM6 8h1v1h-1zM7 8h1v1h-1z"
+        fill="#E10500"
+      />
+    </svg>
+  </div>
+  <div
+    class="flex items-center gap-3 border-r border-border px-4"
+  >
+    <span
+      class="font-display text-[15px] font-medium tracking-[-0.02em] text-foreground"
+    >
+      Maestro Deck
+    </span>
+    <button
+      aria-label="Sign in to Maestro Deck Cloud"
+      class="inline-flex items-center gap-1 px-1.5 py-0.5 font-mono text-[10px] uppercase leading-4 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring bg-surface text-muted-foreground hover:text-foreground"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-sparkle h-3 w-3"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+        />
+      </svg>
+      Free Tier
+    </button>
+  </div>
+  <button
+    class="relative flex shrink-0 items-center justify-center gap-2 border-border font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 px-4 border-l-0 border-r font-mono text-[11px] uppercase text-muted-foreground"
+    data-state="closed"
+    type="button"
+  >
+    vtest
+  </button>
+  <div
+    class="ml-auto flex items-stretch"
+  >
+    <button
+      aria-label="Choose a device"
+      class="relative flex shrink-0 items-center justify-center border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 px-4 group/dev max-w-[16rem] gap-2.5"
+      data-state="closed"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+        class="h-2 w-2 shrink-0 border border-muted-foreground"
+      />
+      <span
+        class="min-w-0 truncate"
+      >
+        Choose a device
+      </span>
+      <svg
+        aria-hidden="true"
+        class="shrink-0 text-muted-foreground"
+        height="10"
+        shape-rendering="crispEdges"
+        style="transform: rotate(90deg);"
+        viewBox="0 0 6 6"
+        width="10"
+      >
+        <path
+          d="M1 0h1v1H1zM2 1h1v1H2zM3 2h1v2H3zM2 4h1v1H2zM1 5h1v1H1z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+    <button
+      aria-busy="false"
+      aria-label="Toggle inspect mode"
+      aria-pressed="false"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-mouse-pointer2 lucide-mouse-pointer-2 h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"
+        />
+      </svg>
+    </button>
+    <button
+      aria-expanded="false"
+      aria-haspopup="menu"
+      aria-label="Toggle panels"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      id="radix-_r_id_"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-layout-panel-left h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <rect
+          height="18"
+          rx="1"
+          width="7"
+          x="3"
+          y="3"
+        />
+        <rect
+          height="7"
+          rx="1"
+          width="7"
+          x="14"
+          y="3"
+        />
+        <rect
+          height="7"
+          rx="1"
+          width="7"
+          x="14"
+          y="14"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Toggle AI assistant"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      data-tour="chat-toggle"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-sparkles h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+        />
+        <path
+          d="M20 2v4"
+        />
+        <path
+          d="M22 4h-4"
+        />
+        <circle
+          cx="4"
+          cy="20"
+          r="2"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Open documentation"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-book-open h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M12 7v14"
+        />
+        <path
+          d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Open image bank"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      data-tour="image-bank"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-images h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="m22 11-1.296-1.296a2.4 2.4 0 0 0-3.408 0L11 16"
+        />
+        <path
+          d="M4 8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2"
+        />
+        <circle
+          cx="13"
+          cy="7"
+          fill="currentColor"
+          r="1"
+        />
+        <rect
+          height="14"
+          rx="2"
+          width="14"
+          x="8"
+          y="2"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Open plugins"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-puzzle h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Maestro Deck Cloud account"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-user h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"
+        />
+        <circle
+          cx="12"
+          cy="7"
+          r="4"
+        />
+      </svg>
+    </button>
+    <button
+      aria-label="Settings"
+      class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 w-11"
+      data-state="closed"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-settings h-4 w-4"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"
+        />
+        <circle
+          cx="12"
+          cy="12"
+          r="3"
+        />
+      </svg>
+    </button>
+    <div
+      class="flex items-stretch"
+      data-tour="run-controls"
+    >
+      <button
+        class="relative flex shrink-0 items-center justify-center gap-2 border-l border-border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 px-4 min-w-[7.5rem] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        data-state="closed"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-square h-3.5 w-3.5"
+          fill="currentColor"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <rect
+            height="18"
+            rx="2"
+            width="18"
+            x="3"
+            y="3"
+          />
+        </svg>
+        Stop watching
+      </button>
+    </div>
+  </div>
+</header>
+`;
