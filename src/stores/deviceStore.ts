@@ -22,6 +22,14 @@ const deviceListKey = (devices: Device[]): string =>
     .sort()
     .join(",");
 
+// Bumped by every connect/disconnect: only the latest one may apply its result,
+// so a slow connect can't overwrite a newer choice (or revive a device the user
+// disconnected meanwhile).
+let connectSeq = 0;
+// A listing in flight: a background poll never stacks another on top of it
+// (adb/simctl can take longer than the poll interval).
+let listing: Promise<void> | null = null;
+
 interface DeviceState {
   devices: Device[];
   current: Device | null;
@@ -58,37 +66,47 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
   error: null,
   refresh: async (opts) => {
     const silent = opts?.silent ?? false;
-    if (!silent) set({ loading: true, error: null });
-    try {
-      const devices = await ipc.listDevices();
-      set((state) => {
-        const changed = deviceListKey(state.devices) !== deviceListKey(devices);
-        // Background poll fast-path: when nothing changed and there's no
-        // spinner/error to clear, return the SAME state reference so zustand
-        // skips the notify entirely. Otherwise the poll would re-render the
-        // whole device list every tick and cause hover jank.
-        if (silent && !changed && !state.loading && !state.error) {
-          return state;
+    if (silent && listing) return listing;
+    const run = (async () => {
+      if (!silent) set({ loading: true, error: null });
+      try {
+        const devices = await ipc.listDevices();
+        set((state) => {
+          const changed = deviceListKey(state.devices) !== deviceListKey(devices);
+          // Background poll fast-path: when nothing changed and there's no
+          // spinner/error to clear, return the SAME state reference so zustand
+          // skips the notify entirely. Otherwise the poll would re-render the
+          // whole device list every tick and cause hover jank.
+          if (silent && !changed && !state.loading && !state.error) {
+            return state;
+          }
+          return {
+            loading: false,
+            error: null,
+            ...(changed ? { devices } : {}),
+          };
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (silent) {
+          // Transient poll failure (e.g. adb briefly busy) — keep the last
+          // known list and stay quiet; the next tick will recover.
+          set((state) => (state.loading ? { loading: false } : state));
+        } else {
+          set({ loading: false, error: message, devices: [] });
+          toast.error("Failed to list devices", message);
         }
-        return {
-          loading: false,
-          error: null,
-          ...(changed ? { devices } : {}),
-        };
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (silent) {
-        // Transient poll failure (e.g. adb briefly busy) — keep the last
-        // known list and stay quiet; the next tick will recover.
-        set((state) => (state.loading ? { loading: false } : state));
-      } else {
-        set({ loading: false, error: message, devices: [] });
-        toast.error("Failed to list devices", message);
       }
+    })();
+    listing = run;
+    try {
+      await run;
+    } finally {
+      if (listing === run) listing = null;
     }
   },
   connect: async (serial) => {
+    const seq = ++connectSeq;
     // A farm phone keeps billing and owns the native session: end it first.
     const farm = useFarmStore.getState();
     if (farm.session) await farm.release();
@@ -112,6 +130,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
         device?.platform ?? "android",
         url,
       );
+      if (seq !== connectSeq) return;
       // Connecting a device is the gesture for "run here now": it takes the
       // run target back from the cloud, so the two can never both look chosen.
       useCloudTargetStore.getState().clear();
@@ -127,6 +146,7 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
         streamEnabled ? connected.model : `${connected.model} · stream off`,
       );
     } catch (err) {
+      if (seq !== connectSeq) return;
       const message = err instanceof Error ? err.message : String(err);
       set({
         connecting: false,
@@ -138,8 +158,9 @@ export const useDeviceStore = create<DeviceState>((set, get) => ({
     }
   },
   disconnect: async () => {
+    connectSeq++;
     const serial = get().current?.serial ?? null;
-    set({ pendingSerial: serial, pendingAction: "disconnect" });
+    set({ pendingSerial: serial, pendingAction: "disconnect", connecting: false });
     try {
       await ipc.disconnectDevice();
     } catch (err) {

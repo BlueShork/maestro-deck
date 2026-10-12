@@ -12,8 +12,40 @@ import { Button } from "@/components/ui/Button";
 import { filterGroups, filterImages } from "@/lib/bankFilter";
 import { ipc } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { BankGroup, BankImage } from "@/types/visualRegression";
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * True once `ref` has come within a screen of the viewport (and from then on).
+ * Thumbnails are full-resolution PNGs sent as base64, so a large bank loaded
+ * all at once would mean hundreds of MB of strings; this defers each one until
+ * it is about to be seen. Without IntersectionObserver everything counts as
+ * visible.
+ */
+function useNearViewport(ref: { current: Element | null }): boolean {
+  const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    const el = ref.current;
+    if (near || !el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "100% 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, near]);
+  return near;
+}
 
 // device_key is `<sanitized_model>_<w>x<h>` (e.g. "iPhone_16_Pro_1179x2556").
 // Split it back into something humans read.
@@ -94,8 +126,11 @@ function Thumb({
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const near = useNearViewport(rootRef);
 
   useEffect(() => {
+    if (!near) return;
     let alive = true;
     void ipc
       .loadBankImage(workspace, deviceKey, image.name)
@@ -106,10 +141,11 @@ function Thumb({
     return () => {
       alive = false;
     };
-  }, [workspace, deviceKey, image.name]);
+  }, [near, workspace, deviceKey, image.name]);
 
   return (
     <div
+      ref={rootRef}
       className="group animate-in fade-in-0 fill-mode-both relative flex flex-col overflow-hidden border-b border-r border-border bg-background transition-colors duration-150 hover:bg-accent"
       style={{ animationDelay: `${Math.min(index, 14) * 35}ms` }}
     >
@@ -401,6 +437,8 @@ export function ImageBankPage() {
       setSelected((prev) =>
         prev && g.some((x) => x.device_key === prev) ? prev : (g[0]?.device_key ?? null),
       );
+    } catch (err) {
+      toast.error("Could not read the image bank", errorText(err));
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -588,7 +626,7 @@ export function ImageBankPage() {
                       if (confirmGroup) {
                         void ipc
                           .deleteBankDevice(folderPath, activeGroup.device_key)
-                          .then(refresh)
+                          .then(refresh, (err) => toast.error("Delete failed", errorText(err)))
                           .finally(() => setConfirmGroup(false));
                       } else {
                         setConfirmGroup(true);
@@ -626,7 +664,7 @@ export function ImageBankPage() {
                         onDelete={() =>
                           void ipc
                             .deleteBankImage(folderPath, activeGroup.device_key, img.name)
-                            .then(refresh)
+                            .then(refresh, (err) => toast.error("Delete failed", errorText(err)))
                         }
                       />
                     ))}

@@ -19,7 +19,7 @@ export function useAutosave(): void {
         // Only flip dirty if the buffer is still on this path — a Save-As
         // racing with an in-flight autosave would otherwise revert filePath.
         if (useFlowStore.getState().filePath === path) {
-          useFlowStore.getState().saved(path);
+          useFlowStore.getState().saved(path, content);
         }
       },
       onError: (message) => toast.error("Auto-save failed", message),

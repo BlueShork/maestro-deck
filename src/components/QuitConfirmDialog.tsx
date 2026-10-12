@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/Dialog";
+import { settleUnsavedFlow } from "@/lib/flow-io";
 import { events, ipc } from "@/lib/ipc";
 import { useSettingsStore } from "@/stores/settingsStore";
 
@@ -27,15 +28,23 @@ export function QuitConfirmDialog() {
   // actually proceeds with the quit.
   const [dontAskAgain, setDontAskAgain] = useState(false);
   const quittingRef = useRef(false);
+  const settlingRef = useRef(false);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
     void events
-      .onQuitRequested(() => {
-        if (quittingRef.current) return;
+      .onQuitRequested(async () => {
+        if (quittingRef.current || settlingRef.current) return;
+        // Unsaved edits come first: autosave writes them, otherwise the user
+        // chooses. Having answered that prompt is already a "yes, quit".
+        settlingRef.current = true;
+        const unsaved = await settleUnsavedFlow().finally(() => {
+          settlingRef.current = false;
+        });
+        if (unsaved === "cancelled") return;
         // Read the live value, not a stale closure.
-        if (!useSettingsStore.getState().confirmBeforeQuit) {
+        if (unsaved === "resolved" || !useSettingsStore.getState().confirmBeforeQuit) {
           quittingRef.current = true;
           void ipc.confirmQuit();
           return;

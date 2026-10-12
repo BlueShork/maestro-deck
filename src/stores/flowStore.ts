@@ -19,7 +19,10 @@ interface FlowState {
   cursorColumn: number;
   setContent: (content: string) => void;
   loaded: (content: string, filePath: string) => void;
-  saved: (filePath: string) => void;
+  /** Records a successful write to `filePath`. Pass the `content` that was
+   *  written: if the buffer moved on while the write was in flight, it stays
+   *  dirty instead of claiming the newer edits are on disk. */
+  saved: (filePath: string, content?: string) => void;
   setActiveLine: (line: number | null) => void;
   setCursor: (line: number, column: number) => void;
   insertAtCursor: (text: string) => void;
@@ -73,7 +76,8 @@ export const useFlowStore = create<FlowState>((set) => ({
       cursorLine: 1,
       cursorColumn: 1,
     }),
-  saved: (filePath) => set({ filePath, dirty: false }),
+  saved: (filePath, content) =>
+    set((s) => ({ filePath, dirty: content !== undefined && content !== s.content })),
   setActiveLine: (line) => set({ activeLine: line }),
   setCursor: (line, column) => set({ cursorLine: line, cursorColumn: column }),
   insertAtCursor: (text) =>

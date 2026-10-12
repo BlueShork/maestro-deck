@@ -61,25 +61,32 @@ export function WorkspaceTree() {
 
   const refresh = useCallback(
     async (path: string) => {
+      // The folder can change while a listing is in flight; only the listing
+      // of the folder still open may land.
+      const stillOpen = () => useWorkspaceStore.getState().folderPath === path;
       setLoading(true);
       setError(null);
       try {
         const t = await ipc.listWorkspace(path);
+        if (!stillOpen()) return;
         setTree(t);
         const sep = path.includes("\\") && !path.includes("/") ? "\\" : "/";
         const configPath = path.endsWith(sep) ? `${path}config.yaml` : `${path}${sep}config.yaml`;
+        let config = false;
         try {
-          setHasConfig(await exists(configPath));
+          config = await exists(configPath);
         } catch {
-          setHasConfig(false);
+          config = false;
         }
+        if (stillOpen()) setHasConfig(config);
       } catch (err) {
+        if (!stillOpen()) return;
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
         setTree(null);
         setHasConfig(false);
       } finally {
-        setLoading(false);
+        if (stillOpen()) setLoading(false);
       }
     },
     [setLoading, setError, setTree, setHasConfig],
@@ -87,8 +94,11 @@ export function WorkspaceTree() {
 
   useEffect(() => {
     if (folderPath) void refresh(folderPath);
-    else setTree(null);
-  }, [folderPath, refresh, setTree]);
+    else {
+      setTree(null);
+      setLoading(false);
+    }
+  }, [folderPath, refresh, setTree, setLoading]);
 
   const onClose = useCallback(() => setFolder(null), [setFolder]);
 

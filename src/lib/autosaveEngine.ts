@@ -25,11 +25,23 @@ export interface AutosaveEngine {
 export function createAutosaveEngine(deps: AutosaveEngineDeps): AutosaveEngine {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = false;
+  // A fire that landed during a write: the edits it was for still need saving
+  // once that write settles, even if no further keystroke comes.
+  let missedFire = false;
+  let disposed = false;
   const disabled = new Set<string>();
+
+  const schedule = (): void => {
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(flush, deps.delayMs);
+  };
 
   const flush = (): void => {
     timer = null;
-    if (inFlight) return;
+    if (inFlight) {
+      missedFire = true;
+      return;
+    }
     if (!deps.getEnabled()) return;
     const { content, filePath, dirty } = deps.getFlow();
     if (!filePath || !dirty) return;
@@ -43,13 +55,16 @@ export function createAutosaveEngine(deps: AutosaveEngineDeps): AutosaveEngine {
       })
       .finally(() => {
         inFlight = false;
+        if (missedFire && !disposed) {
+          missedFire = false;
+          schedule();
+        }
       });
   };
 
   return {
     notifyChange(): void {
-      if (timer !== null) clearTimeout(timer);
-      timer = setTimeout(flush, deps.delayMs);
+      schedule();
     },
     notifyDirtyCleared(path: string | null): void {
       // While inFlight, our own write's saved() call drives dirty→false;
@@ -61,9 +76,11 @@ export function createAutosaveEngine(deps: AutosaveEngineDeps): AutosaveEngine {
         clearTimeout(timer);
         timer = null;
       }
+      missedFire = false;
       if (path) disabled.delete(path);
     },
     dispose(): void {
+      disposed = true;
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;

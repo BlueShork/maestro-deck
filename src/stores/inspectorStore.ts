@@ -40,7 +40,11 @@ const STALE_TREE_MS = 2000;
 
 let autoRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let dumpInFlight = false;
+let enabling = false;
 let treeUpdatedAt: number | null = null;
+// Bumped by disable(): a dump that started before it belongs to a session (and
+// often a device) that is gone, so its result must not land.
+let session = 0;
 
 interface InspectorState {
   enabled: boolean;
@@ -83,13 +87,14 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
     if (runInFlight()) return;
     if (dumpInFlight) return;
     dumpInFlight = true;
+    const started = session;
     set({ loading: true });
     const t0 = performance.now();
     ipc
       .enterInspectMode(fastMode())
       .then((tree) => {
         console.log(`[inspect] background dump: ${(performance.now() - t0).toFixed(0)} ms`);
-        if (!get().enabled) return;
+        if (started !== session || !get().enabled) return;
         treeUpdatedAt = Date.now();
         set({
           tree,
@@ -105,10 +110,10 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
         );
         // Silent (UI-wise): the manual Refresh button surfaces errors
         // explicitly; a toast on every auto-dump flake would be noise.
-        set({ loading: false });
+        if (started === session) set({ loading: false });
       })
       .finally(() => {
-        dumpInFlight = false;
+        if (started === session) dumpInFlight = false;
       });
   };
 
@@ -127,6 +132,9 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       }
     },
     enable: async () => {
+      if (enabling || get().enabled) return;
+      enabling = true;
+      const started = session;
       set({ loading: true });
       // Persistent snackbar while the dump runs — stays visible for the
       // entire duration (dump can take 500–2000 ms depending on the
@@ -144,13 +152,16 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       );
       try {
         const tree = await ipc.enterInspectMode(fastMode());
+        if (started !== session) return;
         treeUpdatedAt = Date.now();
         set({ enabled: true, tree, loading: false });
       } catch (err) {
+        if (started !== session) return;
         const message = err instanceof Error ? err.message : String(err);
         set({ loading: false });
         toast.error("Inspect mode failed", message);
       } finally {
+        if (started === session) enabling = false;
         toast.dismiss(toastId);
       }
     },
@@ -160,6 +171,8 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
         autoRefreshTimer = null;
       }
       treeUpdatedAt = null;
+      session += 1;
+      enabling = false;
       // An in-flight dump's `.then` early-returns once `enabled` is false and
       // never clears `loading`; reset it (and the dump guard) here so disabling
       // — including on a device switch — always lands back in a clean state
@@ -176,9 +189,11 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
     },
     refresh: async () => {
       if (!get().enabled) return;
+      const started = session;
       set({ loading: true });
       try {
         const tree = await ipc.enterInspectMode(fastMode());
+        if (started !== session) return;
         treeUpdatedAt = Date.now();
         set({
           tree,
@@ -188,6 +203,7 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
           selectors: [],
         });
       } catch (err) {
+        if (started !== session) return;
         const message = err instanceof Error ? err.message : String(err);
         set({ loading: false });
         toast.error("Refresh failed", message);
@@ -209,7 +225,10 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       }
       runBackgroundDump();
     },
-    setHovered: (node) => set({ hovered: node }),
+    // Called on every pointer move: skip the notify when the hit is unchanged.
+    setHovered: (node) => {
+      if (get().hovered !== node) set({ hovered: node });
+    },
     select: async (node) => {
       if (!node) {
         set({ selected: null, selectors: [] });
@@ -218,8 +237,10 @@ export const useInspectorStore = create<InspectorState>((set, get) => {
       set({ selected: node, selectors: [] });
       try {
         const selectors = await ipc.suggestSelectors(node);
-        set({ selectors });
+        // A newer selection (or a refresh) replaced this one meanwhile.
+        if (get().selected === node) set({ selectors });
       } catch (err) {
+        if (get().selected !== node) return;
         const message = err instanceof Error ? err.message : String(err);
         toast.error("Selector suggestion failed", message);
       }
