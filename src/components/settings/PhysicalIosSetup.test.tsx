@@ -13,6 +13,7 @@ vi.mock("@/lib/ipc", () => ({
       maestroVersion: "2.6.0",
       maestroIsSupported: false,
       maestroPatched: false,
+      bridgeCurrent: false,
     }),
   },
 }));

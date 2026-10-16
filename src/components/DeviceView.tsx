@@ -1073,6 +1073,16 @@ function IosPhysicalWaiting() {
 
 function iosBridgeCopy(phase: IosBridgeStatus["phase"]): { label: string; hint: string } {
   switch (phase) {
+    case "updating":
+      return {
+        label: "Updating the iPhone bridge",
+        hint: "Maestro Deck was updated: installing the matching iPhone bridge (about a minute, once). Needs network.",
+      };
+    case "locked":
+      return {
+        label: "Unlock your iPhone",
+        hint: "The test driver starts as soon as the iPhone is unlocked. Setting Auto-Lock to Never while testing avoids this.",
+      };
     case "building":
       return {
         label: "Building the test driver for this iPhone",

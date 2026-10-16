@@ -276,7 +276,7 @@ export const ipc = {
 
 /** Bring-up of the physical-iPhone bridge (`ios_bridge_status`). */
 export interface IosBridgeStatus {
-  phase: "connecting" | "building" | "starting" | "ready" | "failed";
+  phase: "connecting" | "updating" | "building" | "starting" | "locked" | "ready" | "failed";
   /** The bridge's own failure message, e.g. the iPhone dropped off USB. */
   error: string | null;
 }
@@ -287,6 +287,8 @@ export interface IosPhysicalSetupStatus {
   /** The installed maestro is the version the bridge patches (2.10.0). */
   maestroIsSupported: boolean;
   maestroPatched: boolean;
+  /** The installed bridge supports this maestro version (false if missing). */
+  bridgeCurrent: boolean;
 }
 
 /** Absolute paths to the tools the app installed for itself; null when a tool

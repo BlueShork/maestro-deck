@@ -17,6 +17,7 @@ pub mod error;
 pub mod farm;
 pub mod hierarchy;
 pub mod input;
+pub mod ios_bridge;
 #[cfg(target_os = "macos")]
 pub mod ios_capture;
 pub mod ios_session;

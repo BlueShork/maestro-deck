@@ -86,6 +86,7 @@ beforeEach(() => {
     maestroVersion: "2.10.0",
     maestroIsSupported: false,
     maestroPatched: false,
+    bridgeCurrent: false,
   });
   ipcMock.environmentStatus.mockResolvedValue({
     minimalOk: false,
