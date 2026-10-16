@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, beforeEach, vi } from "vitest";
 import { useRunStore } from "./runStore";
 import type { Step } from "@/lib/flowAst";
 
@@ -384,5 +384,117 @@ describe("settleSteps", () => {
     useRunStore.getState().settleSteps();
 
     expect(useRunStore.getState().steps[0].status).toBe("done");
+  });
+});
+
+describe("queued runner output", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useRunStore.getState().setStarting();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const texts = () => useRunStore.getState().logs.map((l) => `${l.stream}:${l.text}`);
+
+  it("delivers a burst of lines in one store update on the next flush", () => {
+    const listener = vi.fn();
+    const unsub = useRunStore.subscribe(listener);
+    const { queueLog } = useRunStore.getState();
+    for (let i = 0; i < 50; i++) queueLog("stdout", `l${i}`);
+    expect(useRunStore.getState().logs).toHaveLength(0);
+    vi.advanceTimersByTime(16);
+    unsub();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(useRunStore.getState().logs).toHaveLength(50);
+    expect(texts()[49]).toBe("stdout:l49");
+  });
+
+  it("keeps stdout/stderr interleaving and unique increasing ids", () => {
+    const { queueLog, flushLogs } = useRunStore.getState();
+    queueLog("stdout", "a");
+    queueLog("stderr", "b");
+    queueLog("stdout", "c");
+    flushLogs();
+    expect(texts()).toEqual(["stdout:a", "stderr:b", "stdout:c"]);
+    const ids = useRunStore.getState().logs.map((l) => l.id);
+    expect(new Set(ids).size).toBe(3);
+    expect([...ids].sort((x, y) => x - y)).toEqual(ids);
+  });
+
+  it("a directly appended line lands after the output queued before it", () => {
+    useRunStore.getState().queueLog("stdout", "last output line");
+    useRunStore.getState().appendLog("system", "[runner exited with code 0]");
+    expect(texts()).toEqual(["stdout:last output line", "system:[runner exited with code 0]"]);
+  });
+
+  it("a new run drops output still queued from the previous one", () => {
+    useRunStore.getState().queueLog("stdout", "stale");
+    useRunStore.getState().setStarting();
+    vi.advanceTimersByTime(100);
+    expect(useRunStore.getState().logs).toHaveLength(0);
+  });
+
+  it("clearing the console drops queued output too", () => {
+    useRunStore.getState().queueLog("stdout", "stale");
+    useRunStore.getState().clearConsole();
+    vi.advanceTimersByTime(100);
+    expect(useRunStore.getState().logs).toHaveLength(0);
+  });
+
+  it("flushing with nothing queued does not notify", () => {
+    const listener = vi.fn();
+    const unsub = useRunStore.subscribe(listener);
+    useRunStore.getState().flushLogs();
+    unsub();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("applies the 2000-line cap across a batch", () => {
+    const { queueLog, flushLogs } = useRunStore.getState();
+    for (let i = 0; i < 1990; i++) useRunStore.getState().appendLog("stdout", `old ${i}`);
+    for (let i = 0; i < 30; i++) queueLog("stdout", `new ${i}`);
+    flushLogs();
+    const { logs, truncatedCount } = useRunStore.getState();
+    expect(logs).toHaveLength(2000);
+    expect(truncatedCount).toBe(20);
+    expect(logs[0].text).toBe("old 20");
+    expect(logs[1999].text).toBe("new 29");
+  });
+});
+
+describe("ingestLine no-ops", () => {
+  beforeEach(() => {
+    useRunStore.getState().resetSteps();
+    useRunStore.setState({ expectedFlow: null, flowGateOpen: true, pendingErrorIdx: null });
+    useRunStore.getState().initSteps(mkSteps());
+  });
+
+  it("free-text lines that change nothing do not notify subscribers", () => {
+    const listener = vi.fn();
+    const unsub = useRunStore.subscribe(listener);
+    ingest("Running on emulator-5554", "   ", 'Assertion is false: "X" is visible');
+    unsub();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("step lines while another flow runs (gate closed) do not notify", () => {
+    useRunStore.setState({ flowGateOpen: false });
+    const listener = vi.fn();
+    const unsub = useRunStore.subscribe(listener);
+    ingest('Launch app "com.example"... COMPLETED');
+    unsub();
+    expect(listener).not.toHaveBeenCalled();
+    expect(statuses()).toEqual(["pending", "pending", "pending"]);
+  });
+
+  it("step lines after every step settled do not notify", () => {
+    useRunStore.setState({
+      steps: useRunStore.getState().steps.map((s) => ({ ...s, status: "done" as const })),
+    });
+    const listener = vi.fn();
+    const unsub = useRunStore.subscribe(listener);
+    ingest('Tap on "Login"... COMPLETED');
+    unsub();
+    expect(listener).not.toHaveBeenCalled();
   });
 });

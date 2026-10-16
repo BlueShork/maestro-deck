@@ -2,25 +2,40 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { normalizeFolderName, createFolderInDir, renameEntry, deleteEntry } from "./workspace-ops";
+import {
+  normalizeFolderName,
+  createFlowInDir,
+  createFolderInDir,
+  renameEntry,
+  deleteEntry,
+} from "./workspace-ops";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useFlowStore } from "@/stores/flowStore";
 
-const { mkdir, existsFn, listWorkspace, renameFn, removeFn } = vi.hoisted(() => ({
-  mkdir: vi.fn(async (_p: string) => {}),
-  existsFn: vi.fn(async (_p: string) => false),
-  listWorkspace: vi.fn(async () => ({ kind: "dir", name: "ws", path: "/ws", children: [] })),
-  renameFn: vi.fn(async (_from: string, _to: string) => {}),
-  removeFn: vi.fn(async (_p: string, _opts?: unknown) => {}),
-}));
+const { mkdir, existsFn, listWorkspace, renameFn, removeFn, writeFn, messageFn } = vi.hoisted(
+  () => ({
+    writeFn: vi.fn(async (_p: string, _c: string) => {}),
+    messageFn: vi.fn(async (_m: string, _o?: unknown) => "Cancel"),
+    mkdir: vi.fn(async (_p: string) => {}),
+    existsFn: vi.fn(async (_p: string) => false),
+    listWorkspace: vi.fn(async () => ({ kind: "dir", name: "ws", path: "/ws", children: [] })),
+    renameFn: vi.fn(async (_from: string, _to: string) => {}),
+    removeFn: vi.fn(async (_p: string, _opts?: unknown) => {}),
+  }),
+);
 vi.mock("@tauri-apps/plugin-fs", () => ({
   mkdir,
   exists: existsFn,
-  writeTextFile: vi.fn(async () => {}),
+  writeTextFile: writeFn,
   remove: removeFn,
   rename: renameFn,
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(async () => true) }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  ask: vi.fn(async () => true),
+  message: messageFn,
+  save: vi.fn(async () => null),
+}));
 vi.mock("@/lib/ipc", () => ({ ipc: { listWorkspace } }));
 
 describe("normalizeFolderName", () => {
@@ -153,5 +168,64 @@ describe("deleteEntry", () => {
     useFlowStore.setState({ filePath: "/ws/flows/login.yaml" });
     await deleteEntry("/ws/flows", "dir");
     expect(useFlowStore.getState().filePath).toBeNull();
+  });
+});
+
+describe("createFlowInDir", () => {
+  beforeEach(() => {
+    writeFn.mockClear();
+    messageFn.mockClear();
+    existsFn.mockResolvedValue(false);
+    useSettingsStore.setState({ autoSaveEnabled: false });
+    useWorkspaceStore.setState({ folderPath: "/ws", expanded: {}, lastOpenFile: null });
+    useFlowStore.setState({ content: "- back\n", filePath: "/ws/old.yaml", dirty: false });
+  });
+
+  it("creates a starter flow, appending .yaml, and opens it", async () => {
+    await createFlowInDir("/ws/flows", "login");
+    expect(writeFn).toHaveBeenCalledWith(
+      "/ws/flows/login.yaml",
+      expect.stringContaining("launchApp"),
+    );
+    expect(useFlowStore.getState()).toMatchObject({
+      filePath: "/ws/flows/login.yaml",
+      dirty: false,
+    });
+    expect(useWorkspaceStore.getState()).toMatchObject({
+      lastOpenFile: "/ws/flows/login.yaml",
+      expanded: { "/ws/flows": true },
+    });
+  });
+
+  it("keeps an existing .yml extension", async () => {
+    await createFlowInDir("/ws", "smoke.yml");
+    expect(writeFn).toHaveBeenCalledWith("/ws/smoke.yml", expect.any(String));
+  });
+
+  it("refuses names with separators and never overwrites a file", async () => {
+    await createFlowInDir("/ws", "../evil");
+    existsFn.mockResolvedValueOnce(true);
+    await createFlowInDir("/ws", "taken");
+    expect(writeFn).not.toHaveBeenCalled();
+  });
+
+  it("does not throw away unsaved edits: cancelling leaves the new file unopened", async () => {
+    useFlowStore.setState({ content: "my edits\n", filePath: "/ws/old.yaml", dirty: true });
+    messageFn.mockResolvedValueOnce("Cancel");
+    await createFlowInDir("/ws", "new");
+    expect(writeFn).toHaveBeenCalledWith("/ws/new.yaml", expect.any(String));
+    expect(useFlowStore.getState()).toMatchObject({
+      content: "my edits\n",
+      filePath: "/ws/old.yaml",
+      dirty: true,
+    });
+  });
+
+  it("saves the unsaved edits first when the user picks Save", async () => {
+    useFlowStore.setState({ content: "my edits\n", filePath: "/ws/old.yaml", dirty: true });
+    messageFn.mockResolvedValueOnce("Save");
+    await createFlowInDir("/ws", "new");
+    expect(writeFn).toHaveBeenCalledWith("/ws/old.yaml", "my edits\n");
+    expect(useFlowStore.getState().filePath).toBe("/ws/new.yaml");
   });
 });

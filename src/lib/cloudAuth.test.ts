@@ -8,17 +8,45 @@ const fakeAuth = vi.hoisted(() => ({
   currentUser: null as { getIdToken: () => Promise<string> } | null,
 }));
 
-vi.mock("firebase/app", () => ({ initializeApp: vi.fn(), getApps: () => [] }));
+const fb = vi.hoisted(() => ({
+  initializeApp: vi.fn(),
+  listeners: [] as Array<(u: unknown) => void>,
+  onAuthStateChanged: vi.fn(),
+  signInWithEmailAndPassword: vi.fn(async () => ({})),
+  createUserWithEmailAndPassword: vi.fn(async () => ({})),
+  signOut: vi.fn(async () => {}),
+}));
+fb.onAuthStateChanged.mockImplementation((_auth: unknown, cb: (u: unknown) => void) => {
+  fb.listeners.push(cb);
+  return () => {
+    fb.listeners = fb.listeners.filter((l) => l !== cb);
+  };
+});
+
+vi.mock("firebase/app", () => ({ initializeApp: fb.initializeApp, getApps: () => [] }));
 vi.mock("firebase/auth", () => ({
   getAuth: () => fakeAuth,
-  onAuthStateChanged: vi.fn(),
-  signInWithEmailAndPassword: vi.fn(),
-  createUserWithEmailAndPassword: vi.fn(),
-  signOut: vi.fn(),
+  onAuthStateChanged: fb.onAuthStateChanged,
+  signInWithEmailAndPassword: fb.signInWithEmailAndPassword,
+  createUserWithEmailAndPassword: fb.createUserWithEmailAndPassword,
+  signOut: fb.signOut,
 }));
 
-const { fetchCloudBilling, getCloudAuthErrorMessage, getCloudIdToken, liveMinutes, tierLabel } =
-  await import("./cloudAuth");
+const {
+  createAccountWithEmail,
+  fetchCloudBilling,
+  getCloudAuthErrorMessage,
+  getCloudIdToken,
+  isCloudSignedIn,
+  liveMinutes,
+  loginWithEmail,
+  logout,
+  onCloudAuthStateChanged,
+  tierLabel,
+} = await import("./cloudAuth");
+
+const initCallsAtImport = fb.initializeApp.mock.calls.length;
+const emitAuth = (user: unknown) => fb.listeners.forEach((l) => l(user));
 
 const fetchMock = vi.fn();
 
@@ -163,5 +191,53 @@ describe("liveMinutes", () => {
       remaining: 300,
       included: 300,
     });
+  });
+});
+
+describe("lazy Firebase", () => {
+  it("is not loaded by importing the module, and is initialised once", async () => {
+    expect(initCallsAtImport).toBe(0);
+    await getCloudIdToken().catch(() => {});
+    await loginWithEmail("a@b.c", "pw");
+    expect(fb.initializeApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("delegates sign-in, sign-up and sign-out to Firebase", async () => {
+    await loginWithEmail("a@b.c", "pw");
+    await createAccountWithEmail("new@b.c", "secret");
+    await logout();
+    expect(fb.signInWithEmailAndPassword).toHaveBeenCalledWith(fakeAuth, "a@b.c", "pw");
+    expect(fb.createUserWithEmailAndPassword).toHaveBeenCalledWith(fakeAuth, "new@b.c", "secret");
+    expect(fb.signOut).toHaveBeenCalledWith(fakeAuth);
+  });
+
+  it("isCloudSignedIn follows the auth state", async () => {
+    await getCloudIdToken().catch(() => {});
+    emitAuth({ uid: "u", email: "a@b.c" });
+    expect(isCloudSignedIn()).toBe(true);
+    emitAuth(null);
+    expect(isCloudSignedIn()).toBe(false);
+  });
+
+  it("onCloudAuthStateChanged reports changes once loaded, until unsubscribed", async () => {
+    const cb = vi.fn();
+    const unsubscribe = onCloudAuthStateChanged(cb);
+    await vi.waitFor(() => expect(fb.listeners.length).toBeGreaterThan(1));
+    emitAuth({ uid: "u", email: "a@b.c" });
+    expect(cb).toHaveBeenCalledWith({ uid: "u", email: "a@b.c" });
+    unsubscribe();
+    emitAuth(null);
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it("unsubscribing before Firebase finished loading never subscribes", async () => {
+    const before = fb.onAuthStateChanged.mock.calls.length;
+    const cb = vi.fn();
+    onCloudAuthStateChanged(cb)();
+    await Promise.resolve();
+    await Promise.resolve();
+    emitAuth({ uid: "u", email: null });
+    expect(cb).not.toHaveBeenCalled();
+    expect(fb.onAuthStateChanged.mock.calls.length).toBe(before);
   });
 });

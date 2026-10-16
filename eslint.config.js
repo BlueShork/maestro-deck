@@ -16,6 +16,8 @@ export default [
       "vite.config.ts",
       "postcss.config.js",
       "eslint.config.js",
+      "playwright-report",
+      "test-results",
     ],
   },
   js.configs.recommended,
@@ -67,5 +69,14 @@ export default [
     rules: {
       "react-refresh/only-export-components": "off",
     },
+  },
+  {
+    // Playwright specs and config run in Node (the mock part runs in the page).
+    files: ["e2e/**/*.ts", "playwright.config.ts"],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+    // Playwright fixtures call `use(...)`, which is not a React hook.
+    rules: { "react-hooks/rules-of-hooks": "off" },
   },
 ];

@@ -54,7 +54,7 @@ export function PhysicalIphoneSettings() {
   return (
     <SettingsSection
       title="Physical iPhone"
-      description="Running flows on a real iPhone over USB needs a few extra pieces that simulators, Android and the web don't: Xcode, a patched Maestro 2.5.1, a driver bridge, and your Apple Team ID to sign the test driver. Skip this page if you only use simulators."
+      description="Running flows on a real iPhone over USB needs a few extra pieces that simulators, Android and the web don't: Xcode, a patched Maestro 2.10.0, a driver bridge, and your Apple Team ID to sign the test driver. Skip this page if you only use simulators."
     >
       <PhysicalIosSetup
         bridgeInstalled={bridgeInstalled}

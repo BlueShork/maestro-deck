@@ -32,6 +32,10 @@ interface UpdateState {
 
 let pendingUpdate: Update | null = null;
 
+// Phases during which a new check or download would pull the update out from
+// under the one in progress.
+const BUSY: ReadonlySet<UpdatePhase> = new Set(["checking", "downloading", "installing", "ready"]);
+
 export const useUpdateStore = create<UpdateState>((set, get) => ({
   phase: "idle",
   available: null,
@@ -39,7 +43,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   error: null,
 
   check: async ({ silent = false } = {}) => {
-    if (get().phase === "checking" || get().phase === "downloading") return;
+    if (BUSY.has(get().phase)) return;
     set({ phase: "checking", error: null });
     try {
       const update = await check();
@@ -72,7 +76,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
   downloadAndInstall: async () => {
     const update = pendingUpdate;
-    if (!update) return;
+    if (!update || BUSY.has(get().phase)) return;
     set({ phase: "downloading", downloadPercent: 0, error: null });
     try {
       let total = 0;
@@ -84,8 +88,9 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
           set({ downloadPercent: 0 });
         } else if (progress.event === "Progress") {
           received += progress.data.chunkLength;
-          const pct = total > 0 ? Math.min(100, (received / total) * 100) : 0;
-          set({ downloadPercent: pct });
+          // Chunks arrive by the thousand; the bar only moves per whole percent.
+          const pct = total > 0 ? Math.min(100, Math.floor((received / total) * 100)) : 0;
+          if (pct !== get().downloadPercent) set({ downloadPercent: pct });
         } else if (progress.event === "Finished") {
           set({ downloadPercent: 100, phase: "installing" });
         }

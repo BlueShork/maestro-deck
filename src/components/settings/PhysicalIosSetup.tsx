@@ -75,10 +75,13 @@ export function PhysicalIosSetup({
   const loading = status === null || bridgeInstalled === null;
 
   const xcode = status?.xcodeInstalled ?? false;
-  const is251 = status?.maestroIs251 ?? false;
+  const supported = status?.maestroIsSupported ?? false;
   const patched = status?.maestroPatched ?? false;
   const bridge = bridgeInstalled === true;
-  const allReady = xcode && is251 && patched && bridge && teamIdSet;
+  // An installed bridge that is too old for this maestro, or a maestro whose
+  // patch an update wiped, needs the same fix: reinstall the bridge.
+  const bridgeReady = bridge && (status?.bridgeCurrent ?? false) && patched;
+  const allReady = xcode && supported && bridgeReady && teamIdSet;
 
   return (
     <SettingsSubgroup
@@ -98,9 +101,9 @@ export function PhysicalIosSetup({
             hint="Install the full Xcode from the App Store."
           />
           <Row
-            ok={is251}
-            label="Maestro 2.5.1"
-            hint={`${status?.maestroVersion ? `Found ${status.maestroVersion}; ` : ""}physical iPhones still need 2.5.1.`}
+            ok={supported}
+            label="Maestro 2.10.0"
+            hint={`${status?.maestroVersion ? `Found ${status.maestroVersion}; ` : ""}the iPhone bridge patches 2.10.0.`}
           />
           <Row
             ok={patched}
@@ -108,12 +111,16 @@ export function PhysicalIosSetup({
             hint="Installed together with the driver bridge below."
           />
           <Row
-            ok={bridge}
-            label="Driver bridge installed"
-            hint="Downloads the bridge, the patched Maestro 2.5.1 jars and the XCTest runner (once, needs network)."
+            ok={bridgeReady}
+            label={bridge ? "Driver bridge up to date" : "Driver bridge installed"}
+            hint={
+              bridge
+                ? "This bridge doesn't match Maestro 2.10.0. Connecting the iPhone updates it on its own, or update it now (needs network)."
+                : "Downloads the bridge, the patched Maestro 2.10.0 jars and the XCTest runner (once, needs network)."
+            }
             action={
               <Button size="sm" disabled={installing} onClick={onInstall}>
-                {installing ? "Installing…" : "Install"}
+                {installing ? "Installing…" : bridge ? "Update" : "Install"}
               </Button>
             }
           />
@@ -124,7 +131,8 @@ export function PhysicalIosSetup({
               Mode), then tap Trust when you plug it in.
             </span>
             <span>
-              The first connection builds the driver on the phone (~10 min); later ones are fast.
+              The first connection of each iPhone builds the driver (~30 s); later ones take a few
+              seconds.
             </span>
           </div>
           {allReady && (

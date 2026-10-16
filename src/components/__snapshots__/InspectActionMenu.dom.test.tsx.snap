@@ -1,0 +1,251 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`InspectActionMenu > snapshot 1`] = `
+<div
+  class="menu-surface fixed z-50"
+  role="menu"
+  style="left: 20px; top: 30px; width: 232px;"
+>
+  <div
+    class="border-b border-border px-3 py-2"
+  >
+    <div
+      class="mono-label truncate text-foreground"
+    >
+      "Log in"
+    </div>
+    <div
+      class="truncate font-mono text-[10px] text-muted-foreground"
+    >
+      id login_button
+    </div>
+  </div>
+  <ul
+    class="py-1"
+  >
+    <li
+      class="relative"
+    >
+      <button
+        aria-expanded="false"
+        aria-haspopup="menu"
+        class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:shadow-[inset_2px_0_0_hsl(var(--brand))] focus-visible:outline-none focus-visible:bg-accent"
+        role="menuitem"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-mouse-pointer-click h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M14 4.1 12 6"
+          />
+          <path
+            d="m5.1 8-2.9-.8"
+          />
+          <path
+            d="m6 12-1.9 2"
+          />
+          <path
+            d="M7.2 2.2 8 5.1"
+          />
+          <path
+            d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"
+          />
+        </svg>
+        <span
+          class="flex-1"
+        >
+          Tap
+        </span>
+        <svg
+          aria-hidden="true"
+          class="shrink-0 text-muted-foreground"
+          height="10"
+          shape-rendering="crispEdges"
+          viewBox="0 0 6 6"
+          width="10"
+        >
+          <path
+            d="M1 0h1v1H1zM2 1h1v1H2zM3 2h1v2H3zM2 4h1v1H2zM1 5h1v1H1z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+    </li>
+    <li
+      class="relative"
+    >
+      <button
+        aria-expanded="false"
+        aria-haspopup="menu"
+        class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:shadow-[inset_2px_0_0_hsl(var(--brand))] focus-visible:outline-none focus-visible:bg-accent"
+        role="menuitem"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-eye h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+          />
+          <circle
+            cx="12"
+            cy="12"
+            r="3"
+          />
+        </svg>
+        <span
+          class="flex-1"
+        >
+          Assert visible
+        </span>
+        <svg
+          aria-hidden="true"
+          class="shrink-0 text-muted-foreground"
+          height="10"
+          shape-rendering="crispEdges"
+          viewBox="0 0 6 6"
+          width="10"
+        >
+          <path
+            d="M1 0h1v1H1zM2 1h1v1H2zM3 2h1v2H3zM2 4h1v1H2zM1 5h1v1H1z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+    </li>
+    <li
+      class="relative"
+    >
+      <button
+        aria-expanded="false"
+        aria-haspopup="menu"
+        class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:shadow-[inset_2px_0_0_hsl(var(--brand))] focus-visible:outline-none focus-visible:bg-accent"
+        role="menuitem"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-eye-off h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
+          />
+          <path
+            d="M14.084 14.158a3 3 0 0 1-4.242-4.242"
+          />
+          <path
+            d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
+          />
+          <path
+            d="m2 2 20 20"
+          />
+        </svg>
+        <span
+          class="flex-1"
+        >
+          Assert not visible
+        </span>
+        <svg
+          aria-hidden="true"
+          class="shrink-0 text-muted-foreground"
+          height="10"
+          shape-rendering="crispEdges"
+          viewBox="0 0 6 6"
+          width="10"
+        >
+          <path
+            d="M1 0h1v1H1zM2 1h1v1H2zM3 2h1v2H3zM2 4h1v1H2zM1 5h1v1H1z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+    </li>
+    <li
+      class="relative"
+    >
+      <button
+        aria-expanded="false"
+        aria-haspopup="menu"
+        class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:shadow-[inset_2px_0_0_hsl(var(--brand))] focus-visible:outline-none focus-visible:bg-accent"
+        role="menuitem"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-scroll-text h-3.5 w-3.5 shrink-0 text-muted-foreground"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M15 12h-5"
+          />
+          <path
+            d="M15 8h-5"
+          />
+          <path
+            d="M19 17V5a2 2 0 0 0-2-2H4"
+          />
+          <path
+            d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"
+          />
+        </svg>
+        <span
+          class="flex-1"
+        >
+          Scroll until visible
+        </span>
+        <svg
+          aria-hidden="true"
+          class="shrink-0 text-muted-foreground"
+          height="10"
+          shape-rendering="crispEdges"
+          viewBox="0 0 6 6"
+          width="10"
+        >
+          <path
+            d="M1 0h1v1H1zM2 1h1v1H2zM3 2h1v2H3zM2 4h1v1H2zM1 5h1v1H1z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+    </li>
+  </ul>
+</div>
+`;

@@ -17,6 +17,7 @@ use crate::hierarchy::{self, HierarchyTree, UINode};
 use crate::input::{self, InputEvent};
 use crate::maestro_health::{self, HealthReport, KillReport};
 use crate::metrics;
+use crate::process_ext::blocking;
 use crate::runner;
 use crate::scrcpy;
 use crate::selector::{self, Selector, SpatialIndex};
@@ -38,7 +39,11 @@ pub fn app_version() -> &'static str {
 }
 
 #[tauri::command]
-pub fn list_devices() -> AppResult<Vec<Device>> {
+pub async fn list_devices() -> AppResult<Vec<Device>> {
+    blocking(discover_devices).await?
+}
+
+fn discover_devices() -> AppResult<Vec<Device>> {
     // Each platform's discovery degrades independently — a failure in one
     // must not blank out the other's devices.
     let mut devices = match adb::list_devices() {
@@ -80,12 +85,13 @@ pub async fn connect_device(
     state: State<'_, AppState>,
 ) -> AppResult<Device> {
     use crate::device::Platform;
-    // Picking a local device ends any farm session first (it bills, and its
-    // branches would otherwise take over the local device's commands).
-    if let Some(session) = state.farm_session.lock().await.take() {
-        session.release().await;
-        *state.control_tx.lock().await = None;
-    }
+    // Retire the device being replaced exactly as a disconnect would: its
+    // stream must stop before the new one starts, or both emit frames and
+    // fight over the canvas (an Android scrcpy feed kept painting under a
+    // freshly connected iOS simulator). A farm session is released here too
+    // (it bills, and its branches would take over the local device's
+    // commands); a simulator keeper stays warm for a quick reconnect.
+    teardown_all_sessions(state.inner(), true).await;
     // A previous disconnect may have left a simulator keeper warm for fast
     // reconnect. If we're now connecting something that isn't an iOS device,
     // retire it — it still holds :22087 and a JVM. (iOS→iOS reuse or
@@ -946,109 +952,19 @@ pub async fn get_dark_mode(state: State<'_, AppState>) -> AppResult<bool> {
 /// frontend uses this to decide whether to offer the one-click auto-install for
 /// physical iOS support.
 #[tauri::command]
-pub fn ios_device_bridge_installed() -> bool {
-    crate::tool_paths::maestro_ios_device_installed()
+pub async fn ios_device_bridge_installed() -> AppResult<bool> {
+    blocking(crate::tool_paths::maestro_ios_device_installed).await
 }
 
-/// Auto-install the `maestro-ios-device` bridge (Option A): download the release
-/// binary for this Mac's arch, mark it executable, run its `setup` (which fetches
-/// the XCTest runner + patched maestro **2.5.1** jars into `~/.maestro`), and
-/// persist its path. We ship our own fork (BlueShork/maestro-ios-device) because
-/// upstream devicelab only patches maestro 2.0.9–2.1.0; ours adds 2.5.1. Apache-2.0,
-/// so redistribution-by-fetch is fine. Only users who actually connect a physical
-/// iPhone ever trigger this.
+/// Install (or update) the `maestro-ios-device` bridge: download the release
+/// binary for this Mac's arch and run its `setup`, which fetches the XCTest
+/// runner + patched maestro **2.10.0** jars into `~/.maestro`. We ship our own
+/// fork (BlueShork/maestro-ios-device, Apache-2.0) because upstream devicelab
+/// only patches maestro 2.0.9–2.1.0. Physical-device sessions also call this on
+/// their own when the bridge is outdated (see `crate::ios_bridge`).
 #[tauri::command]
 pub async fn install_ios_device_bridge() -> AppResult<String> {
-    if !cfg!(target_os = "macos") {
-        return Err(AppError::Other("physical iOS support is macOS-only".into()));
-    }
-    let arch = match std::env::consts::ARCH {
-        "aarch64" => "arm64",
-        "x86_64" => "amd64",
-        other => {
-            return Err(AppError::Other(format!(
-                "no maestro-ios-device build for this architecture ({other})"
-            )))
-        }
-    };
-    let url = format!(
-        "https://github.com/BlueShork/maestro-ios-device/releases/latest/download/maestro-ios-device-darwin-{arch}"
-    );
-    info!(%url, "downloading maestro-ios-device bridge");
-
-    let bytes = reqwest::Client::builder()
-        .build()
-        .map_err(|e| AppError::Other(format!("http client: {e}")))?
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| AppError::Other(format!("download maestro-ios-device: {e}")))?
-        .error_for_status()
-        .map_err(|e| AppError::Other(format!("download maestro-ios-device: {e}")))?
-        .bytes()
-        .await
-        .map_err(|e| AppError::Other(format!("read maestro-ios-device: {e}")))?;
-
-    let home =
-        std::env::var_os("HOME").ok_or_else(|| AppError::Other("no HOME directory".into()))?;
-    let dir = std::path::PathBuf::from(home).join(".maestro/bin");
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(AppError::Io)?;
-    let dest = dir.join("maestro-ios-device");
-    tokio::fs::write(&dest, &bytes)
-        .await
-        .map_err(AppError::Io)?;
-    // chmod +x — Unix-only. This whole command returns early on non-macOS above,
-    // so the bridge is never installed off-Unix; the `cfg` just keeps the binary
-    // compiling on Windows (where `PermissionsExt`/`set_mode` don't exist).
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perm = tokio::fs::metadata(&dest)
-            .await
-            .map_err(AppError::Io)?
-            .permissions();
-        perm.set_mode(0o755);
-        tokio::fs::set_permissions(&dest, perm)
-            .await
-            .map_err(AppError::Io)?;
-    }
-
-    // `setup` fetches the prebuilt XCTest runner + patched maestro jars into
-    // ~/.maestro. No device required for this step.
-    info!("running maestro-ios-device setup");
-    let out = tokio::process::Command::new(&dest)
-        .arg("setup")
-        .output()
-        .await
-        .map_err(|e| AppError::Other(format!("maestro-ios-device setup: {e}")))?;
-    if !out.status.success() {
-        // The Go bridge prints its failure reason to STDOUT (its `fatal` uses
-        // fmt.Printf), so stderr alone is usually empty — surface both, keeping
-        // the tail where the actual "❌ Setup failed: …" line lands.
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        let detail: String = stdout
-            .lines()
-            .chain(stderr.lines())
-            .filter(|l| !l.trim().is_empty())
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .take(4)
-            .rev()
-            .collect::<Vec<_>>()
-            .join(" | ");
-        return Err(AppError::Other(format!(
-            "maestro-ios-device setup failed: {detail}"
-        )));
-    }
-
-    let dest_str = dest.to_string_lossy().to_string();
-    crate::tool_paths::set_maestro_ios_device_path(&dest_str)?;
-    info!(path = %dest_str, "maestro-ios-device installed");
-    Ok(dest_str)
+    crate::ios_bridge::install().await
 }
 
 #[tauri::command]
@@ -1149,6 +1065,18 @@ pub async fn run_flow(
             // `maestro-ios-device` bridge driver via `--driver-host-port`, so we
             // must NOT tear the keeper down (unlike the simulator path). The
             // HTTP `/screenshot` poller keeps the device mirrored throughout.
+            // The bridge may be gone (app restarted, phone replugged): with
+            // nothing on the port, maestro tries to build its own driver and
+            // dies on a missing build directory. Bring it back first.
+            let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+            if !keeper.wait_until_ready().await {
+                let (_, error) = keeper.bridge_status();
+                return Err(AppError::IosDriverUnreachable(error.unwrap_or_else(|| {
+                    "the iPhone's test driver didn't start — keep the iPhone unlocked and \
+                     plugged in, then run again"
+                        .into()
+                })));
+            }
             return runner::spawn_ios_device_runner(
                 app,
                 &device.serial,
@@ -1210,8 +1138,8 @@ pub async fn stop_flow(pid: u32) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
-    workspace::list_workspace(std::path::Path::new(&path))
+pub async fn list_workspace(path: String) -> AppResult<WorkspaceNode> {
+    blocking(move || workspace::list_workspace(std::path::Path::new(&path))).await?
 }
 
 #[tauri::command]
@@ -1233,13 +1161,13 @@ pub async fn stop_metrics() -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn check_device_health(serial: String) -> AppResult<HealthReport> {
-    maestro_health::detect::check_device_health(&serial)
+pub async fn check_device_health(serial: String) -> AppResult<HealthReport> {
+    blocking(move || maestro_health::detect::check_device_health(&serial)).await?
 }
 
 #[tauri::command]
-pub fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult<KillReport> {
-    maestro_health::kill::kill_maestro_processes(&serial, report)
+pub async fn kill_maestro_processes(serial: String, report: HealthReport) -> AppResult<KillReport> {
+    blocking(move || maestro_health::kill::kill_maestro_processes(&serial, report)).await?
 }
 
 /// Extract the first `x.y.z` semver from arbitrary `maestro --version` output.
@@ -1271,6 +1199,26 @@ pub(crate) fn parse_maestro_version(out: &str) -> Option<String> {
     None
 }
 
+/// Bring-up of the physical-iPhone bridge, for the preview placeholder.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IosBridgeStatus {
+    pub phase: crate::ios_session::BridgePhase,
+    /// The bridge's own failure message (e.g. the iPhone dropped off USB).
+    pub error: Option<String>,
+}
+
+/// What the physical-iPhone bridge is doing right now, or None when no
+/// physical keeper is running.
+#[tauri::command]
+pub async fn ios_bridge_status(state: State<'_, AppState>) -> AppResult<Option<IosBridgeStatus>> {
+    let slot = state.ios_driver.lock().await;
+    Ok(slot.as_ref().filter(|k| k.is_physical()).map(|k| {
+        let (phase, error) = k.bridge_status();
+        IosBridgeStatus { phase, error }
+    }))
+}
+
 /// Status of the physical-iOS prerequisites that can be auto-detected on this Mac.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1279,10 +1227,12 @@ pub struct IosPhysicalSetupStatus {
     pub xcode_installed: bool,
     /// Parsed `maestro --version`, or None if maestro isn't resolvable.
     pub maestro_version: Option<String>,
-    /// True iff `maestro_version == "2.5.1"`.
-    pub maestro_is_2_5_1: bool,
-    /// True iff the resolved maestro accepts `--driver-host-port` (patched).
+    /// True iff `maestro_version` is the one the bridge patches (`REQUIRED_MAESTRO`).
+    pub maestro_is_supported: bool,
+    /// True iff the resolved maestro carries the physical-device patch.
     pub maestro_patched: bool,
+    /// True iff the installed bridge supports the maestro version the app ships.
+    pub bridge_current: bool,
 }
 
 /// Report the auto-detectable physical-iOS prerequisites for the in-app checklist.
@@ -1316,14 +1266,17 @@ pub async fn ios_physical_setup_status() -> AppResult<IosPhysicalSetupStatus> {
             parse_maestro_version(&text)
         });
 
-    let maestro_is_2_5_1 = maestro_version.as_deref() == Some("2.5.1");
-    let maestro_patched = crate::runner::maestro_supports_driver_host_port(&bin).await;
+    let maestro_is_supported =
+        maestro_version.as_deref() == Some(crate::env_check::REQUIRED_MAESTRO);
+    let maestro_patched = crate::runner::maestro_has_ios_device_patch(&bin).await;
+    let bridge_current = crate::ios_bridge::is_current().await;
 
     Ok(IosPhysicalSetupStatus {
         xcode_installed,
         maestro_version,
-        maestro_is_2_5_1,
+        maestro_is_supported,
         maestro_patched,
+        bridge_current,
     })
 }
 

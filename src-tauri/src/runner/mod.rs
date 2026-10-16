@@ -6,16 +6,16 @@
 use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
 
+use futures::future::BoxFuture;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::{oneshot, Mutex as AsyncMutex};
 use tracing::{debug, info, warn};
 
 use crate::error::{AppError, AppResult};
-use crate::process_ext::CommandExtNoWindow;
+use crate::process_ext::{pump_lines, CommandExtNoWindow};
 
 const EVT_STDOUT: &str = "runner:stdout";
 const EVT_STDERR: &str = "runner:stderr";
@@ -40,9 +40,9 @@ pub struct RunnerExit {
 static RUNNERS: Lazy<AsyncMutex<HashMap<u32, oneshot::Sender<()>>>> =
     Lazy::new(|| AsyncMutex::new(HashMap::new()));
 
-/// Maestro binaries confirmed to support `--driver-host-port`. Caches the
-/// (slow, JVM-booting) capability probe in `maestro_supports_driver_host_port`.
-static DRIVER_HOST_PORT_OK: Lazy<AsyncMutex<HashSet<String>>> =
+/// Maestro binaries confirmed to carry the physical-device patch. Caches the
+/// (slow, JVM-booting) probe in `maestro_has_ios_device_patch`.
+static IOS_DEVICE_PATCH_OK: Lazy<AsyncMutex<HashSet<String>>> =
     Lazy::new(|| AsyncMutex::new(HashSet::new()));
 
 /// Resolves to the user's `maestro` install — see `crate::tool_paths` for
@@ -156,6 +156,102 @@ fn app_id_env_args(app_id: Option<&str>) -> Vec<String> {
     }
 }
 
+/// Post-exit work a runner variant needs before `runner:exit` goes out (e.g.
+/// handing the device back to a keeper).
+type AfterExit<R = tauri::Wry> = Box<dyn FnOnce(AppHandle<R>) -> BoxFuture<'static, ()> + Send>;
+
+/// How long `runner:exit` waits for the pipe readers to drain once the child
+/// is gone. A grandchild that inherited the pipes can keep them open forever,
+/// so this is bounded.
+const PIPE_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Spawn a configured maestro command, stream its stdout/stderr as runner
+/// events, register it for `stop_flow` and emit `runner:exit` once it ends —
+/// after the last output line, the restored command outputs and `after_exit`.
+async fn spawn_maestro<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    mut cmd: Command,
+    output: RunOutput,
+    after_exit: Option<AfterExit<R>>,
+) -> AppResult<u32> {
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::RunnerNotFound
+            } else {
+                AppError::Io(e)
+            }
+        })?;
+
+    let pid = child.id().ok_or_else(|| {
+        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
+    })?;
+
+    let mut pumps = Vec::with_capacity(2);
+    if let Some(stdout) = child.stdout.take() {
+        let app = app.clone();
+        pumps.push(tokio::spawn(pump_lines(stdout, move |line| {
+            debug!(target: "maestro::stdout", "{line}");
+            let _ = app.emit(EVT_STDOUT, &line);
+        })));
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let app = app.clone();
+        pumps.push(tokio::spawn(pump_lines(stderr, move |line| {
+            debug!(target: "maestro::stderr", "{line}");
+            let _ = app.emit(EVT_STDERR, &line);
+        })));
+    }
+
+    // Register the kill channel BEFORE spawning the wait task so a quick
+    // `stop_flow` after `run_flow` returns can always find the PID.
+    let (kill_tx, kill_rx) = oneshot::channel::<()>();
+    RUNNERS.lock().await.insert(pid, kill_tx);
+
+    tokio::spawn(async move {
+        let code = tokio::select! {
+            status = child.wait() => status.ok().and_then(|s| s.code()),
+            _ = kill_rx => {
+                if let Err(e) = child.kill().await {
+                    warn!(pid, error = %e, "child kill failed");
+                }
+                child.wait().await.ok().and_then(|s| s.code())
+            }
+        };
+        RUNNERS.lock().await.remove(&pid);
+        // The child exiting doesn't mean its last lines were emitted: the
+        // readers may still hold buffered output (often the failure detail).
+        if tokio::time::timeout(PIPE_DRAIN_TIMEOUT, futures::future::join_all(pumps))
+            .await
+            .is_err()
+        {
+            warn!(
+                pid,
+                "runner output still open after exit; not waiting for it"
+            );
+        }
+        restore_outputs(output).await;
+        if let Some(after) = after_exit {
+            after(app.clone()).await;
+        }
+        let _ = app.emit(EVT_EXIT, RunnerExit { pid, code });
+    });
+
+    Ok(pid)
+}
+
+/// Directory a flow runs from (maestro resolves relative paths against it).
+fn flow_dir_of(flow_path: &str) -> std::path::PathBuf {
+    std::path::Path::new(flow_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
 /// Spawn `maestro --udid <serial> test <flow>` and stream stdout/stderr to
 /// the frontend via Tauri events. The PID is returned so the frontend can
 /// request a stop.
@@ -174,10 +270,7 @@ pub async fn spawn_runner(
     let bin = maestro_bin();
     info!(bin = %bin, serial, flow = %flow_path, "spawning maestro");
     let env_args = app_id_env_args(app_id);
-    let flow_dir = std::path::Path::new(flow_path)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let flow_dir = flow_dir_of(flow_path);
 
     // Maestro 2.5.x's session manager calls `dadb.Dadb.list()` which
     // walks every adb-server transport before honoring `--udid` — any
@@ -221,80 +314,20 @@ pub async fn spawn_runner(
     }
 
     let output = RunOutput::new(&flow_dir);
-    let mut child = Command::new(&bin)
-        .no_window()
+    let mut cmd = Command::new(&bin);
+    cmd.no_window()
         .args(["--udid", serial, "test"])
         .args(output.args())
         .args(&env_args)
         .arg(flow_path)
-        .current_dir(&flow_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                AppError::RunnerNotFound
-            } else {
-                AppError::Io(e)
-            }
-        })?;
-
-    let pid = child.id().ok_or_else(|| {
-        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
-    })?;
-
-    if let Some(stdout) = child.stdout.take() {
-        let app = app.clone();
-        let mut reader = BufReader::new(stdout).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!(target: "maestro::stdout", "{line}");
-                let _ = app.emit(EVT_STDOUT, &line);
-            }
-        });
-    }
-    if let Some(stderr) = child.stderr.take() {
-        let app = app.clone();
-        let mut reader = BufReader::new(stderr).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!(target: "maestro::stderr", "{line}");
-                let _ = app.emit(EVT_STDERR, &line);
-            }
-        });
-    }
-
-    // Register the kill channel BEFORE spawning the wait task so a quick
-    // `stop_flow` after `run_flow` returns can always find the PID.
-    let (kill_tx, kill_rx) = oneshot::channel::<()>();
-    RUNNERS.lock().await.insert(pid, kill_tx);
-
-    let app_exit = app.clone();
-    let on_exit_hook = on_exit;
-    tokio::spawn(async move {
-        let code = tokio::select! {
-            status = child.wait() => status.ok().and_then(|s| s.code()),
-            _ = kill_rx => {
-                if let Err(e) = child.kill().await {
-                    warn!(pid, error = %e, "child kill failed");
-                }
-                child.wait().await.ok().and_then(|s| s.code())
-            }
-        };
-        RUNNERS.lock().await.remove(&pid);
-        restore_outputs(output).await;
-        // Fire the optional post-exit hook BEFORE emitting the exit event.
-        // The hook may schedule background work (e.g. keeper restart) that
-        // we want kicked off as early as possible — the frontend doesn't
-        // need to wait for it, since the hook just spawns and returns.
-        if let Some(hook) = on_exit_hook {
-            hook(app_exit.clone());
-        }
-        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
+        .current_dir(&flow_dir);
+    let after_exit: Option<AfterExit> = on_exit.map(|hook| -> AfterExit {
+        Box::new(move |app| {
+            hook(app);
+            Box::pin(async {})
+        })
     });
-
-    Ok(pid)
+    spawn_maestro(app, cmd, output, after_exit).await
 }
 
 /// Vertical window-chrome allowance for headless web runs. Selenium applies
@@ -338,102 +371,46 @@ pub async fn spawn_web_runner(
     info!(bin = %bin, flow = %flow_path, ?screen_size, "spawning maestro (web, headless)");
     let env_args = app_id_env_args(app_id);
     let size_args = web_screen_size_args(screen_size);
-    let flow_dir = std::path::Path::new(flow_path)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let flow_dir = flow_dir_of(flow_path);
 
     let output = RunOutput::new(&flow_dir);
-    let mut child = Command::new(&bin)
-        .no_window()
+    let mut cmd = Command::new(&bin);
+    cmd.no_window()
         // `-p web` is a global flag and must precede the `test` subcommand.
         .args(["-p", "web", "test", "--headless"])
         .args(output.args())
         .args(&size_args)
         .args(&env_args)
         .arg(flow_path)
-        .current_dir(&flow_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                AppError::RunnerNotFound
-            } else {
-                AppError::Io(e)
-            }
-        })?;
+        .current_dir(&flow_dir);
+    // Run finished — release the keeper, stop the CDP mirror and hand the
+    // canvas back to the (still-warm) keeper preview.
+    let after_exit: AfterExit = Box::new(|app| Box::pin(web_run_finished(app)));
+    spawn_maestro(app, cmd, output, Some(after_exit)).await
+}
 
-    let pid = child.id().ok_or_else(|| {
-        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
-    })?;
-
-    if let Some(stdout) = child.stdout.take() {
-        let app = app.clone();
-        let mut reader = BufReader::new(stdout).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!(target: "maestro::stdout", "{line}");
-                let _ = app.emit(EVT_STDOUT, &line);
-            }
-        });
+/// Web run finished: release the keeper, stop the CDP mirror and resume the
+/// keeper preview poller (only if none is running — e.g. the user disconnected
+/// mid-run and teardown already ran).
+async fn web_run_finished(app: AppHandle) {
+    use tauri::Manager;
+    let state = app.state::<crate::state::AppState>();
+    state
+        .web_run_active
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    if let Some(mirror) = state.web_run_mirror_abort.lock().await.take() {
+        let _ = mirror.send(());
     }
-    if let Some(stderr) = child.stderr.take() {
-        let app = app.clone();
-        let mut reader = BufReader::new(stderr).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!(target: "maestro::stderr", "{line}");
-                let _ = app.emit(EVT_STDERR, &line);
-            }
-        });
-    }
-
-    let (kill_tx, kill_rx) = oneshot::channel::<()>();
-    RUNNERS.lock().await.insert(pid, kill_tx);
-
-    let app_exit = app.clone();
-    tokio::spawn(async move {
-        let code = tokio::select! {
-            status = child.wait() => status.ok().and_then(|s| s.code()),
-            _ = kill_rx => {
-                if let Err(e) = child.kill().await {
-                    warn!(pid, error = %e, "child kill failed");
-                }
-                child.wait().await.ok().and_then(|s| s.code())
-            }
-        };
-        RUNNERS.lock().await.remove(&pid);
-        restore_outputs(output).await;
-        // Run finished — release the keeper, stop the CDP mirror and hand
-        // the canvas back to the (still-warm) keeper preview.
-        {
-            use tauri::Manager;
-            let state = app_exit.state::<crate::state::AppState>();
-            state
-                .web_run_active
-                .store(false, std::sync::atomic::Ordering::SeqCst);
-            if let Some(mirror) = state.web_run_mirror_abort.lock().await.take() {
-                let _ = mirror.send(());
-            }
-            // Resume the keeper preview poller (only if none is running —
-            // e.g. the user disconnected mid-run and teardown already ran).
-            let keeper = state.web_driver.lock().await.clone();
-            if let Some(keeper) = keeper {
-                let mut slot = state.web_screenshot_abort.lock().await;
-                if slot.is_none() {
-                    *slot = Some(crate::web_session::spawn_screenshot_poller(
-                        app_exit.clone(),
-                        keeper,
-                    ));
-                }
-            }
+    let keeper = state.web_driver.lock().await.clone();
+    if let Some(keeper) = keeper {
+        let mut slot = state.web_screenshot_abort.lock().await;
+        if slot.is_none() {
+            *slot = Some(crate::web_session::spawn_screenshot_poller(
+                app.clone(),
+                keeper,
+            ));
         }
-        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
-    });
-
-    Ok(pid)
+    }
 }
 
 /// Spawn `maestro --udid <udid> test <flow>` for an iOS simulator. Like
@@ -450,121 +427,56 @@ pub async fn spawn_ios_runner(
     let bin = maestro_bin();
     info!(bin = %bin, udid, flow = %flow_path, "spawning maestro (ios)");
     let env_args = app_id_env_args(app_id);
-    let flow_dir = std::path::Path::new(flow_path)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let flow_dir = flow_dir_of(flow_path);
 
     let output = RunOutput::new(&flow_dir);
-    let mut child = Command::new(&bin)
-        .no_window()
+    let mut cmd = Command::new(&bin);
+    cmd.no_window()
         .args(["--udid", udid, "test"])
         .args(output.args())
         .args(&env_args)
         .arg(flow_path)
-        .current_dir(&flow_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                AppError::RunnerNotFound
-            } else {
-                AppError::Io(e)
-            }
-        })?;
-
-    let pid = child.id().ok_or_else(|| {
-        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
-    })?;
-
-    if let Some(stdout) = child.stdout.take() {
-        let app = app.clone();
-        let mut reader = BufReader::new(stdout).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!(target: "maestro::stdout", "{line}");
-                let _ = app.emit(EVT_STDOUT, &line);
-            }
-        });
-    }
-    if let Some(stderr) = child.stderr.take() {
-        let app = app.clone();
-        let mut reader = BufReader::new(stderr).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!(target: "maestro::stderr", "{line}");
-                let _ = app.emit(EVT_STDERR, &line);
-            }
-        });
-    }
-
-    let (kill_tx, kill_rx) = oneshot::channel::<()>();
-    RUNNERS.lock().await.insert(pid, kill_tx);
-
-    let app_exit = app.clone();
-    tokio::spawn(async move {
-        let code = tokio::select! {
-            status = child.wait() => status.ok().and_then(|s| s.code()),
-            _ = kill_rx => {
-                if let Err(e) = child.kill().await {
-                    warn!(pid, error = %e, "child kill failed");
-                }
-                child.wait().await.ok().and_then(|s| s.code())
-            }
-        };
-        RUNNERS.lock().await.remove(&pid);
-        restore_outputs(output).await;
-        // Run finished — let inspect/tap re-warm the simulator keeper again.
-        {
+        .current_dir(&flow_dir);
+    // Run finished — let inspect/tap re-warm the simulator keeper again.
+    let after_exit: AfterExit = Box::new(|app| {
+        Box::pin(async move {
             use tauri::Manager;
-            app_exit
-                .state::<crate::state::AppState>()
+            app.state::<crate::state::AppState>()
                 .ios_sim_run_active
                 .store(false, std::sync::atomic::Ordering::SeqCst);
-        }
-        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
+        })
     });
-
-    Ok(pid)
+    spawn_maestro(app, cmd, output, Some(after_exit)).await
 }
 
-/// True if the resolved maestro accepts the `--driver-host-port` flag, i.e. it
-/// is the patched maestro that can drive a physical device by talking to an
-/// already-running XCTest driver (the `maestro-ios-device` bridge).
+/// True if the resolved maestro carries the `maestro-ios-device` physical-device
+/// patch, i.e. it can drive a physical iPhone by talking to an already-running
+/// XCTest driver (the bridge's forward) through `--driver-host-port`.
 ///
-/// We can't just grep `maestro --help`: in patched maestro 2.5.1 the option is
-/// registered with `hidden = true`, so it never appears in help output. Instead
-/// we probe `maestro --driver-host-port <port> test --help` and treat the flag
-/// being accepted (no picocli "Unknown option" / "Unmatched argument") as
-/// support. `test --help` short-circuits to help, so nothing is executed and no
-/// port is bound.
-pub async fn maestro_supports_driver_host_port(bin: &str) -> bool {
+/// Stock maestro accepts `--driver-host-port` since 2.6, but it refuses a port
+/// that is already bound and rebuilds its own driver, so that flag can't tell
+/// the two apart. The patched jars register a hidden `--ios-device-patch` flag
+/// instead: `maestro --ios-device-patch test --help` exits 0 when it parses and
+/// 2 when picocli rejects it. `test --help` short-circuits to help, so nothing
+/// runs and no port is bound.
+pub async fn maestro_has_ios_device_patch(bin: &str) -> bool {
     // Probing the flag boots the maestro JVM (~seconds), which stalls every
     // physical-device run. The binary doesn't change mid-session, so cache a
     // confirmed-good bin and skip the probe on subsequent runs. Only `true` is
     // cached — a `false` is re-probed so installing the patched maestro is
     // picked up without a restart.
-    if DRIVER_HOST_PORT_OK.lock().await.contains(bin) {
+    if IOS_DEVICE_PATCH_OK.lock().await.contains(bin) {
         return true;
     }
     let ok = Command::new(bin)
         .no_window()
-        .args(["--driver-host-port", "6001", "test", "--help"])
+        .args(["--ios-device-patch", "test", "--help"])
         .output()
         .await
-        .map(|o| {
-            let text = format!(
-                "{}{}",
-                String::from_utf8_lossy(&o.stdout),
-                String::from_utf8_lossy(&o.stderr)
-            );
-            !text.contains("Unknown option") && !text.contains("Unmatched argument")
-        })
+        .map(|o| o.status.success())
         .unwrap_or(false);
     if ok {
-        DRIVER_HOST_PORT_OK.lock().await.insert(bin.to_string());
+        IOS_DEVICE_PATCH_OK.lock().await.insert(bin.to_string());
     }
     ok
 }
@@ -572,9 +484,9 @@ pub async fn maestro_supports_driver_host_port(bin: &str) -> bool {
 /// Spawn `maestro --driver-host-port <port> --device <udid> test <flow>` for a
 /// physical iOS device. The run REUSES the `maestro-ios-device` bridge's
 /// already-running XCTest driver (forwarded on `port`) instead of bringing up
-/// its own — so the caller must keep the keeper alive. Requires the
-/// devicelab-patched maestro (stock maestro has no `--driver-host-port`); we
-/// preflight that flag and surface a clear setup error if it's missing.
+/// its own — so the caller must keep the keeper alive. Requires the patched
+/// maestro (stock maestro can't attach to the bridge's driver); we preflight
+/// the patch and surface a clear setup error if it's missing.
 pub async fn spawn_ios_device_runner(
     app: AppHandle,
     udid: &str,
@@ -583,86 +495,27 @@ pub async fn spawn_ios_device_runner(
     app_id: Option<&str>,
 ) -> AppResult<u32> {
     let bin = maestro_bin();
-    if !maestro_supports_driver_host_port(&bin).await {
+    if !maestro_has_ios_device_patch(&bin).await {
         return Err(AppError::RunnerFailed(
-            "this maestro has no --driver-host-port flag — physical-device flow runs need \
-             devicelab's patched maestro (install maestro-ios-device via setup.sh)"
+            "this maestro is not patched for physical iPhones — install the iPhone bridge \
+             from Settings → Physical iPhone (it patches maestro 2.10.0)"
                 .into(),
         ));
     }
     let port_str = port.to_string();
     info!(bin = %bin, udid, port, flow = %flow_path, "spawning maestro (ios physical)");
     let env_args = app_id_env_args(app_id);
-    let flow_dir = std::path::Path::new(flow_path)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let flow_dir = flow_dir_of(flow_path);
 
     let output = RunOutput::new(&flow_dir);
-    let mut child = Command::new(&bin)
-        .no_window()
+    let mut cmd = Command::new(&bin);
+    cmd.no_window()
         .args(["--driver-host-port", &port_str, "--device", udid, "test"])
         .args(output.args())
         .args(&env_args)
         .arg(flow_path)
-        .current_dir(&flow_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                AppError::RunnerNotFound
-            } else {
-                AppError::Io(e)
-            }
-        })?;
-
-    let pid = child.id().ok_or_else(|| {
-        AppError::RunnerFailed("spawned child had no PID (already exited)".into())
-    })?;
-
-    if let Some(stdout) = child.stdout.take() {
-        let app = app.clone();
-        let mut reader = BufReader::new(stdout).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!(target: "maestro::stdout", "{line}");
-                let _ = app.emit(EVT_STDOUT, &line);
-            }
-        });
-    }
-    if let Some(stderr) = child.stderr.take() {
-        let app = app.clone();
-        let mut reader = BufReader::new(stderr).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                debug!(target: "maestro::stderr", "{line}");
-                let _ = app.emit(EVT_STDERR, &line);
-            }
-        });
-    }
-
-    let (kill_tx, kill_rx) = oneshot::channel::<()>();
-    RUNNERS.lock().await.insert(pid, kill_tx);
-
-    let app_exit = app.clone();
-    tokio::spawn(async move {
-        let code = tokio::select! {
-            status = child.wait() => status.ok().and_then(|s| s.code()),
-            _ = kill_rx => {
-                if let Err(e) = child.kill().await {
-                    warn!(pid, error = %e, "child kill failed");
-                }
-                child.wait().await.ok().and_then(|s| s.code())
-            }
-        };
-        RUNNERS.lock().await.remove(&pid);
-        restore_outputs(output).await;
-        let _ = app_exit.emit(EVT_EXIT, RunnerExit { pid, code });
-    });
-
-    Ok(pid)
+        .current_dir(&flow_dir);
+    spawn_maestro(app, cmd, output, None).await
 }
 
 pub async fn kill_runner(pid: u32) -> AppResult<()> {
@@ -819,5 +672,146 @@ mod tests {
         assert!(rx.await.is_ok(), "stop_flow reaches the remote run");
         unregister_runner(pid2).await;
         assert!(kill_runner(pid2).await.is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn exit_is_emitted_after_every_output_line_even_invalid_utf8() {
+        use std::sync::{Arc, Mutex};
+        use tauri::Listener;
+
+        let app = tauri::test::mock_app();
+        let handle = app.handle().clone();
+        let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+        for evt in [EVT_STDOUT, EVT_STDERR, EVT_EXIT] {
+            let seen = seen.clone();
+            handle.listen(evt, move |e| {
+                seen.lock().unwrap().push(format!("{evt} {}", e.payload()));
+            });
+        }
+        let (done_tx, done_rx) = oneshot::channel::<()>();
+        let done_tx = Mutex::new(Some(done_tx));
+        handle.listen(EVT_EXIT, move |_| {
+            if let Some(tx) = done_tx.lock().unwrap().take() {
+                let _ = tx.send(());
+            }
+        });
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut cmd = Command::new("sh");
+        cmd.args([
+            "-c",
+            // The last line lands after the shell itself exited, through a
+            // subshell still holding the pipe.
+            r"echo first; printf 'bad \377 byte\n'; echo oops >&2; (sleep 0.3; echo last) & exit 3",
+        ]);
+        let pid = spawn_maestro(handle.clone(), cmd, RunOutput::new(tmp.path()), None)
+            .await
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(20), done_rx)
+            .await
+            .expect("runner:exit never emitted")
+            .unwrap();
+
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen.first().unwrap(), &format!("{EVT_STDOUT} \"first\""));
+        assert!(seen.contains(&format!("{EVT_STDOUT} \"bad \u{FFFD} byte\"")));
+        assert!(seen.contains(&format!("{EVT_STDERR} \"oops\"")));
+        let exit_at = seen.iter().position(|l| l.starts_with(EVT_EXIT)).unwrap();
+        let last_at = seen
+            .iter()
+            .position(|l| l == &format!("{EVT_STDOUT} \"last\""))
+            .expect("the last line was lost");
+        assert!(last_at < exit_at, "exit arrived before the last line");
+        assert_eq!(exit_at, seen.len() - 1);
+        assert_eq!(
+            seen[exit_at],
+            format!("{EVT_EXIT} {{\"pid\":{pid},\"code\":3}}")
+        );
+        assert!(
+            kill_runner(pid).await.is_err(),
+            "finished runner stays registered"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn stop_kills_the_runner_and_runs_the_after_exit_hook() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        use tauri::Listener;
+
+        let app = tauri::test::mock_app();
+        let handle = app.handle().clone();
+        let (done_tx, done_rx) = oneshot::channel::<String>();
+        let done_tx = std::sync::Mutex::new(Some(done_tx));
+        handle.listen(EVT_EXIT, move |e| {
+            if let Some(tx) = done_tx.lock().unwrap().take() {
+                let _ = tx.send(e.payload().to_string());
+            }
+        });
+        let hook_ran = Arc::new(AtomicBool::new(false));
+        let flag = hook_ran.clone();
+        let after: AfterExit<tauri::test::MockRuntime> = Box::new(move |_| {
+            Box::pin(async move {
+                flag.store(true, Ordering::SeqCst);
+            })
+        });
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut cmd = Command::new("sleep");
+        cmd.arg("30");
+        let pid = spawn_maestro(handle, cmd, RunOutput::new(tmp.path()), Some(after))
+            .await
+            .unwrap();
+        kill_runner(pid).await.unwrap();
+        let payload = tokio::time::timeout(std::time::Duration::from_secs(10), done_rx)
+            .await
+            .expect("killed runner never reported exit")
+            .unwrap();
+        assert_eq!(payload, format!("{{\"pid\":{pid},\"code\":null}}"));
+        assert!(hook_ran.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn a_missing_binary_is_runner_not_found() {
+        let app = tauri::test::mock_app();
+        let tmp = tempfile::tempdir().unwrap();
+        let cmd = Command::new("/definitely/not/a/maestro/binary");
+        let res = spawn_maestro(app.handle().clone(), cmd, RunOutput::new(tmp.path()), None).await;
+        assert!(matches!(res, Err(AppError::RunnerNotFound)));
+    }
+
+    #[test]
+    fn flow_dir_is_the_flow_parent_or_cwd() {
+        assert_eq!(
+            flow_dir_of("/a/b/flow.yaml"),
+            std::path::PathBuf::from("/a/b")
+        );
+        assert_eq!(flow_dir_of("flow.yaml"), std::path::PathBuf::from(""));
+        assert_eq!(flow_dir_of(""), std::path::PathBuf::from("."));
+    }
+
+    /// A fake `maestro` that exits like picocli does for the marker flag:
+    /// 0 when it parses, 2 when it's an unknown option.
+    #[cfg(unix)]
+    fn fake_maestro(dir: &std::path::Path, name: &str, exit: i32) -> String {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\nexit {exit}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ios_device_patch_probe_reads_the_exit_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let patched = fake_maestro(tmp.path(), "patched", 0);
+        let stock = fake_maestro(tmp.path(), "stock", 2);
+        assert!(maestro_has_ios_device_patch(&patched).await);
+        assert!(!maestro_has_ios_device_patch(&stock).await);
+        let missing = tmp.path().join("missing").to_string_lossy().into_owned();
+        assert!(!maestro_has_ios_device_patch(&missing).await);
     }
 }

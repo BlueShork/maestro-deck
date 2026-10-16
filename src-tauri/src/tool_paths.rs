@@ -235,6 +235,25 @@ pub fn maestro_ios_device_bin() -> String {
     resolved
 }
 
+/// PATH with the directory of the maestro the app runs put first. The
+/// `maestro-ios-device` bridge calls plain `maestro` (its `setup` patches that
+/// install, and every bridge start checks it is patched), so without this it
+/// could see a different, unpatched install — e.g. Homebrew's next to the
+/// app's managed one — and exit with "Maestro not patched".
+pub fn path_with_maestro_first() -> std::ffi::OsString {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let maestro = maestro_bin();
+    let Some(dir) = Path::new(&maestro)
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+    else {
+        return path;
+    };
+    let mut dirs = vec![dir.to_path_buf()];
+    dirs.extend(std::env::split_paths(&path));
+    std::env::join_paths(dirs).unwrap_or(path)
+}
+
 /// True if `maestro-ios-device` resolves to a real file (installed), vs the
 /// bare-name fallback. Used to decide whether to offer the auto-install.
 pub fn maestro_ios_device_installed() -> bool {
@@ -440,7 +459,11 @@ pub struct ToolPathsView {
 }
 
 #[tauri::command]
-pub fn get_tool_paths() -> ToolPathsView {
+pub async fn get_tool_paths() -> AppResult<ToolPathsView> {
+    crate::process_ext::blocking(tool_paths_view).await
+}
+
+fn tool_paths_view() -> ToolPathsView {
     ToolPathsView {
         overrides: load_overrides(),
         resolved_adb: adb_bin(),
@@ -454,7 +477,20 @@ pub fn get_tool_paths() -> ToolPathsView {
 /// next `*_bin()` call picks up the new value. Empty / blank strings mean
 /// "clear the override".
 #[tauri::command]
-pub fn set_tool_paths(
+pub async fn set_tool_paths(
+    adb: Option<String>,
+    maestro: Option<String>,
+    iproxy: Option<String>,
+    apple_team_id: Option<String>,
+    maestro_ios_device: Option<String>,
+) -> AppResult<ToolPathsView> {
+    crate::process_ext::blocking(move || {
+        save_tool_paths(adb, maestro, iproxy, apple_team_id, maestro_ios_device)
+    })
+    .await?
+}
+
+fn save_tool_paths(
     adb: Option<String>,
     maestro: Option<String>,
     iproxy: Option<String>,
@@ -473,7 +509,7 @@ pub fn set_tool_paths(
     };
     save_overrides(&new)?;
     invalidate_cache();
-    Ok(get_tool_paths())
+    Ok(tool_paths_view())
 }
 
 // ---------------------------------------------------------------------------

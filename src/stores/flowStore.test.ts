@@ -100,3 +100,63 @@ describe("appendAction", () => {
     expect(useFlowStore.getState().content).toBe("appId: x\n---\n- launchApp\n- back\n");
   });
 });
+
+describe("saved", () => {
+  it("clears dirty and records the path", () => {
+    useFlowStore.setState({ dirty: true });
+    useFlowStore.getState().saved("/tmp/a.yaml");
+    expect(useFlowStore.getState()).toMatchObject({ filePath: "/tmp/a.yaml", dirty: false });
+  });
+
+  it("clears dirty when the written content is still the buffer", () => {
+    useFlowStore.getState().setContent("- back\n");
+    useFlowStore.getState().saved("/tmp/a.yaml", "- back\n");
+    expect(useFlowStore.getState().dirty).toBe(false);
+  });
+
+  it("stays dirty when the buffer changed while the write was in flight", () => {
+    useFlowStore.getState().setContent("- back\n");
+    const written = useFlowStore.getState().content;
+    useFlowStore.getState().setContent("- back\n- launchApp\n");
+    useFlowStore.getState().saved("/tmp/a.yaml", written);
+    expect(useFlowStore.getState()).toMatchObject({ filePath: "/tmp/a.yaml", dirty: true });
+  });
+});
+
+describe("setContent", () => {
+  it("marks the buffer dirty only when the text actually changes", () => {
+    useFlowStore.getState().setContent(BASE);
+    expect(useFlowStore.getState().dirty).toBe(false);
+    useFlowStore.getState().setContent(`${BASE}- back\n`);
+    expect(useFlowStore.getState().dirty).toBe(true);
+  });
+
+  it("keeps an existing dirty flag when set to identical text", () => {
+    useFlowStore.setState({ dirty: true });
+    useFlowStore.getState().setContent(BASE);
+    expect(useFlowStore.getState().dirty).toBe(true);
+  });
+});
+
+describe("insertAtCursor", () => {
+  it("inserts at the cursor column of the cursor line", () => {
+    useFlowStore.getState().setCursor(4, 10);
+    useFlowStore.getState().insertAtCursor("Big ");
+    expect(useFlowStore.getState().content).toBe(
+      'appId: com.example.app\n---\n- launchApp\n- tapOn: Big "Login"\n',
+    );
+    expect(useFlowStore.getState().dirty).toBe(true);
+  });
+
+  it("clamps a column past the end of the line to the line end", () => {
+    useFlowStore.getState().setCursor(3, 500);
+    useFlowStore.getState().insertAtCursor("!");
+    expect(useFlowStore.getState().content.split("\n")[2]).toBe("- launchApp!");
+  });
+
+  it("clamps a line past the end of the document to the last line", () => {
+    useFlowStore.getState().setCursor(99, 1);
+    useFlowStore.getState().insertAtCursor("x");
+    expect(useFlowStore.getState().content.endsWith("\nx")).toBe(true);
+  });
+});

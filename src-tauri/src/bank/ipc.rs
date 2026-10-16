@@ -345,6 +345,11 @@ pub async fn resolve_comparison(
     name: String,
     decision: String,
 ) -> Result<(), String> {
+    safe_component(&run_id)?;
+    safe_component(&device_key)?;
+    if !crate::bank::flow::safe_screenshot_name(&name) {
+        return Err(format!("invalid screenshot name: {name:?}"));
+    }
     if decision == "replace" {
         // "replace": la nouvelle capture (copiée dans le dossier de run) devient la vérité.
         blocking(move || {
@@ -751,5 +756,35 @@ mod tests {
 
         tauri::async_runtime::block_on(delete_bank_device(wss, "Dev_2x3".into())).unwrap();
         assert!(!group.exists());
+    }
+
+    #[tokio::test]
+    async fn resolve_refuses_names_that_escape_the_bank() {
+        let ws = std::env::temp_dir().join(format!("md-bank-escape-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&ws);
+        let run = ws.join("maestro").join(".runs").join("1");
+        fs::create_dir_all(&run).unwrap();
+        fs::write(run.join("x.png"), b"NEW").unwrap();
+        let victim = ws.join("victim.png");
+        fs::write(&victim, b"KEEP").unwrap();
+        let w = ws.to_string_lossy().to_string();
+        for (run_id, key, name) in [
+            ("1", "pixel", "../../../victim"),
+            ("1", "pixel", "/tmp/victim"),
+            ("1", "..", "x"),
+            ("..", "pixel", "x"),
+        ] {
+            let res = resolve_comparison(
+                w.clone(),
+                run_id.into(),
+                key.into(),
+                name.into(),
+                "replace".into(),
+            )
+            .await;
+            assert!(res.is_err(), "{run_id}/{key}/{name} was accepted");
+        }
+        assert_eq!(fs::read(&victim).unwrap(), b"KEEP");
+        let _ = fs::remove_dir_all(&ws);
     }
 }

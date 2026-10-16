@@ -195,4 +195,55 @@ describe("autosaveEngine", () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(write).not.toHaveBeenCalled();
   });
+  it("saves edits made during an in-flight write once it settles, without another keystroke", async () => {
+    const flow = { content: "v1", filePath: "/tmp/flow.yaml", dirty: true };
+    let release: (() => void) | null = null;
+    const write = vi.fn(
+      (_path: string, _content: string) =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const engine = createAutosaveEngine({
+      write,
+      onError: vi.fn(),
+      getFlow: () => flow,
+      getEnabled: () => true,
+      delayMs: 1000,
+    });
+
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    flow.content = "v2";
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(1);
+
+    (release as (() => void) | null)?.();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith("/tmp/flow.yaml", "v2");
+  });
+
+  it("does not reschedule a missed fire after dispose", async () => {
+    let release: (() => void) | null = null;
+    const write = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const { deps } = makeDeps({ write });
+    const engine = createAutosaveEngine(deps);
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    engine.notifyChange();
+    await vi.advanceTimersByTimeAsync(1000);
+    engine.dispose();
+    (release as (() => void) | null)?.();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(write).toHaveBeenCalledTimes(1);
+  });
 });

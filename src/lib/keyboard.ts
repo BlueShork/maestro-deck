@@ -32,14 +32,15 @@ function isEditable(target: EventTarget | null): boolean {
   const tag = target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return true;
   if (target.isContentEditable) return true;
-  if (target.closest(".monaco-editor")) return true;
-  return false;
+  return target.closest('[contenteditable]:not([contenteditable="false"]), .cm-editor') !== null;
 }
 
 export function useShortcuts(bindings: ShortcutBinding[]): void {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (suppressed) return;
+      // A held key auto-repeats: one press must stay one action (a held
+      // inspect key would otherwise flip inspect mode on and off repeatedly).
+      if (suppressed || e.repeat || e.isComposing) return;
       const mod = IS_MAC ? e.metaKey : e.ctrlKey;
       for (const b of bindings) {
         if (b.key.toLowerCase() !== e.key.toLowerCase()) continue;

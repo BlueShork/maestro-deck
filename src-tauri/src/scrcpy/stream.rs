@@ -50,7 +50,15 @@ pub struct FramePayload {
     pub pts_us: u64,
     pub is_config: bool,
     pub is_key: bool,
+    /// Sent as base64: serde turns a `Vec<u8>` into a JSON array of numbers,
+    /// ~4x the bytes and a main-thread parse per frame at 30-60 fps.
+    #[serde(serialize_with = "as_base64")]
     pub data: Vec<u8>,
+}
+
+fn as_base64<S: serde::Serializer>(data: &[u8], s: S) -> Result<S::Ok, S::Error> {
+    use base64::Engine as _;
+    s.serialize_str(&base64::engine::general_purpose::STANDARD.encode(data))
 }
 
 /// Stream metadata returned to the caller when the video socket is initialised.
@@ -454,5 +462,25 @@ mod tests {
         let got = frames.lock().unwrap();
         assert_eq!(got.len(), 1);
         assert!(got[0].is_key);
+    }
+
+    #[test]
+    fn frame_payload_serializes_data_as_base64() {
+        let json = serde_json::to_value(FramePayload {
+            pts_us: 7,
+            is_config: false,
+            is_key: true,
+            data: vec![0, 0, 0, 1, 0x65, 0xff],
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "ptsUs": 7,
+                "isConfig": false,
+                "isKey": true,
+                "data": "AAAAAWX/",
+            })
+        );
     }
 }

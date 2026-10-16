@@ -28,12 +28,14 @@ import type {
 } from "@/lib/plugins/types";
 import type { BankGroup, RunReport } from "@/types/visualRegression";
 
+/** A failed backend command. The message is the backend's own (it ends up in
+ *  toasts verbatim); which command failed stays on `command` for debugging. */
 export class IpcError extends Error {
   constructor(
     public readonly command: string,
     cause: unknown,
   ) {
-    super(`IPC ${command} failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
     this.name = "IpcError";
   }
 }
@@ -193,6 +195,7 @@ export const ipc = {
   installIosDeviceBridge: () => call<string>("install_ios_device_bridge"),
   // Auto-detected physical-iOS prerequisites for the in-app setup checklist.
   iosPhysicalSetupStatus: () => call<IosPhysicalSetupStatus>("ios_physical_setup_status"),
+  iosBridgeStatus: () => call<IosBridgeStatus | null>("ios_bridge_status"),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
   setToolPaths: (
     adb: string | null,
@@ -271,12 +274,21 @@ export const ipc = {
     call<string>("plugin_workspace_read", { pluginId, workspace, path }),
 };
 
+/** Bring-up of the physical-iPhone bridge (`ios_bridge_status`). */
+export interface IosBridgeStatus {
+  phase: "connecting" | "updating" | "building" | "starting" | "locked" | "ready" | "failed";
+  /** The bridge's own failure message, e.g. the iPhone dropped off USB. */
+  error: string | null;
+}
+
 export interface IosPhysicalSetupStatus {
   xcodeInstalled: boolean;
   maestroVersion: string | null;
-  // serde `rename_all = "camelCase"` turns `maestro_is_2_5_1` into `maestroIs251`.
-  maestroIs251: boolean;
+  /** The installed maestro is the version the bridge patches (2.10.0). */
+  maestroIsSupported: boolean;
   maestroPatched: boolean;
+  /** The installed bridge supports this maestro version (false if missing). */
+  bridgeCurrent: boolean;
 }
 
 /** Absolute paths to the tools the app installed for itself; null when a tool
@@ -340,20 +352,27 @@ interface RawFrameEvent {
   ptsUs: number;
   isConfig: boolean;
   isKey: boolean;
-  // Tauri serializes Vec<u8> as a JSON array of numbers; convert at the boundary.
-  data: number[] | Uint8Array | ArrayBuffer;
+  /** Base64 (see FramePayload in scrcpy/stream.rs); converted at the boundary. */
+  data: string | number[] | Uint8Array | ArrayBuffer;
 }
 
-function toUint8Array(d: number[] | Uint8Array | ArrayBuffer | string): Uint8Array {
-  // Base64 string: the backend encodes PNG frames this way because a raw
-  // Vec<u8> serializes as a JSON number array (multi-MB of tokens per frame,
-  // freezing the main thread while parsing).
-  if (typeof d === "string") {
-    const bin = atob(d);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  }
+type Base64Decoder = (b64: string) => Uint8Array;
+// Native in recent WebKit/Chromium: decodes without a per-byte JS loop.
+const nativeFromBase64 = (Uint8Array as unknown as { fromBase64?: Base64Decoder }).fromBase64;
+
+function decodeBase64(b64: string): Uint8Array {
+  if (nativeFromBase64) return nativeFromBase64(b64);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Binary event payloads arrive base64-encoded: a raw Vec<u8> serializes as
+ *  a JSON number array (multi-MB of tokens per frame, freezing the main
+ *  thread while parsing). Arrays and buffers are still accepted. */
+export function toUint8Array(d: number[] | Uint8Array | ArrayBuffer | string): Uint8Array {
+  if (typeof d === "string") return decodeBase64(d);
   if (d instanceof Uint8Array) return d;
   if (d instanceof ArrayBuffer) return new Uint8Array(d);
   return Uint8Array.from(d);

@@ -4,6 +4,7 @@
 import { ask } from "@tauri-apps/plugin-dialog";
 import { exists, mkdir, remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
 
+import { settleUnsavedFlow } from "@/lib/flow-io";
 import { ipc } from "@/lib/ipc";
 import { useFlowStore } from "@/stores/flowStore";
 import { toast } from "@/stores/toastStore";
@@ -82,9 +83,10 @@ export async function createFlowInDir(dir: string, rawName: string): Promise<voi
     await refreshRoot();
     toast.success("Created", name);
 
-    // Open the new file in the editor.
-    const { loaded } = useFlowStore.getState();
-    loaded(DEFAULT_FLOW, full);
+    // Open the new file in the editor — once the buffer it replaces is safe.
+    // Backing out leaves the new file created, just not opened.
+    if ((await settleUnsavedFlow()) === "cancelled") return;
+    useFlowStore.getState().loaded(DEFAULT_FLOW, full);
     useWorkspaceStore.getState().setLastOpenFile(full);
   } catch (err) {
     toast.error("Create failed", err instanceof Error ? err.message : String(err));

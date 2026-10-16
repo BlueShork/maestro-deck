@@ -58,6 +58,17 @@ pub fn read_workspace_file(workspace: String, rel_path: String) -> AppResult<Str
 pub fn write_workspace_file(workspace: String, rel_path: String, content: String) -> AppResult<()> {
     let (root, joined) = validate(&workspace, &rel_path)?;
     if let Some(parent) = joined.parent() {
+        // Check the deepest folder that already exists BEFORE creating the
+        // rest: a symlinked folder pointing outside would otherwise let
+        // create_dir_all make directories out there before the check fails.
+        let existing = parent
+            .ancestors()
+            .find(|p| p.exists())
+            .ok_or_else(|| AppError::Other("workspace not accessible".into()))?;
+        let real_existing = fs::canonicalize(existing).map_err(AppError::Io)?;
+        if !real_existing.starts_with(&root) {
+            return Err(AppError::Other("path escapes the workspace".into()));
+        }
         fs::create_dir_all(parent).map_err(AppError::Io)?;
         let real_parent = fs::canonicalize(parent).map_err(AppError::Io)?;
         if !real_parent.starts_with(&root) {
@@ -166,6 +177,25 @@ mod tests {
         assert!(
             result.is_err(),
             "symlink escaping workspace must be rejected"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_folder_pointing_outside_creates_nothing_out_there() {
+        use std::os::unix::fs::symlink;
+        let ws = tmp();
+        let outside = tmp();
+        symlink(outside.path(), ws.path().join("link")).unwrap();
+        let res = write_workspace_file(
+            ws.path().to_string_lossy().into_owned(),
+            "link/new/deeper/flow.yaml".into(),
+            "- launchApp\n".into(),
+        );
+        assert!(res.is_err());
+        assert!(
+            !outside.path().join("new").exists(),
+            "a directory was created outside the workspace"
         );
     }
 

@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{oneshot, Mutex as AsyncMutex};
 use tracing::{debug, warn};
@@ -122,10 +122,8 @@ impl McpClient {
         if let Some(out) = child.stdout.take() {
             let pending = pending.clone();
             tokio::spawn(async move {
-                let mut lines = BufReader::new(out).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    route_line(&line, &pending);
-                }
+                let routing = pending.clone();
+                crate::process_ext::pump_lines(out, |line| route_line(&line, &routing)).await;
                 // EOF: the server is gone — fail every in-flight request.
                 for (_, tx) in pending.lock().drain() {
                     let _ = tx.send(Err("maestro mcp exited".into()));
@@ -134,17 +132,14 @@ impl McpClient {
         }
         if let Some(err) = child.stderr.take() {
             let tail = stderr_tail.clone();
-            tokio::spawn(async move {
-                let mut lines = BufReader::new(err).lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    debug!(target: "maestro_mcp", "{line}");
-                    let mut t = tail.lock();
-                    t.push(line);
-                    if t.len() > 20 {
-                        t.remove(0);
-                    }
+            tokio::spawn(crate::process_ext::pump_lines(err, move |line| {
+                debug!(target: "maestro_mcp", "{line}");
+                let mut t = tail.lock();
+                t.push(line);
+                if t.len() > 20 {
+                    t.remove(0);
                 }
-            });
+            }));
         }
 
         let client = Self {

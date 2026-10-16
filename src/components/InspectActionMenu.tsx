@@ -81,6 +81,11 @@ export function InspectActionMenu({ x, y, node, selectors, onClose }: InspectAct
   const hoverTimer = useRef<number | null>(null);
   const [openKind, setOpenKind] = useState<ActionMenuItem["kind"] | null>(null);
   const [focusSubmenu, setFocusSubmenu] = useState(false);
+  const openKindRef = useRef(openKind);
+  openKindRef.current = openKind;
+  // One insert per menu: a second click while the command is generating would
+  // append the same action twice.
+  const inserting = useRef(false);
 
   const best = selectors[0] ?? null;
   const hasSubmenu = selectors.length > 1;
@@ -101,11 +106,8 @@ export function InspectActionMenu({ x, y, node, selectors, onClose }: InspectAct
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       // Escape closes the flyout first, the whole menu second.
-      setOpenKind((k) => {
-        if (k !== null) return null;
-        onClose();
-        return k;
-      });
+      if (openKindRef.current !== null) setOpenKind(null);
+      else onClose();
     };
     const onPointerDown = (e: PointerEvent) => {
       const el = ref.current;
@@ -128,6 +130,8 @@ export function InspectActionMenu({ x, y, node, selectors, onClose }: InspectAct
 
   const insert = useCallback(
     async (kind: ActionMenuItem["kind"], selector: Selector | null) => {
+      if (inserting.current) return;
+      inserting.current = true;
       if (!selector) {
         toast.error("No selector available", "Pick another element nearby.");
         onClose();
@@ -189,7 +193,9 @@ export function InspectActionMenu({ x, y, node, selectors, onClose }: InspectAct
     <div
       ref={ref}
       role="menu"
-      className="menu-surface fixed z-50 overflow-hidden"
+      // No overflow-hidden: the selector flyout sits outside this box and
+      // would be clipped away (it was, unseen, since the redesign).
+      className="menu-surface fixed z-50"
       style={{ ...style, width: MENU_W }}
       // The menu floats over the device view, whose container drives the inspector
       // (hover on pointer-move, tap on pointer-down, swipe on wheel). Because this

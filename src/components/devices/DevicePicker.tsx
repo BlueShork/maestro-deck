@@ -121,8 +121,10 @@ export function DevicePicker() {
     () => filterCatalog(entries, { source, kind, query }),
     [entries, source, kind, query],
   );
+  // Each rail count keeps the other group's choice and the search, so it
+  // matches what clicking that item would show.
   const count = (f: Partial<CatalogFilter>) =>
-    filterCatalog(entries, { source: "all", kind: "all", query: "", ...f }).length;
+    filterCatalog(entries, { source, kind, query, ...f }).length;
 
   const pick = async (e: CatalogEntry) => {
     const done = await selectEntry(e);

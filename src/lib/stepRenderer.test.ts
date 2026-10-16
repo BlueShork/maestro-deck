@@ -7,6 +7,7 @@ import { humanLabel, formatDuration } from "./stepRenderer";
 describe("humanLabel", () => {
   it("formats launchApp", () => {
     expect(humanLabel({ command: "launchApp", arg: "com.example" })).toBe("Open com.example app");
+    expect(humanLabel({ command: "launchApp", arg: null })).toBe("Open the app");
   });
 
   it("formats tapOn", () => {

@@ -7,7 +7,7 @@ export interface LabelInput {
 }
 
 const TEMPLATES: Record<string, (arg: string | null) => string> = {
-  launchApp: (a) => `Open ${a ?? "app"} app`,
+  launchApp: (a) => (a ? `Open ${a} app` : "Open the app"),
   stopApp: (a) => `Stop ${a ?? "app"}`,
   tapOn: (a) => (a ? `Tap "${a}"` : "Tap"),
   longPressOn: (a) => (a ? `Long press "${a}"` : "Long press"),

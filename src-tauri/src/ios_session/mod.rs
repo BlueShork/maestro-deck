@@ -12,6 +12,7 @@ mod preview;
 #[cfg(target_os = "macos")]
 pub use preview::{spawn_ios_preview, PreviewHandle};
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -104,6 +105,12 @@ impl IosHttpClient {
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(1))
             .timeout(Duration::from_secs(10))
+            // The runner drops the socket after every response without sending
+            // `Connection: close`, so a pooled connection may already be dead
+            // when the next request (e.g. a tap between two preview frames)
+            // goes out. A fresh local connection costs ~10 ms even through the
+            // physical-device forward.
+            .pool_max_idle_per_host(0)
             .build()
             .map_err(|e| AppError::IosDriverUnreachable(e.to_string()))?;
         Ok(Self {
@@ -353,12 +360,107 @@ pub struct IosDriverKeeper {
     target: IosTarget,
     /// Last time a `/status` probe succeeded (see [`Self::is_healthy`]).
     health_checked: parking_lot::Mutex<Option<std::time::Instant>>,
+    /// Physical devices: what the bridge is doing, read from its stdout.
+    bridge_phase: Arc<parking_lot::Mutex<BridgePhase>>,
+    /// Physical devices: true until the bridge process is started (the bridge
+    /// may first be updated), so the keeper isn't taken for dead meanwhile.
+    bridge_pending: AtomicBool,
+    /// Set by `stop` so a pending bring-up doesn't start a bridge afterwards.
+    stopped: AtomicBool,
+}
+
+/// Bring-up phase of the `maestro-ios-device` bridge, parsed from the lines it
+/// prints, so the preview can say what it is waiting on instead of guessing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BridgePhase {
+    /// Looking for the iPhone over USB.
+    Connecting,
+    /// Installing a bridge that matches the app's maestro (after an app update;
+    /// download + setup, about a minute).
+    Updating,
+    /// Compiling the XCTest runner (first connection of this iPhone, ~30 s).
+    Building,
+    /// Launching the runner on the iPhone (a few seconds).
+    Starting,
+    /// The iPhone is locked; the runner starts once it is unlocked.
+    Locked,
+    /// The bridge reported the driver ready.
+    Ready,
+    /// The bridge exited with an error (see `warmup_error`).
+    Failed,
+}
+
+/// Map one bridge stdout line to the phase it announces, if any. Returns the
+/// error text for a failure line (the bridge prefixes them with ❌).
+fn parse_bridge_line(line: &str) -> Option<(BridgePhase, Option<String>)> {
+    let line = line.trim();
+    if let Some(err) = line.strip_prefix("❌") {
+        return Some((BridgePhase::Failed, Some(err.trim().to_string())));
+    }
+    if line.starts_with("🔒") {
+        Some((BridgePhase::Locked, None))
+    } else if line.starts_with("🔨") {
+        Some((BridgePhase::Building, None))
+    } else if line.starts_with("▶️") || line.contains("Runner already built") {
+        Some((BridgePhase::Starting, None))
+    } else if line.contains("Runner already running") || line.starts_with("✅ Ready") {
+        Some((BridgePhase::Ready, None))
+    } else {
+        None
+    }
 }
 
 /// How long a successful `/status` probe vouches for the on-device runner
 /// before `is_healthy` re-verifies. Keeps the per-command overhead at one
 /// cheap local HTTP GET every few seconds instead of one per tap.
 const HEALTH_TTL: Duration = Duration::from_secs(5);
+
+/// Start the `maestro-ios-device` bridge for `udid` and follow its progress
+/// lines: the preview shows the phase, and a ❌ line fails `wait_until_ready`
+/// at once with the bridge's reason (e.g. the iPhone dropped off USB) instead
+/// of after the full budget.
+fn spawn_bridge(
+    udid: &str,
+    team: &str,
+    phase: Arc<parking_lot::Mutex<BridgePhase>>,
+    error: Arc<parking_lot::Mutex<Option<String>>>,
+) -> AppResult<Child> {
+    let bin = crate::tool_paths::maestro_ios_device_bin();
+    let mut bridge = Command::new(&bin)
+        .args(["--team-id", team, "--device", udid])
+        .env("PATH", crate::tool_paths::path_with_maestro_first())
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                AppError::IosToolMissing(
+                    "maestro-ios-device not found — install it from Settings → Physical iPhone \
+                     to enable physical iOS devices"
+                        .into(),
+                )
+            } else {
+                AppError::IosCommandFailed(format!("maestro-ios-device: {e}"))
+            }
+        })?;
+    if let Some(stdout) = bridge.stdout.take() {
+        tokio::spawn(async move {
+            use tokio::io::AsyncBufReadExt;
+            let mut lines = tokio::io::BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                info!(target: "maestro_ios_device", "{line}");
+                if let Some((p, err)) = parse_bridge_line(&line) {
+                    *phase.lock() = p;
+                    if err.is_some() {
+                        *error.lock() = err;
+                    }
+                }
+            }
+        });
+    }
+    Ok(bridge)
+}
 
 impl IosDriverKeeper {
     pub fn udid(&self) -> &str {
@@ -373,6 +475,11 @@ impl IosDriverKeeper {
     /// True for physical devices (drives screenshot source + reuse checks).
     pub fn is_physical(&self) -> bool {
         self.target == IosTarget::Physical
+    }
+
+    /// Physical devices: the bridge's bring-up phase and its error, if any.
+    pub fn bridge_status(&self) -> (BridgePhase, Option<String>) {
+        (*self.bridge_phase.lock(), self.warmup_error.lock().clone())
     }
 
     /// True once the driver has served real data at least once (cached). Cheap, no I/O.
@@ -476,6 +583,9 @@ impl IosDriverKeeper {
             warmup_error,
             target: IosTarget::Simulator,
             health_checked: parking_lot::Mutex::new(None),
+            bridge_phase: Arc::new(parking_lot::Mutex::new(BridgePhase::Starting)),
+            bridge_pending: AtomicBool::new(false),
+            stopped: AtomicBool::new(false),
         }))
     }
 
@@ -497,33 +607,53 @@ impl IosDriverKeeper {
         // bridge for this UDID at spawn time is an orphan (the keeper is
         // stopped before respawning) — cull them so we always get 6001.
         kill_orphan_bridges_for(udid).await;
-        let bin = crate::tool_paths::maestro_ios_device_bin();
-        let bridge = Command::new(&bin)
-            .args(["--team-id", &team, "--device", udid])
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    AppError::IosToolMissing(
-                        "maestro-ios-device not found — install it from Settings → Tool paths \
-                         (\"Install automatically\") to enable physical iOS devices"
-                            .into(),
-                    )
-                } else {
-                    AppError::IosCommandFailed(format!("maestro-ios-device: {e}"))
-                }
-            })?;
 
-        Ok(Arc::new(Self {
+        let keeper = Arc::new(Self {
             udid: udid.to_string(),
             http: IosHttpClient::new(PHYSICAL_BRIDGE_PORT)?,
             device_info: parking_lot::RwLock::new(None),
             mcp: None,
-            driver_child: AsyncMutex::new(Some(bridge)),
+            driver_child: AsyncMutex::new(None),
             warmup_error: Arc::default(),
             target: IosTarget::Physical,
             health_checked: parking_lot::Mutex::new(None),
-        }))
+            bridge_phase: Arc::new(parking_lot::Mutex::new(BridgePhase::Connecting)),
+            bridge_pending: AtomicBool::new(true),
+            stopped: AtomicBool::new(false),
+        });
+
+        // An app update can leave an outdated bridge, or stock jars where the
+        // patched ones were: bring both up to date before starting it. That
+        // can take a while (download + setup), so it runs in the background
+        // like the rest of the bring-up; `bridge_pending` keeps the keeper
+        // counted as alive meanwhile.
+        let k = keeper.clone();
+        let udid = udid.to_string();
+        tokio::spawn(async move {
+            let phase = k.bridge_phase.clone();
+            let ensured =
+                crate::ios_bridge::ensure_current(|| *phase.lock() = BridgePhase::Updating).await;
+            let spawned = match ensured {
+                Ok(()) if k.stopped.load(Ordering::SeqCst) => Ok(None),
+                Ok(()) => {
+                    *phase.lock() = BridgePhase::Connecting;
+                    spawn_bridge(&udid, &team, phase, k.warmup_error.clone()).map(Some)
+                }
+                Err(e) => Err(e),
+            };
+            match spawned {
+                Ok(Some(child)) => *k.driver_child.lock().await = Some(child),
+                Ok(None) => {}
+                Err(e) => {
+                    warn!(udid = %udid, error = %e, "iPhone bridge failed to start");
+                    *k.warmup_error.lock() = Some(e.to_string());
+                    *k.bridge_phase.lock() = BridgePhase::Failed;
+                }
+            }
+            k.bridge_pending.store(false, Ordering::SeqCst);
+        });
+
+        Ok(keeper)
     }
 
     /// Probe `/status` + `/deviceInfo` until the runner serves real data, caching
@@ -533,7 +663,8 @@ impl IosDriverKeeper {
         if self.is_ready() {
             return true;
         }
-        for attempt in 0..READY_ATTEMPTS {
+        let mut attempt = 0;
+        while attempt < READY_ATTEMPTS {
             // Bail out promptly if the keeper exited (e.g. the session was torn
             // down on disconnect/run) or failed to open the device, instead of
             // probing a dead socket for the full budget.
@@ -554,7 +685,16 @@ impl IosDriverKeeper {
             if attempt % 10 == 0 {
                 info!(udid = %self.udid, attempt, physical = self.is_physical(), "waiting for iOS driver...");
             }
-            if attempt + 1 < READY_ATTEMPTS {
+            // A bridge update (download + setup) or a locked iPhone doesn't eat
+            // into the budget: one is progressing and fails fast through
+            // `warmup_error`, the other waits on the user.
+            if !matches!(
+                *self.bridge_phase.lock(),
+                BridgePhase::Updating | BridgePhase::Locked
+            ) {
+                attempt += 1;
+            }
+            if attempt < READY_ATTEMPTS {
                 sleep(std::time::Duration::from_millis(READY_BACKOFF_MS)).await;
             }
         }
@@ -562,6 +702,7 @@ impl IosDriverKeeper {
     }
 
     pub async fn stop(&self) {
+        self.stopped.store(true, Ordering::SeqCst);
         if let Some(mcp) = &self.mcp {
             mcp.stop().await;
         }
@@ -577,6 +718,9 @@ impl IosDriverKeeper {
     pub async fn is_process_alive(&self) -> bool {
         if let Some(mcp) = &self.mcp {
             return mcp.is_alive().await;
+        }
+        if self.bridge_pending.load(Ordering::SeqCst) {
+            return true;
         }
         match self.driver_child.lock().await.as_mut() {
             Some(child) => matches!(child.try_wait(), Ok(None)),
@@ -845,5 +989,86 @@ mod tests {
         assert!(!crate::prockill::cmdline_matches(&other, &needles));
         let user_mcp = "java -classpath /opt/maestro/lib/* maestro.cli.AppKt mcp";
         assert!(!crate::prockill::cmdline_matches(user_mcp, &needles));
+    }
+
+    /// The XCTest runner answers HTTP/1.1 without `Connection: close` yet drops
+    /// the socket after each response (observed through the physical-device
+    /// forward). A pooled connection is then dead on its next use, which
+    /// surfaced as intermittent "touch: error sending request" taps.
+    #[tokio::test]
+    async fn every_request_survives_a_server_that_closes_after_each_response() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    return;
+                };
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 4096];
+                    if sock.read(&mut buf).await.unwrap_or(0) == 0 {
+                        return;
+                    }
+                    let body = r#"{"status":"ok"}"#;
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = sock.write_all(resp.as_bytes()).await;
+                    // Close a few ms later without having announced it: a
+                    // request sent on the parked connection in that window is
+                    // written to a socket that never answers.
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                });
+            }
+        });
+
+        // Back to back, like a tap landing between two preview frames.
+        let client = IosHttpClient::new(port).unwrap();
+        for i in 0..20 {
+            assert!(client.status().await, "status {i} failed");
+            client
+                .touch(1.0, 1.0, 0.0)
+                .await
+                .unwrap_or_else(|e| panic!("touch {i} failed: {e}"));
+        }
+    }
+
+    #[test]
+    fn parses_bridge_progress_lines() {
+        assert_eq!(
+            parse_bridge_line("🔨 Building the runner for this device (first time only, ~30 s)..."),
+            Some((BridgePhase::Building, None))
+        );
+        assert_eq!(
+            parse_bridge_line("♻️  Runner already built for this device"),
+            Some((BridgePhase::Starting, None))
+        );
+        assert_eq!(
+            parse_bridge_line("▶️  Starting runner..."),
+            Some((BridgePhase::Starting, None))
+        );
+        assert_eq!(
+            parse_bridge_line("♻️  Runner already running on the device"),
+            Some((BridgePhase::Ready, None))
+        );
+        assert_eq!(
+            parse_bridge_line("✅ Ready! Run:"),
+            Some((BridgePhase::Ready, None))
+        );
+        assert_eq!(
+            parse_bridge_line("🔒 Unlock the iPhone to continue"),
+            Some((BridgePhase::Locked, None))
+        );
+        assert_eq!(
+            parse_bridge_line("❌ iPhone X is not reachable over USB. Unlock it"),
+            Some((
+                BridgePhase::Failed,
+                Some("iPhone X is not reachable over USB. Unlock it".into())
+            ))
+        );
+        assert_eq!(parse_bridge_line("✅ Build complete"), None);
+        assert_eq!(parse_bridge_line("maestro-ios-device v2.10.0"), None);
     }
 }

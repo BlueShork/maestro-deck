@@ -106,6 +106,22 @@ describe("DevicePicker", () => {
     expect(screen.getByText("SM-S911B")).toBeTruthy();
   });
 
+  it("counts each filter within the other filters and the search", () => {
+    renderPicker();
+    const count = (name: string) =>
+      screen.getByRole("button", { name: new RegExp(`^${name}`) }).lastElementChild?.textContent;
+    // One local phone, three farm phones and the cloud's Android phone fleet.
+    expect(count("Physical")).toBe("5");
+    fireEvent.click(screen.getByRole("button", { name: /This machine/ }));
+    expect(count("Physical")).toBe("1");
+    fireEvent.click(screen.getByRole("button", { name: /^Physical/ }));
+    expect(count("Everywhere")).toBe("5");
+    expect(count("This machine")).toBe("1");
+    fireEvent.change(screen.getByPlaceholderText(/Search/), { target: { value: "pixel" } });
+    expect(count("Everywhere")).toBe("1");
+    expect(count("This machine")).toBe("0");
+  });
+
   it("pitches the cloud when signed out", () => {
     useCloudAuthStore.setState({ user: null });
     renderPicker();

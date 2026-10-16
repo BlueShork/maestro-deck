@@ -23,7 +23,7 @@ install:
 	pnpm install
 
 setup-hooks:
-	@pnpm exec lefthook install >/dev/null 2>&1 || true
+	@git config core.hooksPath .githooks && echo "✓ git hooks installed (.githooks)"
 	@if command -v gitleaks >/dev/null 2>&1; then \
 		echo "✓ gitleaks already installed"; \
 	elif [ "$$(uname)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then \

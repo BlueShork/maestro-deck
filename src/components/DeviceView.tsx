@@ -3,7 +3,17 @@
 
 import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
-import { Camera, House, Moon, Smartphone, Sun } from "lucide-react";
+import {
+  Camera,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  House,
+  Moon,
+  Smartphone,
+  Sun,
+} from "lucide-react";
 import {
   memo,
   useCallback,
@@ -23,8 +33,17 @@ import { InspectActionMenu } from "@/components/InspectActionMenu";
 import { Logo } from "@/components/Logo";
 import LatticeLoader from "@/components/ui/LatticeLoader";
 import { H264Decoder } from "@/lib/decoder";
-import { registerDeviceCanvas } from "@/lib/deviceFrame";
-import { events, ipc } from "@/lib/ipc";
+import { frameSourceFor, registerDeviceCanvas, type FrameSource } from "@/lib/deviceFrame";
+import {
+  findSmallestAt,
+  fitScale,
+  hierarchyExtent,
+  toDevicePoint,
+  toolbarSwipe,
+  wheelSwipeEndY,
+  type SwipeDirection,
+} from "@/lib/deviceGeometry";
+import { events, ipc, type IosBridgeStatus } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import { useLocation } from "react-router-dom";
@@ -35,55 +54,6 @@ import { useStreamStore } from "@/stores/streamStore";
 import { toast } from "@/stores/toastStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import type { Selector, UINode } from "@/types";
-
-function nodeArea(n: UINode): number {
-  const w = n.bounds.right - n.bounds.left;
-  const h = n.bounds.bottom - n.bounds.top;
-  return Math.max(0, w) * Math.max(0, h);
-}
-
-function contains(n: UINode, x: number, y: number): boolean {
-  const { bounds } = n;
-  return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
-}
-
-function isTargetable(n: UINode): boolean {
-  return !!n.text?.trim() || !!n.resource_id?.trim() || !!n.content_desc?.trim() || n.clickable;
-}
-
-/**
- * Walk the full tree and return the best node containing (x, y). "Best" = the
- * smallest-area node, but with a preference for nodes that have a usable
- * selector (text / resource-id / content-desc / clickable). Falls back to the
- * smallest raw match if no targetable candidate exists.
- *
- * We walk unconditionally instead of pruning on "does parent contain point"
- * because Maestro 2.0 returns the root with empty attributes → bounds parse
- * to [0,0][0,0], which would cut the descent and return null.
- */
-function findSmallestAt(root: UINode, x: number, y: number): UINode | null {
-  let bestTargetable: UINode | null = null;
-  let bestTargetableArea = Infinity;
-  let bestAny: UINode | null = null;
-  let bestAnyArea = Infinity;
-  const stack: UINode[] = [root];
-  while (stack.length) {
-    const n = stack.pop()!;
-    if (contains(n, x, y)) {
-      const area = nodeArea(n);
-      if (area > 0 && area < bestAnyArea) {
-        bestAny = n;
-        bestAnyArea = area;
-      }
-      if (area > 0 && area < bestTargetableArea && isTargetable(n)) {
-        bestTargetable = n;
-        bestTargetableArea = area;
-      }
-    }
-    for (const c of n.children) stack.push(c);
-  }
-  return bestTargetable ?? bestAny;
-}
 
 function useFrameStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
@@ -166,7 +136,11 @@ function useFrameStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: 
   }, [canvasRef, pushFrame]);
 }
 
-function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, paused: boolean) {
+function useScreenshotStream(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  paused: boolean,
+  source: FrameSource | null,
+) {
   const pushFrame = useStreamStore((s) => s.pushFrame);
   // Hold the decoded bitmap plus the frame's *reported* dimensions. For iOS the
   // reported dims equal the bitmap's natural size, but for web the PNG is at
@@ -174,10 +148,17 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
   // viewport (1200×766) — the coordinate space the hierarchy bounds live in.
   // We paint at the bitmap's native resolution (crisp) but report the CSS size
   // so overlay scaling and hit-testing use the right space.
-  const pendingRef = useRef<{ bmp: ImageBitmap; w: number; h: number } | null>(null);
+  const pendingRef = useRef<{
+    bmp: ImageBitmap;
+    w: number;
+    h: number;
+    from: FrameSource;
+  } | null>(null);
   const rafRef = useRef<number | null>(null);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
 
   useEffect(() => {
     const unlistens: Array<() => void> = [];
@@ -189,8 +170,11 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
       const pending = pendingRef.current;
       pendingRef.current = null;
       if (!pending) return;
-      const { bmp, w, h } = pending;
-      if (!canvas) {
+      const { bmp, w, h, from } = pending;
+      // Checked again at paint time: a device switch or unplug can land
+      // between the decode and this frame, and the stale capture must not
+      // reappear after the stream was reset.
+      if (!canvas || sourceRef.current !== from) {
         bmp.close();
         return;
       }
@@ -210,8 +194,11 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
 
     // iOS and web both deliver PNG screenshots; only the connected platform's
     // poller emits, so subscribing to both events is safe.
-    const onShot = async (payload: { data: Uint8Array; width: number; height: number }) => {
-      if (pausedRef.current) return;
+    const onShot = async (
+      from: FrameSource,
+      payload: { data: Uint8Array; width: number; height: number },
+    ) => {
+      if (pausedRef.current || sourceRef.current !== from) return;
       try {
         // Copy the exact view region into a fresh buffer: robust if `data`
         // is ever a subarray, and yields a concrete-buffer typed array that
@@ -222,7 +209,8 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
           type: isJpeg ? "image/jpeg" : "image/png",
         });
         const bmp = await createImageBitmap(blob);
-        if (cancelled) {
+        // Decoding is async: the connected device may have changed meanwhile.
+        if (cancelled || sourceRef.current !== from) {
           bmp.close();
           return;
         }
@@ -233,6 +221,7 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
           bmp,
           w: payload.width || bmp.width,
           h: payload.height || bmp.height,
+          from,
         };
         if (rafRef.current === null) rafRef.current = requestAnimationFrame(drawNext);
       } catch {
@@ -242,8 +231,8 @@ function useScreenshotStream(canvasRef: RefObject<HTMLCanvasElement | null>, pau
 
     const subscribe = (fn: Promise<() => void>) =>
       void fn.then((un) => (cancelled ? un() : unlistens.push(un)));
-    subscribe(events.onIosFrame(onShot));
-    subscribe(events.onWebFrame(onShot));
+    subscribe(events.onIosFrame((p) => onShot("ios", p)));
+    subscribe(events.onWebFrame((p) => onShot("web", p)));
 
     return () => {
       cancelled = true;
@@ -396,11 +385,15 @@ export function DeviceView() {
 
   // Dark-mode toggle is an Android-only `adb` feature; hidden for iOS and web.
   const noDarkMode = current?.platform !== "android";
-  // Both hooks mount unconditionally (Rules of Hooks). They listen to
-  // different events (`frame` / `ios_frame` / `web_frame`), so only the
-  // connected platform actually paints — the Android H.264 hook is unchanged.
+  // Both hooks mount unconditionally (Rules of Hooks) and listen to different
+  // events (`frame` / `ios_frame` / `web_frame`). Screenshot frames only paint
+  // for the connected platform, so a poller still winding down after a switch
+  // can't fight the new device over the canvas. H.264 is not filtered: scrcpy
+  // sends its config packet once, while `connect` is still in flight (current
+  // = the previous device or none), and dropping it would leave the stream
+  // black — the backend stops the old scrcpy feed before connecting instead.
   useFrameStream(canvasRef, mirrorPaused);
-  useScreenshotStream(canvasRef, mirrorPaused);
+  useScreenshotStream(canvasRef, mirrorPaused, frameSourceFor(current?.platform));
   useNativePreviewStream(canvasRef, current?.platform === "ios" && streamEnabled, mirrorPaused);
 
   // Register this canvas in the module-level registry so non-React code
@@ -424,10 +417,7 @@ export function DeviceView() {
     return () => ro.disconnect();
   }, []);
 
-  const scale = Math.min(
-    canvasRect.width / deviceWidth || 0,
-    canvasRect.height / deviceHeight || 0,
-  );
+  const scale = fitScale(canvasRect, { width: deviceWidth, height: deviceHeight });
   const displayW = deviceWidth * scale;
   const displayH = deviceHeight * scale;
 
@@ -445,17 +435,7 @@ export function DeviceView() {
   const isWeb = current?.platform === "web";
   const hierarchyDims = useMemo(() => {
     if (isWeb) return streamW > 0 && streamH > 0 ? { w: streamW, h: streamH } : null;
-    if (!tree?.root) return null;
-    let w = 0;
-    let h = 0;
-    const stack: UINode[] = [tree.root];
-    while (stack.length) {
-      const n = stack.pop()!;
-      if (n.bounds.right > w) w = n.bounds.right;
-      if (n.bounds.bottom > h) h = n.bounds.bottom;
-      for (const c of n.children) stack.push(c);
-    }
-    return w > 0 && h > 0 ? { w, h } : null;
+    return hierarchyExtent(tree?.root ?? null);
   }, [tree, isWeb, streamW, streamH]);
 
   const overlayScaleX = hierarchyDims ? displayW / hierarchyDims.w : scale;
@@ -470,18 +450,13 @@ export function DeviceView() {
       const el = containerRef.current;
       if (!el) return null;
       const rect = el.getBoundingClientRect();
-      const offsetX = (rect.width - displayW) / 2;
-      const offsetY = (rect.height - displayH) / 2;
-      const localX = clientX - rect.left - offsetX;
-      const localY = clientY - rect.top - offsetY;
-      if (localX < 0 || localY < 0 || localX > displayW || localY > displayH || scale === 0) {
-        return null;
-      }
-      return {
-        // Stream-space pixels — what scrcpy expects for input events.
-        x: Math.round(localX / scale),
-        y: Math.round(localY / scale),
-      };
+      // Stream-space pixels — what scrcpy expects for input events.
+      return toDevicePoint(
+        { x: clientX - rect.left, y: clientY - rect.top },
+        rect,
+        { width: displayW, height: displayH },
+        scale,
+      );
     },
     [displayW, displayH, scale],
   );
@@ -699,6 +674,8 @@ export function DeviceView() {
           mod: true,
           shift: true,
           handler: () => void takeScreenshot(),
+          // Works from the editor too (it holds focus from startup).
+          allowInInput: true,
         },
       ],
       [takeScreenshot],
@@ -721,12 +698,10 @@ export function DeviceView() {
     // pixels as a tap-cancel rather than a fling.
     if (!cursor || Math.abs(delta) < 4 || scale === 0) return;
 
-    // `delta` is in display-space pixels; convert to stream-space (which
-    // is what scrcpy expects). `deviceDelta` ends up negative when the
-    // user scrolls down — i.e. finger should move *up* on the device
-    // to reveal content below. That matches Android's natural scroll.
-    const deviceDelta = delta / scale;
-    const y2 = Math.max(0, Math.min(deviceHeight - 1, cursor.y - Math.round(deviceDelta)));
+    // `delta` is in display-space pixels; wheelSwipeEndY converts it to
+    // stream space (what scrcpy expects) and moves the finger *up* when the
+    // user scrolls down, matching Android's natural scroll.
+    const y2 = wheelSwipeEndY(cursor.y, delta, scale, deviceHeight);
 
     void ipc
       .sendInput(
@@ -751,6 +726,13 @@ export function DeviceView() {
       });
   }, [scale, deviceHeight, deviceWidth]);
 
+  useEffect(
+    () => () => {
+      if (wheelTimer.current !== null) window.clearTimeout(wheelTimer.current);
+    },
+    [],
+  );
+
   const onWheel = useCallback(
     (e: ReactWheelEvent) => {
       if (!current) return;
@@ -769,13 +751,31 @@ export function DeviceView() {
     [current, toDeviceCoords, wheelFlush],
   );
 
+  const scrollPage = useCallback(
+    (direction: SwipeDirection) => {
+      if (!current) return;
+      void ipc
+        .sendInput(
+          { kind: "swipe", ...toolbarSwipe(direction, deviceWidth, deviceHeight) },
+          deviceWidth,
+          deviceHeight,
+        )
+        .catch((err) => {
+          toast.error("Scroll failed", err instanceof Error ? err.message : String(err));
+        });
+    },
+    [current, deviceWidth, deviceHeight],
+  );
+
   const canvasStyle = useMemo(
     () => ({ width: displayW || undefined, height: displayH || undefined }),
     [displayW, displayH],
   );
 
   return (
-    <div className="flex h-full w-full flex-col">
+    // The waiting states fill the panel edge to edge; a live mirror gets
+    // breathing room around the phone and its toolbar.
+    <div className={cn("flex h-full w-full flex-col", hasFrame && "p-4")}>
       <div
         ref={containerRef}
         className="relative flex min-h-0 w-full flex-1 items-center justify-center"
@@ -813,8 +813,19 @@ export function DeviceView() {
           scale={scale}
         />
 
-        {hasFrame ? (
-          <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border border-border bg-background">
+        {actionMenu ? (
+          <InspectActionMenu
+            x={actionMenu.x}
+            y={actionMenu.y}
+            node={actionMenu.node}
+            selectors={actionMenu.selectors}
+            onClose={() => setActionMenu(null)}
+          />
+        ) : null}
+      </div>
+      {hasFrame ? (
+        <div className="mt-3 flex h-10 w-full shrink-0 items-stretch justify-between overflow-hidden rounded-md border border-border bg-background">
+          <div className="flex border-r border-border">
             {isIos ? (
               <button
                 type="button"
@@ -822,7 +833,7 @@ export function DeviceView() {
                 disabled={pressingHome || !connectedSerial}
                 title="Press Home (return to home screen)"
                 aria-label="Press Home button"
-                className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className={TOOLBAR_BUTTON}
               >
                 <House className="h-4 w-4" />
               </button>
@@ -835,7 +846,7 @@ export function DeviceView() {
                 title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
                 aria-label="Toggle device dark mode"
                 aria-pressed={darkMode ?? false}
-                className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className={TOOLBAR_BUTTON}
               >
                 {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </button>
@@ -846,26 +857,57 @@ export function DeviceView() {
               disabled={capturing}
               title="Screenshot · ⌘⇧S"
               aria-label="Take screenshot"
-              className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className={TOOLBAR_BUTTON}
             >
               <Camera className="h-4 w-4" />
             </button>
           </div>
-        ) : null}
-
-        {actionMenu ? (
-          <InspectActionMenu
-            x={actionMenu.x}
-            y={actionMenu.y}
-            node={actionMenu.node}
-            selectors={actionMenu.selectors}
-            onClose={() => setActionMenu(null)}
-          />
-        ) : null}
-      </div>
+          <div className="flex border-l border-border">
+            <button
+              type="button"
+              onClick={() => scrollPage("left")}
+              title="Scroll left"
+              aria-label="Scroll the device screen left"
+              className={TOOLBAR_BUTTON}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollPage("up")}
+              title="Scroll up"
+              aria-label="Scroll the device screen up"
+              className={TOOLBAR_BUTTON}
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollPage("down")}
+              title="Scroll down"
+              aria-label="Scroll the device screen down"
+              className={TOOLBAR_BUTTON}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollPage("right")}
+              title="Scroll right"
+              aria-label="Scroll the device screen right"
+              className={TOOLBAR_BUTTON}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+
+const TOOLBAR_BUTTON =
+  "flex h-full w-10 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50";
 
 function formatTimestamp(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -915,8 +957,9 @@ function EmptyState({
       </div>
     );
   }
-  // Physical iPhones build the on-device XCTest driver on first connect (~10 min),
-  // so a generic "Waiting for frames…" looks frozen. Show progress + reassurance.
+  // Physical iPhones start (or, the first time, build) the on-device XCTest
+  // driver before the first frame, so show the bridge's real phase instead of
+  // a generic "Waiting for frames…".
   if (iosPhysical && connected && !lightweight) {
     return <IosPhysicalWaiting />;
   }
@@ -985,27 +1028,74 @@ function PreviewLoader({ label }: { label: string }) {
   );
 }
 
-/// Physical-iPhone preview placeholder. The first connect builds the XCTest driver
-/// on the device (~10 min), so the loader's stopwatch and a phase message make
-/// clear it's progressing — not frozen.
+/// Physical-iPhone preview placeholder. Polls the bridge's real bring-up phase
+/// (it prints what it's doing) so the label says whether it's reusing the
+/// runner, building it for a new iPhone (~30 s) or failed — and why.
 function IosPhysicalWaiting() {
-  // After ~25s the bridge is almost certainly in the xcodebuild phase. Only the
-  // label changes, so the loader keeps counting from the first connect.
-  const [building, setBuilding] = useState(false);
+  const [status, setStatus] = useState<IosBridgeStatus | null>(null);
   useEffect(() => {
-    const id = window.setTimeout(() => setBuilding(true), 25_000);
-    return () => window.clearTimeout(id);
+    let alive = true;
+    const poll = () =>
+      void ipc
+        .iosBridgeStatus()
+        .then((s) => alive && setStatus(s))
+        .catch(() => {});
+    poll();
+    const id = window.setInterval(poll, 1000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
   }, []);
+
+  if (status?.phase === "failed") {
+    return (
+      <div className="flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
+        <Smartphone className="h-8 w-8 text-destructive" />
+        <div className="font-display text-base font-medium">Couldn&apos;t reach your iPhone</div>
+        <div className="max-w-[18rem] text-xs text-muted-foreground">
+          {status.error ?? "The device bridge stopped."} Then pick the iPhone again in the sidebar.
+        </div>
+      </div>
+    );
+  }
+
+  const { label, hint } = iosBridgeCopy(status?.phase ?? "connecting");
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
-      <PreviewLoader
-        label={building ? "Building the test driver on your iPhone" : "Connecting to your iPhone"}
-      />
-      <div className="max-w-[18rem] text-xs text-muted-foreground">
-        {building
-          ? "First connect builds the XCTest driver on the device — this can take up to ~10 min. Keep the iPhone unlocked and plugged in; tap Trust if prompted."
-          : "Starting the device bridge…"}
-      </div>
+      <PreviewLoader label={label} />
+      <div className="max-w-[18rem] text-xs text-muted-foreground">{hint}</div>
     </div>
   );
+}
+
+function iosBridgeCopy(phase: IosBridgeStatus["phase"]): { label: string; hint: string } {
+  switch (phase) {
+    case "updating":
+      return {
+        label: "Updating the iPhone bridge",
+        hint: "Maestro Deck was updated: installing the matching iPhone bridge (about a minute, once). Needs network.",
+      };
+    case "locked":
+      return {
+        label: "Unlock your iPhone",
+        hint: "The test driver starts as soon as the iPhone is unlocked. Setting Auto-Lock to Never while testing avoids this.",
+      };
+    case "building":
+      return {
+        label: "Building the test driver for this iPhone",
+        hint: "Only the first connection of each iPhone builds it (~30 s). Keep the iPhone unlocked and plugged in; tap Trust if prompted.",
+      };
+    case "starting":
+    case "ready":
+      return {
+        label: "Starting the test driver on your iPhone",
+        hint: "A few seconds. Keep the iPhone unlocked.",
+      };
+    default:
+      return {
+        label: "Connecting to your iPhone",
+        hint: "Looking for the iPhone over USB. Keep it unlocked and plugged in.",
+      };
+  }
 }

@@ -11,8 +11,9 @@ vi.mock("@/lib/ipc", () => ({
     iosPhysicalSetupStatus: vi.fn().mockResolvedValue({
       xcodeInstalled: true,
       maestroVersion: "2.6.0",
-      maestroIs251: false,
+      maestroIsSupported: false,
       maestroPatched: false,
+      bridgeCurrent: false,
     }),
   },
 }));
@@ -44,8 +45,8 @@ describe("PhysicalIosSetup", () => {
     expect(html).toMatch(/Checking your setup/i);
   });
 
-  it("does not flash a false 'need 2.5.1' before the status loads", () => {
+  it("does not flash a false 'patches 2.10.0' hint before the status loads", () => {
     const html = render();
-    expect(html).not.toMatch(/need 2\.5\.1/i);
+    expect(html).not.toMatch(/patches 2\.10\.0/i);
   });
 });

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { Check, Eye, EyeOff, ImageOff, RotateCcw, TriangleAlert } from "lucide-react";
@@ -140,6 +140,9 @@ export function ScreenshotReview() {
   const ignoreStatusBar = useVisualRegressionStore((s) => s.ignoreStatusBar);
   const [showDiff, setShowDiff] = useState(true);
   const [pending, setPending] = useState(false);
+  // Guards in the same tick as the click: two quick clicks would both see
+  // `pending` false, resolve twice and skip the next capture unreviewed.
+  const deciding = useRef(false);
 
   if (!open || !report || queue.length === 0) return null;
 
@@ -165,7 +168,8 @@ export function ScreenshotReview() {
   const masked = mask.top > 0 || mask.bottom > 0 || mask.right > 0;
 
   const decide = async (decision: "keep" | "replace") => {
-    if (pending) return;
+    if (deciding.current) return;
+    deciding.current = true;
     setPending(true);
     try {
       await ipc.resolveComparison({
@@ -180,6 +184,7 @@ export function ScreenshotReview() {
     } catch (err) {
       toast.error("Could not update bank", err instanceof Error ? err.message : String(err));
     } finally {
+      deciding.current = false;
       setPending(false);
     }
   };

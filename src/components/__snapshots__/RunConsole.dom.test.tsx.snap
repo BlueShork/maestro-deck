@@ -1,0 +1,599 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RunConsole snapshots > empty console 1`] = `
+<section
+  class="flex h-full min-h-0 flex-col bg-background"
+>
+  <div
+    class="flex shrink-0 items-stretch border-b border-border bg-background h-10"
+  >
+    <div
+      class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-3"
+    >
+      <span
+        class="mono-label truncate"
+      >
+        Console
+      </span>
+    </div>
+    <div
+      class="flex shrink-0 items-stretch"
+    >
+      <div
+        aria-label="Console view"
+        class="flex items-stretch"
+        role="group"
+      >
+        <button
+          aria-pressed="true"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium bg-accent text-foreground shadow-[inset_0_-2px_0_hsl(var(--brand))]"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-list h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M3 5h.01"
+            />
+            <path
+              d="M3 12h.01"
+            />
+            <path
+              d="M3 19h.01"
+            />
+            <path
+              d="M8 5h13"
+            />
+            <path
+              d="M8 12h13"
+            />
+            <path
+              d="M8 19h13"
+            />
+          </svg>
+          Simple
+        </button>
+        <button
+          aria-pressed="false"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-terminal h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M12 19h8"
+            />
+            <path
+              d="m4 17 6-6-6-6"
+            />
+          </svg>
+          Technical
+        </button>
+        <button
+          aria-pressed="false"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-activity h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+            />
+          </svg>
+          Performance
+        </button>
+      </div>
+      <button
+        class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+        disabled=""
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-eraser h-3 w-3"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"
+          />
+          <path
+            d="m5.082 11.09 8.828 8.828"
+          />
+        </svg>
+        Clear
+      </button>
+    </div>
+  </div>
+  <div
+    class="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 text-[11px] leading-relaxed"
+  >
+    <div
+      class="text-muted-foreground"
+    >
+      No output yet. Press Run to execute the current flow.
+    </div>
+  </div>
+</section>
+`;
+
+exports[`RunConsole snapshots > finished run with a failed step 1`] = `
+<section
+  class="flex h-full min-h-0 flex-col bg-background"
+>
+  <div
+    class="flex shrink-0 items-stretch border-b border-border bg-background h-10"
+  >
+    <div
+      class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-3"
+    >
+      <span
+        class="mono-label truncate"
+      >
+        Console
+      </span>
+      <span
+        class="px-1.5 py-0.5 font-mono text-[10px] uppercase leading-none bg-destructive/15 text-destructive"
+        title="Flow failed — exit code 1"
+      >
+        Failed
+      </span>
+    </div>
+    <div
+      class="flex shrink-0 items-stretch"
+    >
+      <div
+        aria-label="Console view"
+        class="flex items-stretch"
+        role="group"
+      >
+        <button
+          aria-pressed="true"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium bg-accent text-foreground shadow-[inset_0_-2px_0_hsl(var(--brand))]"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-list h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M3 5h.01"
+            />
+            <path
+              d="M3 12h.01"
+            />
+            <path
+              d="M3 19h.01"
+            />
+            <path
+              d="M8 5h13"
+            />
+            <path
+              d="M8 12h13"
+            />
+            <path
+              d="M8 19h13"
+            />
+          </svg>
+          Simple
+        </button>
+        <button
+          aria-pressed="false"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-terminal h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M12 19h8"
+            />
+            <path
+              d="m4 17 6-6-6-6"
+            />
+          </svg>
+          Technical
+        </button>
+        <button
+          aria-pressed="false"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-activity h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+            />
+          </svg>
+          Performance
+        </button>
+      </div>
+      <button
+        class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-eraser h-3 w-3"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"
+          />
+          <path
+            d="m5.082 11.09 8.828 8.828"
+          />
+        </svg>
+        Clear
+      </button>
+    </div>
+  </div>
+  <div
+    class="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 text-[11px] leading-relaxed"
+  >
+    <div
+      class="-mx-2"
+    >
+      <div
+        class="flex items-center gap-2.5 whitespace-pre border-l-2 border-transparent px-2 py-0.5 text-foreground"
+      >
+        <span
+          aria-hidden="true"
+          class="step-pip step-pip-done"
+        />
+        <span
+          class="flex-1 truncate"
+        >
+          Open com.app app
+        </span>
+        <span
+          class="tabular-nums text-muted-foreground"
+        >
+          1.2s
+        </span>
+      </div>
+      <div
+        class="flex items-center gap-2.5 whitespace-pre border-l-2 border-transparent px-2 py-0.5 text-muted-foreground"
+      >
+        <span
+          aria-hidden="true"
+          class="step-pip step-pip-skipped"
+        />
+        <span
+          class="flex-1 truncate"
+        >
+          Tap "Button 1"
+        </span>
+        <span
+          class="tabular-nums text-muted-foreground"
+        >
+          skipped
+        </span>
+      </div>
+      <div
+        class="flex items-center gap-2.5 whitespace-pre border-l-2 border-transparent px-2 py-0.5 text-destructive"
+      >
+        <span
+          aria-hidden="true"
+          class="step-pip step-pip-failed"
+        />
+        <span
+          class="flex-1 truncate"
+        >
+          Tap "Button 2"
+        </span>
+        <span
+          class="tabular-nums text-muted-foreground"
+        >
+          0.3s
+        </span>
+        <span
+          class="ml-2 truncate text-destructive/80"
+          title="Element not found"
+        >
+          — 
+          Element not found
+        </span>
+      </div>
+      <div
+        class="flex items-center gap-2.5 whitespace-pre border-l-2 border-transparent px-2 py-0.5 text-muted-foreground"
+      >
+        <span
+          aria-hidden="true"
+          class="step-pip step-pip-pending"
+        />
+        <span
+          class="flex-1 truncate"
+        >
+          Tap "Button 3"
+        </span>
+        <span
+          class="tabular-nums text-muted-foreground"
+        />
+      </div>
+      <div
+        class="mt-3 flex items-center gap-2.5 border px-3 py-2 border-destructive/35 bg-destructive/10 text-muted-foreground"
+      >
+        <span
+          aria-hidden="true"
+          class="step-pip step-pip-failed"
+        />
+        <b
+          class="font-semibold text-destructive"
+        >
+          Test failed
+        </b>
+        at step 3
+      </div>
+    </div>
+  </div>
+</section>
+`;
+
+exports[`RunConsole snapshots > technical log 1`] = `
+<section
+  class="flex h-full min-h-0 flex-col bg-background"
+>
+  <div
+    class="flex shrink-0 items-stretch border-b border-border bg-background h-10"
+  >
+    <div
+      class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-3"
+    >
+      <span
+        class="mono-label truncate"
+      >
+        Console
+      </span>
+    </div>
+    <div
+      class="flex shrink-0 items-stretch"
+    >
+      <div
+        aria-label="Console view"
+        class="flex items-stretch"
+        role="group"
+      >
+        <button
+          aria-pressed="false"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-list h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M3 5h.01"
+            />
+            <path
+              d="M3 12h.01"
+            />
+            <path
+              d="M3 19h.01"
+            />
+            <path
+              d="M8 5h13"
+            />
+            <path
+              d="M8 12h13"
+            />
+            <path
+              d="M8 19h13"
+            />
+          </svg>
+          Simple
+        </button>
+        <button
+          aria-pressed="true"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium bg-accent text-foreground shadow-[inset_0_-2px_0_hsl(var(--brand))]"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-terminal h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M12 19h8"
+            />
+            <path
+              d="m4 17 6-6-6-6"
+            />
+          </svg>
+          Technical
+        </button>
+        <button
+          aria-pressed="false"
+          class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-activity h-3 w-3"
+            fill="none"
+            height="24"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+            />
+          </svg>
+          Performance
+        </button>
+      </div>
+      <button
+        class="relative flex items-center justify-center gap-1.5 border-l border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 whitespace-nowrap px-3 text-xs font-medium"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-eraser h-3 w-3"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"
+          />
+          <path
+            d="m5.082 11.09 8.828 8.828"
+          />
+        </svg>
+        Clear
+      </button>
+    </div>
+  </div>
+  <div
+    class="allow-select min-h-0 flex-1 overflow-auto px-3 py-2 text-[11px] leading-relaxed"
+  >
+    <div
+      class="italic text-muted-foreground"
+    >
+      [
+      3
+       older lines dropped — console keeps the last 
+      2000
+      ]
+    </div>
+    <div
+      class="whitespace-pre-wrap font-mono text-muted-foreground italic"
+    >
+      <span
+        class=""
+      >
+        [runner started pid 42]
+      </span>
+    </div>
+    <div
+      class="whitespace-pre-wrap font-mono"
+    >
+      <span
+        class="text-amber-300"
+      >
+        Launch app
+      </span>
+      <span
+        class=""
+      >
+        ... COMPLETED
+      </span>
+    </div>
+    <div
+      class="whitespace-pre-wrap font-mono text-destructive"
+    >
+      <span
+        class=""
+      >
+        warning: slow device
+      </span>
+    </div>
+  </div>
+</section>
+`;

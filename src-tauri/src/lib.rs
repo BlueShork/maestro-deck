@@ -17,6 +17,7 @@ pub mod error;
 pub mod farm;
 pub mod hierarchy;
 pub mod input;
+pub mod ios_bridge;
 #[cfg(target_os = "macos")]
 pub mod ios_capture;
 pub mod ios_session;
@@ -109,6 +110,7 @@ pub fn run() {
             ios_device_bridge_installed,
             install_ios_device_bridge,
             ios_physical_setup_status,
+            ios_bridge_status,
             set_dark_mode,
             get_dark_mode,
             run_flow,

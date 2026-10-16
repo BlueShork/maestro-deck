@@ -41,6 +41,25 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm build
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v7
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm exec playwright install --with-deps webkit
+      # Visual references are macOS renders; they run locally (see e2e/visual.spec.ts).
+      - run: pnpm test:e2e --grep-invert @visual
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+
   rust-quality:
     runs-on: ubuntu-latest
     steps:
@@ -63,8 +82,9 @@ jobs:
         run: mkdir -p dist && touch dist/index.html
 
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-      - run: cargo check --manifest-path src-tauri/Cargo.toml
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
 
   sonarcloud:
     runs-on: ubuntu-latest

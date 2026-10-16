@@ -5,7 +5,7 @@
 // captureDeviceFrame so the tests run in the default node environment.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { captureDeviceFrame, registerDeviceCanvas } from "./deviceFrame";
+import { captureDeviceFrame, frameSourceFor, registerDeviceCanvas } from "./deviceFrame";
 
 /** Build a minimal HTMLCanvasElement stub. */
 function makeCanvas(w: number, h: number): HTMLCanvasElement {
@@ -71,5 +71,18 @@ describe("captureDeviceFrame", () => {
     registerDeviceCanvas(makeCanvas(1600, 900));
     const result = captureDeviceFrame(800);
     expect(result).not.toBeNull();
+  });
+});
+
+describe("frameSourceFor", () => {
+  it("gives each platform exactly one feed", () => {
+    expect(frameSourceFor("android")).toBe("h264");
+    expect(frameSourceFor("ios")).toBe("ios");
+    expect(frameSourceFor("web")).toBe("web");
+  });
+
+  it("lets nothing paint without a connected device", () => {
+    expect(frameSourceFor(null)).toBeNull();
+    expect(frameSourceFor(undefined)).toBeNull();
   });
 });
