@@ -31,7 +31,7 @@ import {
   toDevicePoint,
   wheelSwipeEndY,
 } from "@/lib/deviceGeometry";
-import { events, ipc } from "@/lib/ipc";
+import { events, ipc, type IosBridgeStatus } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import { useLocation } from "react-router-dom";
@@ -885,8 +885,9 @@ function EmptyState({
       </div>
     );
   }
-  // Physical iPhones build the on-device XCTest driver on first connect (~10 min),
-  // so a generic "Waiting for frames…" looks frozen. Show progress + reassurance.
+  // Physical iPhones start (or, the first time, build) the on-device XCTest
+  // driver before the first frame, so show the bridge's real phase instead of
+  // a generic "Waiting for frames…".
   if (iosPhysical && connected && !lightweight) {
     return <IosPhysicalWaiting />;
   }
@@ -955,27 +956,64 @@ function PreviewLoader({ label }: { label: string }) {
   );
 }
 
-/// Physical-iPhone preview placeholder. The first connect builds the XCTest driver
-/// on the device (~10 min), so the loader's stopwatch and a phase message make
-/// clear it's progressing — not frozen.
+/// Physical-iPhone preview placeholder. Polls the bridge's real bring-up phase
+/// (it prints what it's doing) so the label says whether it's reusing the
+/// runner, building it for a new iPhone (~30 s) or failed — and why.
 function IosPhysicalWaiting() {
-  // After ~25s the bridge is almost certainly in the xcodebuild phase. Only the
-  // label changes, so the loader keeps counting from the first connect.
-  const [building, setBuilding] = useState(false);
+  const [status, setStatus] = useState<IosBridgeStatus | null>(null);
   useEffect(() => {
-    const id = window.setTimeout(() => setBuilding(true), 25_000);
-    return () => window.clearTimeout(id);
+    let alive = true;
+    const poll = () =>
+      void ipc
+        .iosBridgeStatus()
+        .then((s) => alive && setStatus(s))
+        .catch(() => {});
+    poll();
+    const id = window.setInterval(poll, 1000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
   }, []);
+
+  if (status?.phase === "failed") {
+    return (
+      <div className="flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
+        <Smartphone className="h-8 w-8 text-destructive" />
+        <div className="font-display text-base font-medium">Couldn&apos;t reach your iPhone</div>
+        <div className="max-w-[18rem] text-xs text-muted-foreground">
+          {status.error ?? "The device bridge stopped."} Then pick the iPhone again in the sidebar.
+        </div>
+      </div>
+    );
+  }
+
+  const { label, hint } = iosBridgeCopy(status?.phase ?? "connecting");
   return (
     <div className="pointer-events-none flex aspect-[9/19.5] max-h-full w-auto flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface p-6 text-center">
-      <PreviewLoader
-        label={building ? "Building the test driver on your iPhone" : "Connecting to your iPhone"}
-      />
-      <div className="max-w-[18rem] text-xs text-muted-foreground">
-        {building
-          ? "First connect builds the XCTest driver on the device — this can take up to ~10 min. Keep the iPhone unlocked and plugged in; tap Trust if prompted."
-          : "Starting the device bridge…"}
-      </div>
+      <PreviewLoader label={label} />
+      <div className="max-w-[18rem] text-xs text-muted-foreground">{hint}</div>
     </div>
   );
+}
+
+function iosBridgeCopy(phase: IosBridgeStatus["phase"]): { label: string; hint: string } {
+  switch (phase) {
+    case "building":
+      return {
+        label: "Building the test driver for this iPhone",
+        hint: "Only the first connection of each iPhone builds it (~30 s). Keep the iPhone unlocked and plugged in; tap Trust if prompted.",
+      };
+    case "starting":
+    case "ready":
+      return {
+        label: "Starting the test driver on your iPhone",
+        hint: "A few seconds. Keep the iPhone unlocked.",
+      };
+    default:
+      return {
+        label: "Connecting to your iPhone",
+        hint: "Looking for the iPhone over USB. Keep it unlocked and plugged in.",
+      };
+  }
 }

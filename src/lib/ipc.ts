@@ -195,6 +195,7 @@ export const ipc = {
   installIosDeviceBridge: () => call<string>("install_ios_device_bridge"),
   // Auto-detected physical-iOS prerequisites for the in-app setup checklist.
   iosPhysicalSetupStatus: () => call<IosPhysicalSetupStatus>("ios_physical_setup_status"),
+  iosBridgeStatus: () => call<IosBridgeStatus | null>("ios_bridge_status"),
   getToolPaths: () => call<ToolPathsView>("get_tool_paths"),
   setToolPaths: (
     adb: string | null,
@@ -272,6 +273,13 @@ export const ipc = {
   pluginWorkspaceRead: (pluginId: string, workspace: string, path: string) =>
     call<string>("plugin_workspace_read", { pluginId, workspace, path }),
 };
+
+/** Bring-up of the physical-iPhone bridge (`ios_bridge_status`). */
+export interface IosBridgeStatus {
+  phase: "connecting" | "building" | "starting" | "ready" | "failed";
+  /** The bridge's own failure message, e.g. the iPhone dropped off USB. */
+  error: string | null;
+}
 
 export interface IosPhysicalSetupStatus {
   xcodeInstalled: boolean;

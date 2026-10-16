@@ -109,6 +109,7 @@ pub fn run() {
             ios_device_bridge_installed,
             install_ios_device_bridge,
             ios_physical_setup_status,
+            ios_bridge_status,
             set_dark_mode,
             get_dark_mode,
             run_flow,

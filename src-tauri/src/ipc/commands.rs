@@ -1292,6 +1292,26 @@ pub(crate) fn parse_maestro_version(out: &str) -> Option<String> {
     None
 }
 
+/// Bring-up of the physical-iPhone bridge, for the preview placeholder.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IosBridgeStatus {
+    pub phase: crate::ios_session::BridgePhase,
+    /// The bridge's own failure message (e.g. the iPhone dropped off USB).
+    pub error: Option<String>,
+}
+
+/// What the physical-iPhone bridge is doing right now, or None when no
+/// physical keeper is running.
+#[tauri::command]
+pub async fn ios_bridge_status(state: State<'_, AppState>) -> AppResult<Option<IosBridgeStatus>> {
+    let slot = state.ios_driver.lock().await;
+    Ok(slot.as_ref().filter(|k| k.is_physical()).map(|k| {
+        let (phase, error) = k.bridge_status();
+        IosBridgeStatus { phase, error }
+    }))
+}
+
 /// Status of the physical-iOS prerequisites that can be auto-detected on this Mac.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

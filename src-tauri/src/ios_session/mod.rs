@@ -359,6 +359,43 @@ pub struct IosDriverKeeper {
     target: IosTarget,
     /// Last time a `/status` probe succeeded (see [`Self::is_healthy`]).
     health_checked: parking_lot::Mutex<Option<std::time::Instant>>,
+    /// Physical devices: what the bridge is doing, read from its stdout.
+    bridge_phase: Arc<parking_lot::Mutex<BridgePhase>>,
+}
+
+/// Bring-up phase of the `maestro-ios-device` bridge, parsed from the lines it
+/// prints, so the preview can say what it is waiting on instead of guessing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BridgePhase {
+    /// Looking for the iPhone over USB.
+    Connecting,
+    /// Compiling the XCTest runner (first connection of this iPhone, ~30 s).
+    Building,
+    /// Launching the runner on the iPhone (a few seconds).
+    Starting,
+    /// The bridge reported the driver ready.
+    Ready,
+    /// The bridge exited with an error (see `warmup_error`).
+    Failed,
+}
+
+/// Map one bridge stdout line to the phase it announces, if any. Returns the
+/// error text for a failure line (the bridge prefixes them with ❌).
+fn parse_bridge_line(line: &str) -> Option<(BridgePhase, Option<String>)> {
+    let line = line.trim();
+    if let Some(err) = line.strip_prefix("❌") {
+        return Some((BridgePhase::Failed, Some(err.trim().to_string())));
+    }
+    if line.starts_with("🔨") {
+        Some((BridgePhase::Building, None))
+    } else if line.starts_with("▶️") || line.contains("Runner already built") {
+        Some((BridgePhase::Starting, None))
+    } else if line.contains("Runner already running") || line.starts_with("✅ Ready") {
+        Some((BridgePhase::Ready, None))
+    } else {
+        None
+    }
 }
 
 /// How long a successful `/status` probe vouches for the on-device runner
@@ -379,6 +416,11 @@ impl IosDriverKeeper {
     /// True for physical devices (drives screenshot source + reuse checks).
     pub fn is_physical(&self) -> bool {
         self.target == IosTarget::Physical
+    }
+
+    /// Physical devices: the bridge's bring-up phase and its error, if any.
+    pub fn bridge_status(&self) -> (BridgePhase, Option<String>) {
+        (*self.bridge_phase.lock(), self.warmup_error.lock().clone())
     }
 
     /// True once the driver has served real data at least once (cached). Cheap, no I/O.
@@ -482,6 +524,7 @@ impl IosDriverKeeper {
             warmup_error,
             target: IosTarget::Simulator,
             health_checked: parking_lot::Mutex::new(None),
+            bridge_phase: Arc::new(parking_lot::Mutex::new(BridgePhase::Starting)),
         }))
     }
 
@@ -504,8 +547,9 @@ impl IosDriverKeeper {
         // stopped before respawning) — cull them so we always get 6001.
         kill_orphan_bridges_for(udid).await;
         let bin = crate::tool_paths::maestro_ios_device_bin();
-        let bridge = Command::new(&bin)
+        let mut bridge = Command::new(&bin)
             .args(["--team-id", &team, "--device", udid])
+            .stdout(std::process::Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| {
@@ -520,15 +564,39 @@ impl IosDriverKeeper {
                 }
             })?;
 
+        // Follow the bridge's progress lines: the preview shows the phase, and
+        // a ❌ line fails `wait_until_ready` at once with the bridge's reason
+        // (e.g. the iPhone dropped off USB) instead of after the full budget.
+        let warmup_error: Arc<parking_lot::Mutex<Option<String>>> = Arc::default();
+        let bridge_phase = Arc::new(parking_lot::Mutex::new(BridgePhase::Connecting));
+        if let Some(stdout) = bridge.stdout.take() {
+            let phase = bridge_phase.clone();
+            let error = warmup_error.clone();
+            tokio::spawn(async move {
+                use tokio::io::AsyncBufReadExt;
+                let mut lines = tokio::io::BufReader::new(stdout).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    info!(target: "maestro_ios_device", "{line}");
+                    if let Some((p, err)) = parse_bridge_line(&line) {
+                        *phase.lock() = p;
+                        if err.is_some() {
+                            *error.lock() = err;
+                        }
+                    }
+                }
+            });
+        }
+
         Ok(Arc::new(Self {
             udid: udid.to_string(),
             http: IosHttpClient::new(PHYSICAL_BRIDGE_PORT)?,
             device_info: parking_lot::RwLock::new(None),
             mcp: None,
             driver_child: AsyncMutex::new(Some(bridge)),
-            warmup_error: Arc::default(),
+            warmup_error,
             target: IosTarget::Physical,
             health_checked: parking_lot::Mutex::new(None),
+            bridge_phase,
         }))
     }
 
@@ -895,5 +963,38 @@ mod tests {
                 .await
                 .unwrap_or_else(|e| panic!("touch {i} failed: {e}"));
         }
+    }
+
+    #[test]
+    fn parses_bridge_progress_lines() {
+        assert_eq!(
+            parse_bridge_line("🔨 Building the runner for this device (first time only, ~30 s)..."),
+            Some((BridgePhase::Building, None))
+        );
+        assert_eq!(
+            parse_bridge_line("♻️  Runner already built for this device"),
+            Some((BridgePhase::Starting, None))
+        );
+        assert_eq!(
+            parse_bridge_line("▶️  Starting runner..."),
+            Some((BridgePhase::Starting, None))
+        );
+        assert_eq!(
+            parse_bridge_line("♻️  Runner already running on the device"),
+            Some((BridgePhase::Ready, None))
+        );
+        assert_eq!(
+            parse_bridge_line("✅ Ready! Run:"),
+            Some((BridgePhase::Ready, None))
+        );
+        assert_eq!(
+            parse_bridge_line("❌ iPhone X is not reachable over USB. Unlock it"),
+            Some((
+                BridgePhase::Failed,
+                Some("iPhone X is not reachable over USB. Unlock it".into())
+            ))
+        );
+        assert_eq!(parse_bridge_line("✅ Build complete"), None);
+        assert_eq!(parse_bridge_line("maestro-ios-device v2.10.0"), None);
     }
 }
