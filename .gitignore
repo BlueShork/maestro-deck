@@ -59,6 +59,7 @@ coverage/
 *.exe
 
 # Local-only working docs (not for public repo)
+docs/
 docs/superpowers/
 AUDIT.md
 AUDIT_SECU.md
