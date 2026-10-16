@@ -124,7 +124,8 @@ export function PhysicalIosSetup({
               Mode), then tap Trust when you plug it in.
             </span>
             <span>
-              The first connection builds the driver on the phone (~10 min); later ones are fast.
+              The first connection of each iPhone builds the driver (~30 s); later ones take a few
+              seconds.
             </span>
           </div>
           {allReady && (
