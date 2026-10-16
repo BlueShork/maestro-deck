@@ -34,7 +34,7 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 # `rust_crypto` is REQUIRED: since v10 the default features ship NO crypto
 # backend — RS256 signing then compiles fine but panic!s at runtime (and with
 # `panic = "abort"` that aborts the whole app when Billy requests a token).
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+jsonwebtoken = { version = "11", features = ["rust_crypto"] }
 
 # HTTP for token exchange.
 # `rustls-tls-native-roots` (NOT plain `rustls-tls`): plain rustls-tls trusts
