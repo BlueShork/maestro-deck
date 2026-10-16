@@ -1170,6 +1170,18 @@ pub async fn run_flow(
             // `maestro-ios-device` bridge driver via `--driver-host-port`, so we
             // must NOT tear the keeper down (unlike the simulator path). The
             // HTTP `/screenshot` poller keeps the device mirrored throughout.
+            // The bridge may be gone (app restarted, phone replugged): with
+            // nothing on the port, maestro tries to build its own driver and
+            // dies on a missing build directory. Bring it back first.
+            let keeper = ensure_ios_keeper(&device.serial, state.inner()).await?;
+            if !keeper.wait_until_ready().await {
+                let (_, error) = keeper.bridge_status();
+                return Err(AppError::IosDriverUnreachable(error.unwrap_or_else(|| {
+                    "the iPhone's test driver didn't start — keep the iPhone unlocked and \
+                     plugged in, then run again"
+                        .into()
+                })));
+            }
             return runner::spawn_ios_device_runner(
                 app,
                 &device.serial,
