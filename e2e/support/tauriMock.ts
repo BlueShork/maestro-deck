@@ -33,6 +33,14 @@ export interface Scenario {
   failures?: Record<string, string>;
   /** Pre-seeded localStorage entries (zustand persist blobs, etc.). */
   storage?: Record<string, string>;
+  credentials?: Record<string, string>;
+  deferred?: string[];
+  cloudApi?: Record<string, CloudReply | CloudReply[]>;
+}
+
+export interface CloudReply {
+  status: number;
+  body: string;
 }
 
 export interface RecordedCall {
@@ -54,6 +62,13 @@ export function installTauriMock(scenario: Scenario): void {
     },
     responses: { ...(scenario.responses ?? {}) } as Record<string, unknown>,
     failures: { ...(scenario.failures ?? {}) } as Record<string, string>,
+    credentials: { ...(scenario.credentials ?? {}) } as Record<string, string>,
+    cloudApi: { ...(scenario.cloudApi ?? {}) } as Record<string, CloudReply | CloudReply[]>,
+    deferred: new Set(scenario.deferred ?? []),
+    pending: new Map<
+      string,
+      Array<{ resolve: (v: unknown) => void; reject: (e: Error) => void }>
+    >(),
     calls: [] as Array<{ cmd: string; args: unknown }>,
     listeners: new Map<string, number[]>(),
     callbacks: new Map<number, (data: unknown) => void>(),
@@ -81,6 +96,31 @@ export function installTauriMock(scenario: Scenario): void {
     for (const id of state.listeners.get(event) ?? []) {
       state.callbacks.get(id)?.({ event, id: state.nextEventId++, payload });
     }
+  }
+
+  function listDir(dir: string): unknown {
+    const dirs = new Set<string>();
+    const files = new Set<string>();
+    const entries = [...Object.keys(state.files), ...[...state.dirs].map((d) => `${d}/`)];
+    for (const k of entries) {
+      if (!k.startsWith(`${dir}/`)) continue;
+      const rest = k.slice(dir.length + 1);
+      const first = rest.split("/")[0];
+      if (!first || first.startsWith(".")) continue;
+      if (rest.includes("/")) dirs.add(first);
+      else if (/\.ya?ml$/i.test(first)) files.add(first);
+    }
+    const name = dir.split("/").pop();
+    const sorted = (set: Set<string>) => [...set].sort();
+    return {
+      kind: "dir",
+      name,
+      path: dir,
+      children: [
+        ...sorted(dirs).map((d) => listDir(`${dir}/${d}`)),
+        ...sorted(files).map((f) => ({ kind: "file", name: f, path: `${dir}/${f}` })),
+      ],
+    };
   }
 
   function defaults(cmd: string, a: Record<string, unknown>, headers: Record<string, string>) {
@@ -116,7 +156,11 @@ export function installTauriMock(scenario: Scenario): void {
       }
       case "plugin:fs|exists": {
         const p = a.path as string;
-        return p in state.files || state.dirs.has(p);
+        return (
+          p in state.files ||
+          state.dirs.has(p) ||
+          Object.keys(state.files).some((k) => k.startsWith(`${p}/`))
+        );
       }
       case "plugin:fs|mkdir":
         state.dirs.add(a.path as string);
@@ -126,6 +170,7 @@ export function installTauriMock(scenario: Scenario): void {
         for (const k of Object.keys(state.files)) {
           if (k === p || k.startsWith(`${p}/`)) delete state.files[k];
         }
+        for (const d of [...state.dirs]) if (d === p || d.startsWith(`${p}/`)) state.dirs.delete(d);
         return null;
       }
       case "plugin:fs|rename": {
@@ -135,6 +180,12 @@ export function installTauriMock(scenario: Scenario): void {
           if (k === from || k.startsWith(`${from}/`)) {
             state.files[to + k.slice(from.length)] = state.files[k];
             delete state.files[k];
+          }
+        }
+        for (const d of [...state.dirs]) {
+          if (d === from || d.startsWith(`${from}/`)) {
+            state.dirs.delete(d);
+            state.dirs.add(to + d.slice(from.length));
           }
         }
         return null;
@@ -173,12 +224,33 @@ export function installTauriMock(scenario: Scenario): void {
       case "managed_tools":
         return {};
       case "list_workspace": {
-        const tree = state.trees[a.path as string];
-        if (!tree) throw new Error(`cannot read ${a.path}`);
-        return tree;
+        if (!state.trees[a.path as string]) throw new Error(`cannot read ${a.path}`);
+        return listDir(a.path as string);
       }
       case "run_flow":
         return 4242;
+      case "cloud_api_request": {
+        const reply = state.cloudApi[`${a.method} ${a.path}`];
+        if (!reply) return { status: 404, body: '{"error":"not_found","message":"no such route"}' };
+        if (!Array.isArray(reply)) return reply;
+        return reply.length > 1 ? reply.shift() : reply[0];
+      }
+      case "get_credential":
+        return state.credentials[a.provider as string] ?? null;
+      case "save_credential":
+        state.credentials[a.provider as string] = a.payload as string;
+        return null;
+      case "delete_credential":
+        delete state.credentials[a.provider as string];
+        return null;
+      case "read_workspace_file": {
+        const text = state.files[`${a.workspace}/${a.relPath}`];
+        if (text === undefined) throw new Error(`no such flow: ${a.relPath}`);
+        return text;
+      }
+      case "write_workspace_file":
+        state.files[`${a.workspace}/${a.relPath}`] = a.content as string;
+        return null;
       case "plugins_list":
         return [];
       case "plugins_registry":
@@ -232,6 +304,13 @@ export function installTauriMock(scenario: Scenario): void {
             : args,
       });
     }
+    if (state.deferred.has(cmd)) {
+      return new Promise((resolve, reject) => {
+        const list = state.pending.get(cmd) ?? [];
+        list.push({ resolve, reject });
+        state.pending.set(cmd, list);
+      });
+    }
     if (cmd in state.failures) throw new Error(state.failures[cmd]);
     if (cmd in state.responses) return state.responses[cmd];
     return defaults(cmd, a, options?.headers ?? {});
@@ -274,6 +353,13 @@ export function installTauriMock(scenario: Scenario): void {
   };
   w.__e2e = {
     emit,
+    settle(cmd: string, value: unknown, error?: string) {
+      for (const p of state.pending.get(cmd) ?? []) {
+        if (error !== undefined) p.reject(new Error(error));
+        else p.resolve(value);
+      }
+      state.pending.delete(cmd);
+    },
     state,
     calls: (cmd?: string) => state.calls.filter((c) => !cmd || c.cmd === cmd),
   };

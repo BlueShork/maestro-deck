@@ -69,3 +69,5 @@ release-artifacts/
 # Playwright
 test-results/
 playwright-report/
+
+.nyc_output

@@ -1,5 +1,5 @@
 import { expect, test, type App } from "./support/app";
-import { IPHONE_SIM, PIXEL, screenPng } from "./support/data";
+import { HIERARCHY, IPHONE_SIM, PIXEL, screenPng } from "./support/data";
 
 const W = 402;
 const H = 874;
@@ -30,37 +30,6 @@ async function connectSim(app: App) {
 async function pushIosFrame(app: App, accent = [255, 92, 0]) {
   await app.emit("ios_frame", { data: screenPng(W, H, accent), width: W, height: H });
 }
-
-const HIERARCHY = {
-  xml_raw: "",
-  root: {
-    id: "0",
-    resource_id: null,
-    text: null,
-    content_desc: null,
-    class_name: "Application",
-    package: "com.example.app",
-    bounds: { left: 0, top: 0, right: W, bottom: H },
-    clickable: false,
-    enabled: true,
-    focused: false,
-    children: [
-      {
-        id: "1",
-        resource_id: "login_button",
-        text: "Log in",
-        content_desc: null,
-        class_name: "Button",
-        package: "com.example.app",
-        bounds: { left: 60, top: 393, right: 342, bottom: 454 },
-        clickable: true,
-        enabled: true,
-        focused: false,
-        children: [],
-      },
-    ],
-  },
-};
 
 test.describe("devices", () => {
   test("lists ready devices and connects one in a click", async ({ app, page }) => {

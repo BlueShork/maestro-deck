@@ -26,12 +26,13 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
   const current = useFlowStore((s) => s.content);
   const filePath = useFlowStore((s) => s.filePath);
   const setContent = useFlowStore((s) => s.setContent);
+  const next = current.endsWith("\n") && !proposed.endsWith("\n") ? `${proposed}\n` : proposed;
 
   // Every YAML block in the chat mounts one of these; only an open dialog
   // pays for the diff (it would otherwise rerun on each editor keystroke).
   const diff = useMemo(
-    () => (open ? lineDiff(current.split("\n"), proposed.split("\n")) : []),
-    [open, current, proposed],
+    () => (open ? lineDiff(current.split("\n"), next.split("\n")) : []),
+    [open, current, next],
   );
 
   const stats = useMemo(() => {
@@ -45,7 +46,7 @@ export function ApplyDiffDialog({ open, onOpenChange, proposed }: Props) {
   }, [diff]);
 
   const apply = () => {
-    setContent(proposed);
+    setContent(next);
     onOpenChange(false);
   };
 

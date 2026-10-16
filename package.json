@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
+    "test:e2e:coverage": "rm -rf .nyc_output && E2E_COVERAGE=1 playwright test --grep-invert @visual; nyc report",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
     "fetch-models": "node scripts/fetch-models.mjs"
@@ -88,11 +89,13 @@
     "globals": "^17.6.0",
     "jsdom": "^26.1.0",
     "lefthook": "^2.1.6",
+    "nyc": "^18.0.0",
     "postcss": "^8.5.23",
     "prettier": "^3.3.3",
     "tailwindcss": "^3.4.15",
     "typescript": "^6.0.3",
     "vite": "^6.4.3",
+    "vite-plugin-istanbul": "^9.0.1",
     "vitest": "^4.1.11"
   },
   "engines": {

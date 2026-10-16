@@ -74,6 +74,37 @@ export const IPHONE_SIM = {
   physical: false,
 };
 
+export const HIERARCHY = {
+  xml_raw: "",
+  root: {
+    id: "0",
+    resource_id: null,
+    text: null,
+    content_desc: null,
+    class_name: "Application",
+    package: "com.example.app",
+    bounds: { left: 0, top: 0, right: 402, bottom: 874 },
+    clickable: false,
+    enabled: true,
+    focused: false,
+    children: [
+      {
+        id: "1",
+        resource_id: "login_button",
+        text: "Log in",
+        content_desc: null,
+        class_name: "Button",
+        package: "com.example.app",
+        bounds: { left: 60, top: 393, right: 342, bottom: 454 },
+        clickable: true,
+        enabled: true,
+        focused: false,
+        children: [],
+      },
+    ],
+  },
+};
+
 /** Maestro's plain-text output for a run of LOGIN_FLOW. */
 export const PASSING_RUN = [
   "Running on emulator-5554",

@@ -1,6 +1,9 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
+import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+
 import { test as base, expect, type Page } from "@playwright/test";
 
 import { installTauriMock, type RecordedCall, type Scenario } from "./tauriMock";
@@ -13,6 +16,7 @@ const SETTLED_STORAGE: Record<string, string> = {
   "maestro-deck.telemetry": persisted({ consent: "denied", decidedAt: null, installId: null }),
   "maestro-deck.tour": persisted({ hasSeenTour: true }),
   "maestro-deck.onboarding": persisted({ done: true }),
+  "maestro-deck.cloud-invite": persisted({ asked: true }),
 };
 
 export class App {
@@ -85,6 +89,24 @@ export class App {
     );
   }
 
+  async settle(cmd: string, value: unknown = null, error?: string): Promise<void> {
+    await this.page.evaluate(
+      ([c, v, e]) =>
+        (
+          window as unknown as {
+            __e2e: { settle: (c: string, v: unknown, e?: string) => void };
+          }
+        ).__e2e.settle(c, v, e ?? undefined),
+      [cmd, value, error ?? null] as const,
+    );
+  }
+
+  async setDevices(devices: unknown[]): Promise<void> {
+    await this.page.evaluate((d) => {
+      (window as unknown as { __e2e: { state: { devices: unknown[] } } }).__e2e.state.devices = d;
+    }, devices);
+  }
+
   /** Waits until `cmd` has been called at least `times` times. */
   async waitForCall(cmd: string, times = 1): Promise<RecordedCall[]> {
     await expect.poll(async () => (await this.calls(cmd)).length).toBeGreaterThanOrEqual(times);
@@ -95,6 +117,15 @@ export class App {
 export const test = base.extend<{ app: App }>({
   app: async ({ page }, use) => {
     await use(new App(page));
+    if (process.env.E2E_COVERAGE) {
+      const cov = await page
+        .evaluate(() => (window as unknown as { __coverage__?: unknown }).__coverage__)
+        .catch(() => undefined);
+      if (cov) {
+        mkdirSync(".nyc_output", { recursive: true });
+        writeFileSync(`.nyc_output/${randomUUID()}.json`, JSON.stringify(cov));
+      }
+    }
   },
 });
 

@@ -29,7 +29,6 @@ interface WorkspaceState {
   setLoading: (v: boolean) => void;
   setError: (msg: string | null) => void;
   setHasConfig: (v: boolean) => void;
-  toggleExpanded: (path: string) => void;
   setExpanded: (path: string, value: boolean) => void;
   setLastOpenFile: (path: string | null) => void;
   setCloudApkPath: (path: string | null) => void;
@@ -63,8 +62,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       setLoading: (loading) => set({ loading }),
       setError: (error) => set({ error }),
       setHasConfig: (hasConfig) => set({ hasConfig }),
-      toggleExpanded: (path) =>
-        set((s) => ({ expanded: { ...s.expanded, [path]: !s.expanded[path] } })),
       setExpanded: (path, value) => set((s) => ({ expanded: { ...s.expanded, [path]: value } })),
       setLastOpenFile: (lastOpenFile) => set({ lastOpenFile }),
       setCloudApkPath: (cloudApkPath) => set({ cloudApkPath }),

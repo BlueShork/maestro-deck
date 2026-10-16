@@ -1,0 +1,6 @@
+{
+  "temp-dir": ".nyc_output",
+  "report-dir": "coverage/e2e",
+  "reporter": ["text-summary", "html", "json-summary"],
+  "exclude-after-remap": false
+}

@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import istanbul from "vite-plugin-istanbul";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 
@@ -16,7 +17,16 @@ export default defineConfig(async () => ({
   // useMemo/useCallback. Targets React 19 by default, so no runtime polyfill
   // is needed. It only runs through Vite's Babel pass — vitest.config.ts has
   // its own pipeline and is unaffected.
-  plugins: [react({ babel: { plugins: [["babel-plugin-react-compiler", {}]] } })],
+  plugins: [
+    react({ babel: { plugins: [["babel-plugin-react-compiler", {}]] } }),
+    process.env.E2E_COVERAGE &&
+      istanbul({
+        include: "src/**",
+        exclude: ["src/**/*.test.*", "src/test/**"],
+        extension: [".ts", ".tsx"],
+        forceBuildInstrument: true,
+      }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

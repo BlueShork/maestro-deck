@@ -329,7 +329,7 @@ function TreeItem({
   onCancelRename,
 }: TreeItemProps) {
   const expanded = useWorkspaceStore((s) => s.expanded[node.path] ?? depth === 0);
-  const toggle = useWorkspaceStore((s) => s.toggleExpanded);
+  const setExpanded = useWorkspaceStore((s) => s.setExpanded);
   const activePath = useFlowStore((s) => s.filePath);
   const isRenaming = renamingPath === node.path;
 
@@ -356,7 +356,7 @@ function TreeItem({
               >
                 <button
                   type="button"
-                  onClick={() => toggle(node.path)}
+                  onClick={() => setExpanded(node.path, !expanded)}
                   className="flex h-full min-w-0 flex-1 items-center gap-2 text-left text-xs text-foreground/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <PixelChevron
