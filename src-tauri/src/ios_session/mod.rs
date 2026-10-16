@@ -104,6 +104,12 @@ impl IosHttpClient {
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(1))
             .timeout(Duration::from_secs(10))
+            // The runner drops the socket after every response without sending
+            // `Connection: close`, so a pooled connection may already be dead
+            // when the next request (e.g. a tap between two preview frames)
+            // goes out. A fresh local connection costs ~10 ms even through the
+            // physical-device forward.
+            .pool_max_idle_per_host(0)
             .build()
             .map_err(|e| AppError::IosDriverUnreachable(e.to_string()))?;
         Ok(Self {
@@ -845,5 +851,49 @@ mod tests {
         assert!(!crate::prockill::cmdline_matches(&other, &needles));
         let user_mcp = "java -classpath /opt/maestro/lib/* maestro.cli.AppKt mcp";
         assert!(!crate::prockill::cmdline_matches(user_mcp, &needles));
+    }
+
+    /// The XCTest runner answers HTTP/1.1 without `Connection: close` yet drops
+    /// the socket after each response (observed through the physical-device
+    /// forward). A pooled connection is then dead on its next use, which
+    /// surfaced as intermittent "touch: error sending request" taps.
+    #[tokio::test]
+    async fn every_request_survives_a_server_that_closes_after_each_response() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    return;
+                };
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 4096];
+                    if sock.read(&mut buf).await.unwrap_or(0) == 0 {
+                        return;
+                    }
+                    let body = r#"{"status":"ok"}"#;
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = sock.write_all(resp.as_bytes()).await;
+                    // Close a few ms later without having announced it: a
+                    // request sent on the parked connection in that window is
+                    // written to a socket that never answers.
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                });
+            }
+        });
+
+        // Back to back, like a tap landing between two preview frames.
+        let client = IosHttpClient::new(port).unwrap();
+        for i in 0..20 {
+            assert!(client.status().await, "status {i} failed");
+            client
+                .touch(1.0, 1.0, 0.0)
+                .await
+                .unwrap_or_else(|e| panic!("touch {i} failed: {e}"));
+        }
     }
 }
