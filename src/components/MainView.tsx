@@ -178,7 +178,7 @@ export function MainView() {
                                 handlers, so these buttons never turn into
                                 taps on the phone. */}
                             <FarmSessionBar />
-                            <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center p-4">
+                            <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center">
                               <DeviceView />
                               {cloudLive ? (
                                 <CloudLivePreview

@@ -204,17 +204,11 @@ test.describe("inspect mode", () => {
 });
 
 test.describe("device toolbar", () => {
-  test("sits under the phone once connected, arrows wait for the first frame", async ({
-    app,
-    page,
-  }) => {
+  test("appears under the phone with the first frame", async ({ app, page }) => {
     await app.launch({ devices: [IPHONE_SIM] });
     await connectSim(app);
     const up = page.getByRole("button", { name: "Scroll the device screen up" });
-    await expect(up).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Take screenshot" })).toBeDisabled();
-    // Dark mode is an adb feature: never offered for an iPhone.
-    await expect(page.getByRole("button", { name: "Toggle device dark mode" })).toHaveCount(0);
+    await expect(up).toHaveCount(0);
 
     await pushIosFrame(app);
     for (const dir of ["left", "up", "down", "right"]) {
@@ -222,6 +216,8 @@ test.describe("device toolbar", () => {
         page.getByRole("button", { name: `Scroll the device screen ${dir}` }),
       ).toBeEnabled();
     }
+    // Dark mode is an adb feature: never offered for an iPhone.
+    await expect(page.getByRole("button", { name: "Toggle device dark mode" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Press Home button" })).toBeEnabled();
 
     // Docked below the canvas and as wide as the device panel.

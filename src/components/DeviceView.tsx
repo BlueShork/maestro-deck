@@ -773,7 +773,9 @@ export function DeviceView() {
   );
 
   return (
-    <div className="flex h-full w-full flex-col">
+    // The waiting states fill the panel edge to edge; a live mirror gets
+    // breathing room around the phone and its toolbar.
+    <div className={cn("flex h-full w-full flex-col", hasFrame && "p-4")}>
       <div
         ref={containerRef}
         className="relative flex min-h-0 w-full flex-1 items-center justify-center"
@@ -821,7 +823,7 @@ export function DeviceView() {
           />
         ) : null}
       </div>
-      {current ? (
+      {hasFrame ? (
         <div className="mt-3 flex h-10 w-full shrink-0 items-stretch justify-between overflow-hidden rounded-md border border-border bg-background">
           <div className="flex border-r border-border">
             {isIos ? (
@@ -852,7 +854,7 @@ export function DeviceView() {
             <button
               type="button"
               onClick={() => void takeScreenshot()}
-              disabled={capturing || !hasFrame}
+              disabled={capturing}
               title="Screenshot · ⌘⇧S"
               aria-label="Take screenshot"
               className={TOOLBAR_BUTTON}
@@ -864,7 +866,6 @@ export function DeviceView() {
             <button
               type="button"
               onClick={() => scrollPage("left")}
-              disabled={!hasFrame}
               title="Scroll left"
               aria-label="Scroll the device screen left"
               className={TOOLBAR_BUTTON}
@@ -874,7 +875,6 @@ export function DeviceView() {
             <button
               type="button"
               onClick={() => scrollPage("up")}
-              disabled={!hasFrame}
               title="Scroll up"
               aria-label="Scroll the device screen up"
               className={TOOLBAR_BUTTON}
@@ -884,7 +884,6 @@ export function DeviceView() {
             <button
               type="button"
               onClick={() => scrollPage("down")}
-              disabled={!hasFrame}
               title="Scroll down"
               aria-label="Scroll the device screen down"
               className={TOOLBAR_BUTTON}
@@ -894,7 +893,6 @@ export function DeviceView() {
             <button
               type="button"
               onClick={() => scrollPage("right")}
-              disabled={!hasFrame}
               title="Scroll right"
               aria-label="Scroll the device screen right"
               className={TOOLBAR_BUTTON}
