@@ -47,6 +47,9 @@ class FakeIO {
   takeRecords() {
     return [];
   }
+  static observes(match: (el: Element) => boolean) {
+    return FakeIO.instances.some((io) => io.targets.some(match));
+  }
   static reveal(match: (el: Element) => boolean) {
     for (const io of FakeIO.instances) {
       const hits = io.targets.filter(match);
@@ -116,7 +119,10 @@ describe("ImageBankPage", () => {
     mount();
     await screen.findByRole("heading", { name: "Pixel 7" });
     expect(h.loadBankImage).not.toHaveBeenCalled();
-    act(() => FakeIO.reveal((el) => el.textContent?.includes("login") ?? false));
+    const login = (el: Element) => el.textContent?.includes("login") ?? false;
+    // Tiles start observing in an effect that can land after the heading shows.
+    await waitFor(() => expect(FakeIO.observes(login)).toBe(true));
+    act(() => FakeIO.reveal(login));
     await waitFor(() => expect(h.loadBankImage).toHaveBeenCalledTimes(1));
     expect(h.loadBankImage).toHaveBeenCalledWith("/ws", "Pixel_7_1080x2400", "login");
     expect(await screen.findByAltText("login")).toBeTruthy();
