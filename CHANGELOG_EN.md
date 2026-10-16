@@ -1,3 +1,23 @@
+# What's New in v1.3.0
+
+## Plugins
+- **GitLab plugin.** Open a merge request on GitLab (gitlab.com or your own instance) straight from Maestro Deck. Plugins can now ask you to allow a site of your choice, such as a self-hosted server; you can revoke that access at any time.
+- **Reportly plugin.** At the end of a run or a Run All, get a branded summary image of the results, ready to copy into Teams or Slack, or to save as a PNG.
+- **Theme plugins.** Restyle the app with themes from the marketplace, starting with Catppuccin (Latte and Mocha). The default look is unchanged.
+
+## Devices
+- **Physical iPhones are back**, now on Maestro 2.10. The first driver build takes about 30 seconds instead of about 10 minutes, the device view shows what the iPhone is doing while it starts (building, waiting for unlock, updating), and the bridge comes back on its own before a run.
+- **New device toolbar** under the phone, with Home, dark mode and screenshot, plus arrows to scroll up and down or swipe between pages.
+- Switching devices now properly releases the previous one first.
+
+## Reliability
+- **Runs are more dependable**: no console line is lost anymore, a run only ends after its last line, and heavy work no longer freezes the app.
+- **Unsaved edits are protected**, and several timing issues that could mix up state have been fixed.
+- **Faster and lighter**: console output is batched and heavy screens load on demand.
+- **Security**: app ids are validated and screenshots can no longer be saved outside their folder.
+
+---
+
 # What's New in v1.2.0
 
 ## Plugins
