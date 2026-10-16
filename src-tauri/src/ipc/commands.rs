@@ -958,9 +958,9 @@ pub async fn ios_device_bridge_installed() -> AppResult<bool> {
 
 /// Auto-install the `maestro-ios-device` bridge (Option A): download the release
 /// binary for this Mac's arch, mark it executable, run its `setup` (which fetches
-/// the XCTest runner + patched maestro **2.5.1** jars into `~/.maestro`), and
+/// the XCTest runner + patched maestro **2.10.0** jars into `~/.maestro`), and
 /// persist its path. We ship our own fork (BlueShork/maestro-ios-device) because
-/// upstream devicelab only patches maestro 2.0.9–2.1.0; ours adds 2.5.1. Apache-2.0,
+/// upstream devicelab only patches maestro 2.0.9–2.1.0; ours patches 2.10.0. Apache-2.0,
 /// so redistribution-by-fetch is fine. Only users who actually connect a physical
 /// iPhone ever trigger this.
 #[tauri::command]
@@ -1022,10 +1022,25 @@ pub async fn install_ios_device_bridge() -> AppResult<String> {
     }
 
     // `setup` fetches the prebuilt XCTest runner + patched maestro jars into
-    // ~/.maestro. No device required for this step.
+    // ~/.maestro. No device required for this step. It patches whichever
+    // `maestro` is first on PATH, so put the one the app runs (maybe the managed
+    // install) first — otherwise it could patch a different install.
     info!("running maestro-ios-device setup");
+    let maestro = crate::tool_paths::maestro_bin();
+    let mut path = std::env::var_os("PATH").unwrap_or_default();
+    if let Some(dir) = std::path::Path::new(&maestro)
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+    {
+        let mut dirs = vec![dir.to_path_buf()];
+        dirs.extend(std::env::split_paths(&path));
+        if let Ok(joined) = std::env::join_paths(dirs) {
+            path = joined;
+        }
+    }
     let out = tokio::process::Command::new(&dest)
         .arg("setup")
+        .env("PATH", path)
         .output()
         .await
         .map_err(|e| AppError::Other(format!("maestro-ios-device setup: {e}")))?;
@@ -1285,9 +1300,9 @@ pub struct IosPhysicalSetupStatus {
     pub xcode_installed: bool,
     /// Parsed `maestro --version`, or None if maestro isn't resolvable.
     pub maestro_version: Option<String>,
-    /// True iff `maestro_version == "2.5.1"`.
-    pub maestro_is_2_5_1: bool,
-    /// True iff the resolved maestro accepts `--driver-host-port` (patched).
+    /// True iff `maestro_version` is the one the bridge patches (`REQUIRED_MAESTRO`).
+    pub maestro_is_supported: bool,
+    /// True iff the resolved maestro carries the physical-device patch.
     pub maestro_patched: bool,
 }
 
@@ -1322,13 +1337,14 @@ pub async fn ios_physical_setup_status() -> AppResult<IosPhysicalSetupStatus> {
             parse_maestro_version(&text)
         });
 
-    let maestro_is_2_5_1 = maestro_version.as_deref() == Some("2.5.1");
-    let maestro_patched = crate::runner::maestro_supports_driver_host_port(&bin).await;
+    let maestro_is_supported =
+        maestro_version.as_deref() == Some(crate::env_check::REQUIRED_MAESTRO);
+    let maestro_patched = crate::runner::maestro_has_ios_device_patch(&bin).await;
 
     Ok(IosPhysicalSetupStatus {
         xcode_installed,
         maestro_version,
-        maestro_is_2_5_1,
+        maestro_is_supported,
         maestro_patched,
     })
 }

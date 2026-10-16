@@ -75,10 +75,10 @@ export function PhysicalIosSetup({
   const loading = status === null || bridgeInstalled === null;
 
   const xcode = status?.xcodeInstalled ?? false;
-  const is251 = status?.maestroIs251 ?? false;
+  const supported = status?.maestroIsSupported ?? false;
   const patched = status?.maestroPatched ?? false;
   const bridge = bridgeInstalled === true;
-  const allReady = xcode && is251 && patched && bridge && teamIdSet;
+  const allReady = xcode && supported && patched && bridge && teamIdSet;
 
   return (
     <SettingsSubgroup
@@ -98,9 +98,9 @@ export function PhysicalIosSetup({
             hint="Install the full Xcode from the App Store."
           />
           <Row
-            ok={is251}
-            label="Maestro 2.5.1"
-            hint={`${status?.maestroVersion ? `Found ${status.maestroVersion}; ` : ""}physical iPhones still need 2.5.1.`}
+            ok={supported}
+            label="Maestro 2.10.0"
+            hint={`${status?.maestroVersion ? `Found ${status.maestroVersion}; ` : ""}the iPhone bridge patches 2.10.0.`}
           />
           <Row
             ok={patched}
@@ -110,7 +110,7 @@ export function PhysicalIosSetup({
           <Row
             ok={bridge}
             label="Driver bridge installed"
-            hint="Downloads the bridge, the patched Maestro 2.5.1 jars and the XCTest runner (once, needs network)."
+            hint="Downloads the bridge, the patched Maestro 2.10.0 jars and the XCTest runner (once, needs network)."
             action={
               <Button size="sm" disabled={installing} onClick={onInstall}>
                 {installing ? "Installing…" : "Install"}

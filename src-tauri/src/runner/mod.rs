@@ -40,9 +40,9 @@ pub struct RunnerExit {
 static RUNNERS: Lazy<AsyncMutex<HashMap<u32, oneshot::Sender<()>>>> =
     Lazy::new(|| AsyncMutex::new(HashMap::new()));
 
-/// Maestro binaries confirmed to support `--driver-host-port`. Caches the
-/// (slow, JVM-booting) capability probe in `maestro_supports_driver_host_port`.
-static DRIVER_HOST_PORT_OK: Lazy<AsyncMutex<HashSet<String>>> =
+/// Maestro binaries confirmed to carry the physical-device patch. Caches the
+/// (slow, JVM-booting) probe in `maestro_has_ios_device_patch`.
+static IOS_DEVICE_PATCH_OK: Lazy<AsyncMutex<HashSet<String>>> =
     Lazy::new(|| AsyncMutex::new(HashSet::new()));
 
 /// Resolves to the user's `maestro` install — see `crate::tool_paths` for
@@ -449,41 +449,34 @@ pub async fn spawn_ios_runner(
     spawn_maestro(app, cmd, output, Some(after_exit)).await
 }
 
-/// True if the resolved maestro accepts the `--driver-host-port` flag, i.e. it
-/// is the patched maestro that can drive a physical device by talking to an
-/// already-running XCTest driver (the `maestro-ios-device` bridge).
+/// True if the resolved maestro carries the `maestro-ios-device` physical-device
+/// patch, i.e. it can drive a physical iPhone by talking to an already-running
+/// XCTest driver (the bridge's forward) through `--driver-host-port`.
 ///
-/// We can't just grep `maestro --help`: in patched maestro 2.5.1 the option is
-/// registered with `hidden = true`, so it never appears in help output. Instead
-/// we probe `maestro --driver-host-port <port> test --help` and treat the flag
-/// being accepted (no picocli "Unknown option" / "Unmatched argument") as
-/// support. `test --help` short-circuits to help, so nothing is executed and no
-/// port is bound.
-pub async fn maestro_supports_driver_host_port(bin: &str) -> bool {
+/// Stock maestro accepts `--driver-host-port` since 2.6, but it refuses a port
+/// that is already bound and rebuilds its own driver, so that flag can't tell
+/// the two apart. The patched jars register a hidden `--ios-device-patch` flag
+/// instead: `maestro --ios-device-patch test --help` exits 0 when it parses and
+/// 2 when picocli rejects it. `test --help` short-circuits to help, so nothing
+/// runs and no port is bound.
+pub async fn maestro_has_ios_device_patch(bin: &str) -> bool {
     // Probing the flag boots the maestro JVM (~seconds), which stalls every
     // physical-device run. The binary doesn't change mid-session, so cache a
     // confirmed-good bin and skip the probe on subsequent runs. Only `true` is
     // cached — a `false` is re-probed so installing the patched maestro is
     // picked up without a restart.
-    if DRIVER_HOST_PORT_OK.lock().await.contains(bin) {
+    if IOS_DEVICE_PATCH_OK.lock().await.contains(bin) {
         return true;
     }
     let ok = Command::new(bin)
         .no_window()
-        .args(["--driver-host-port", "6001", "test", "--help"])
+        .args(["--ios-device-patch", "test", "--help"])
         .output()
         .await
-        .map(|o| {
-            let text = format!(
-                "{}{}",
-                String::from_utf8_lossy(&o.stdout),
-                String::from_utf8_lossy(&o.stderr)
-            );
-            !text.contains("Unknown option") && !text.contains("Unmatched argument")
-        })
+        .map(|o| o.status.success())
         .unwrap_or(false);
     if ok {
-        DRIVER_HOST_PORT_OK.lock().await.insert(bin.to_string());
+        IOS_DEVICE_PATCH_OK.lock().await.insert(bin.to_string());
     }
     ok
 }
@@ -491,9 +484,9 @@ pub async fn maestro_supports_driver_host_port(bin: &str) -> bool {
 /// Spawn `maestro --driver-host-port <port> --device <udid> test <flow>` for a
 /// physical iOS device. The run REUSES the `maestro-ios-device` bridge's
 /// already-running XCTest driver (forwarded on `port`) instead of bringing up
-/// its own — so the caller must keep the keeper alive. Requires the
-/// devicelab-patched maestro (stock maestro has no `--driver-host-port`); we
-/// preflight that flag and surface a clear setup error if it's missing.
+/// its own — so the caller must keep the keeper alive. Requires the patched
+/// maestro (stock maestro can't attach to the bridge's driver); we preflight
+/// the patch and surface a clear setup error if it's missing.
 pub async fn spawn_ios_device_runner(
     app: AppHandle,
     udid: &str,
@@ -502,10 +495,10 @@ pub async fn spawn_ios_device_runner(
     app_id: Option<&str>,
 ) -> AppResult<u32> {
     let bin = maestro_bin();
-    if !maestro_supports_driver_host_port(&bin).await {
+    if !maestro_has_ios_device_patch(&bin).await {
         return Err(AppError::RunnerFailed(
-            "this maestro has no --driver-host-port flag — physical-device flow runs need \
-             devicelab's patched maestro (install maestro-ios-device via setup.sh)"
+            "this maestro is not patched for physical iPhones — install the iPhone bridge \
+             from Settings → Physical iPhone (it patches maestro 2.10.0)"
                 .into(),
         ));
     }
@@ -797,5 +790,28 @@ mod tests {
         );
         assert_eq!(flow_dir_of("flow.yaml"), std::path::PathBuf::from(""));
         assert_eq!(flow_dir_of(""), std::path::PathBuf::from("."));
+    }
+
+    /// A fake `maestro` that exits like picocli does for the marker flag:
+    /// 0 when it parses, 2 when it's an unknown option.
+    #[cfg(unix)]
+    fn fake_maestro(dir: &std::path::Path, name: &str, exit: i32) -> String {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\nexit {exit}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ios_device_patch_probe_reads_the_exit_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let patched = fake_maestro(tmp.path(), "patched", 0);
+        let stock = fake_maestro(tmp.path(), "stock", 2);
+        assert!(maestro_has_ios_device_patch(&patched).await);
+        assert!(!maestro_has_ios_device_patch(&stock).await);
+        let missing = tmp.path().join("missing").to_string_lossy().into_owned();
+        assert!(!maestro_has_ios_device_patch(&missing).await);
     }
 }

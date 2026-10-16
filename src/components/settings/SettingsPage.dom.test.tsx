@@ -84,7 +84,7 @@ beforeEach(() => {
   ipcMock.iosPhysicalSetupStatus.mockResolvedValue({
     xcodeInstalled: true,
     maestroVersion: "2.10.0",
-    maestroIs251: false,
+    maestroIsSupported: false,
     maestroPatched: false,
   });
   ipcMock.environmentStatus.mockResolvedValue({

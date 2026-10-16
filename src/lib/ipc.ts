@@ -276,8 +276,8 @@ export const ipc = {
 export interface IosPhysicalSetupStatus {
   xcodeInstalled: boolean;
   maestroVersion: string | null;
-  // serde `rename_all = "camelCase"` turns `maestro_is_2_5_1` into `maestroIs251`.
-  maestroIs251: boolean;
+  /** The installed maestro is the version the bridge patches (2.10.0). */
+  maestroIsSupported: boolean;
   maestroPatched: boolean;
 }
 
