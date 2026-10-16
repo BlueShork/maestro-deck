@@ -1026,18 +1026,7 @@ pub async fn install_ios_device_bridge() -> AppResult<String> {
     // `maestro` is first on PATH, so put the one the app runs (maybe the managed
     // install) first — otherwise it could patch a different install.
     info!("running maestro-ios-device setup");
-    let maestro = crate::tool_paths::maestro_bin();
-    let mut path = std::env::var_os("PATH").unwrap_or_default();
-    if let Some(dir) = std::path::Path::new(&maestro)
-        .parent()
-        .filter(|d| !d.as_os_str().is_empty())
-    {
-        let mut dirs = vec![dir.to_path_buf()];
-        dirs.extend(std::env::split_paths(&path));
-        if let Ok(joined) = std::env::join_paths(dirs) {
-            path = joined;
-        }
-    }
+    let path = crate::tool_paths::path_with_maestro_first();
     let out = tokio::process::Command::new(&dest)
         .arg("setup")
         .env("PATH", path)

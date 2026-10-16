@@ -235,6 +235,25 @@ pub fn maestro_ios_device_bin() -> String {
     resolved
 }
 
+/// PATH with the directory of the maestro the app runs put first. The
+/// `maestro-ios-device` bridge calls plain `maestro` (its `setup` patches that
+/// install, and every bridge start checks it is patched), so without this it
+/// could see a different, unpatched install — e.g. Homebrew's next to the
+/// app's managed one — and exit with "Maestro not patched".
+pub fn path_with_maestro_first() -> std::ffi::OsString {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let maestro = maestro_bin();
+    let Some(dir) = Path::new(&maestro)
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+    else {
+        return path;
+    };
+    let mut dirs = vec![dir.to_path_buf()];
+    dirs.extend(std::env::split_paths(&path));
+    std::env::join_paths(dirs).unwrap_or(path)
+}
+
 /// True if `maestro-ios-device` resolves to a real file (installed), vs the
 /// bare-name fallback. Used to decide whether to offer the auto-install.
 pub fn maestro_ios_device_installed() -> bool {

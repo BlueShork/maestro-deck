@@ -549,6 +549,7 @@ impl IosDriverKeeper {
         let bin = crate::tool_paths::maestro_ios_device_bin();
         let mut bridge = Command::new(&bin)
             .args(["--team-id", &team, "--device", udid])
+            .env("PATH", crate::tool_paths::path_with_maestro_first())
             .stdout(std::process::Stdio::piped())
             .kill_on_drop(true)
             .spawn()
