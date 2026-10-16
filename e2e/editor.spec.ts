@@ -134,6 +134,14 @@ test.describe("editor files", () => {
 });
 
 test.describe("macOS menu bar", () => {
+  // useAppMenu only listens on macOS (IS_MAC reads navigator.platform); the CI
+  // runner is Linux, so present the page as a Mac.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() =>
+      Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" }),
+    );
+  });
+
   test("menu items drive the same actions as the toolbar", async ({ app, page }) => {
     await app.launch({ ...opened, dialogs: { save: ["/elsewhere/menu.yaml"] } });
     await expect(editor(app)).toContainText("Welcome");

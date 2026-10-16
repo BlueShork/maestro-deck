@@ -52,12 +52,21 @@ pnpm tauri:dev
 
 `pnpm install` runs `make setup-hooks` automatically, which:
 
-- Installs the Lefthook git hooks (`pre-commit`, `pre-push`).
+- Points git at the repo's hooks (`git config core.hooksPath .githooks`).
 - Auto-installs [gitleaks](https://github.com/gitleaks/gitleaks) on macOS via Homebrew (used by the `pre-commit` hook to detect committed secrets locally).
 
 On **Linux**, install gitleaks manually from the [official releases](https://github.com/gitleaks/gitleaks/releases) if you want local pre-commit scanning. On **Windows** (without `make`), the hooks still install via a fallback — gitleaks must then be installed manually (e.g. `scoop install gitleaks` or `winget install gitleaks`).
 
 Either way, the hook skips gracefully if gitleaks is missing, and GitHub server-side push protection blocks secrets at push time as a safety net.
+
+Both hooks run `scripts/hooks/run.mjs` and show a live checklist:
+
+| Hook | Checks | Scope |
+| --- | --- | --- |
+| `pre-commit` | staged files (conflict markers, files over 5 MB), secrets (gitleaks), Prettier, ESLint, rustfmt, `Cargo.lock` in sync | staged files only, a check is skipped when nothing it covers is staged |
+| `pre-push` | TypeScript, unit tests (vitest), Clippy, Rust tests | whole project, frontend checks only when the pushed commits touch the frontend, Rust checks only when they touch `src-tauri/` |
+
+Bypass once with `--no-verify`.
 
 The dev command launches the Tauri shell with hot-reload for both the React frontend (`src/`) and the Rust backend (`src-tauri/`).
 

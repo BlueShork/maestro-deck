@@ -2,6 +2,16 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// jsdom has no Range layout; CodeMirror's deferred measure would throw an
+// uncaught error after the test that triggered it and fail the run.
+Range.prototype.getClientRects = () =>
+  ({
+    length: 0,
+    item: () => null,
+    [Symbol.iterator]: [][Symbol.iterator],
+  }) as unknown as DOMRectList;
+Range.prototype.getBoundingClientRect = () => new DOMRect();
+
 const h = vi.hoisted(() => ({
   files: new Map<string, string>(),
   save: vi.fn(),
