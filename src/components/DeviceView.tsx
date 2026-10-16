@@ -3,7 +3,17 @@
 
 import { Channel } from "@tauri-apps/api/core";
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
-import { Camera, House, Moon, Smartphone, Sun } from "lucide-react";
+import {
+  Camera,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  House,
+  Moon,
+  Smartphone,
+  Sun,
+} from "lucide-react";
 import {
   memo,
   useCallback,
@@ -29,7 +39,9 @@ import {
   fitScale,
   hierarchyExtent,
   toDevicePoint,
+  toolbarSwipe,
   wheelSwipeEndY,
+  type SwipeDirection,
 } from "@/lib/deviceGeometry";
 import { events, ipc, type IosBridgeStatus } from "@/lib/ipc";
 import { useShortcuts } from "@/lib/keyboard";
@@ -739,6 +751,22 @@ export function DeviceView() {
     [current, toDeviceCoords, wheelFlush],
   );
 
+  const scrollPage = useCallback(
+    (direction: SwipeDirection) => {
+      if (!current) return;
+      void ipc
+        .sendInput(
+          { kind: "swipe", ...toolbarSwipe(direction, deviceWidth, deviceHeight) },
+          deviceWidth,
+          deviceHeight,
+        )
+        .catch((err) => {
+          toast.error("Scroll failed", err instanceof Error ? err.message : String(err));
+        });
+    },
+    [current, deviceWidth, deviceHeight],
+  );
+
   const canvasStyle = useMemo(
     () => ({ width: displayW || undefined, height: displayH || undefined }),
     [displayW, displayH],
@@ -783,8 +811,19 @@ export function DeviceView() {
           scale={scale}
         />
 
-        {hasFrame ? (
-          <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border border-border bg-background">
+        {actionMenu ? (
+          <InspectActionMenu
+            x={actionMenu.x}
+            y={actionMenu.y}
+            node={actionMenu.node}
+            selectors={actionMenu.selectors}
+            onClose={() => setActionMenu(null)}
+          />
+        ) : null}
+      </div>
+      {current ? (
+        <div className="mt-3 flex h-10 w-full shrink-0 items-stretch justify-between overflow-hidden rounded-md border border-border bg-background">
+          <div className="flex border-r border-border">
             {isIos ? (
               <button
                 type="button"
@@ -792,7 +831,7 @@ export function DeviceView() {
                 disabled={pressingHome || !connectedSerial}
                 title="Press Home (return to home screen)"
                 aria-label="Press Home button"
-                className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className={TOOLBAR_BUTTON}
               >
                 <House className="h-4 w-4" />
               </button>
@@ -805,7 +844,7 @@ export function DeviceView() {
                 title={darkMode ? "Switch device to light mode" : "Switch device to dark mode"}
                 aria-label="Toggle device dark mode"
                 aria-pressed={darkMode ?? false}
-                className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className={TOOLBAR_BUTTON}
               >
                 {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </button>
@@ -813,29 +852,64 @@ export function DeviceView() {
             <button
               type="button"
               onClick={() => void takeScreenshot()}
-              disabled={capturing}
+              disabled={capturing || !hasFrame}
               title="Screenshot · ⌘⇧S"
               aria-label="Take screenshot"
-              className="flex h-9 w-9 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className={TOOLBAR_BUTTON}
             >
               <Camera className="h-4 w-4" />
             </button>
           </div>
-        ) : null}
-
-        {actionMenu ? (
-          <InspectActionMenu
-            x={actionMenu.x}
-            y={actionMenu.y}
-            node={actionMenu.node}
-            selectors={actionMenu.selectors}
-            onClose={() => setActionMenu(null)}
-          />
-        ) : null}
-      </div>
+          <div className="flex border-l border-border">
+            <button
+              type="button"
+              onClick={() => scrollPage("left")}
+              disabled={!hasFrame}
+              title="Scroll left"
+              aria-label="Scroll the device screen left"
+              className={TOOLBAR_BUTTON}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollPage("up")}
+              disabled={!hasFrame}
+              title="Scroll up"
+              aria-label="Scroll the device screen up"
+              className={TOOLBAR_BUTTON}
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollPage("down")}
+              disabled={!hasFrame}
+              title="Scroll down"
+              aria-label="Scroll the device screen down"
+              className={TOOLBAR_BUTTON}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollPage("right")}
+              disabled={!hasFrame}
+              title="Scroll right"
+              aria-label="Scroll the device screen right"
+              className={TOOLBAR_BUTTON}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+
+const TOOLBAR_BUTTON =
+  "flex h-full w-10 items-center justify-center border-l border-border text-foreground/80 transition-colors first:border-l-0 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50";
 
 function formatTimestamp(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

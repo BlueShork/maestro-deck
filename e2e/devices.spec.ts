@@ -202,3 +202,76 @@ test.describe("inspect mode", () => {
     );
   });
 });
+
+test.describe("device toolbar", () => {
+  test("sits under the phone once connected, arrows wait for the first frame", async ({
+    app,
+    page,
+  }) => {
+    await app.launch({ devices: [IPHONE_SIM] });
+    await connectSim(app);
+    const up = page.getByRole("button", { name: "Scroll the device screen up" });
+    await expect(up).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Take screenshot" })).toBeDisabled();
+    // Dark mode is an adb feature: never offered for an iPhone.
+    await expect(page.getByRole("button", { name: "Toggle device dark mode" })).toHaveCount(0);
+
+    await pushIosFrame(app);
+    for (const dir of ["left", "up", "down", "right"]) {
+      await expect(
+        page.getByRole("button", { name: `Scroll the device screen ${dir}` }),
+      ).toBeEnabled();
+    }
+    await expect(page.getByRole("button", { name: "Press Home button" })).toBeEnabled();
+
+    // Docked below the canvas and as wide as the device panel.
+    const canvas = (await page.locator("canvas").boundingBox())!;
+    const bar = (await up.locator("xpath=../..").boundingBox())!;
+    expect(bar.y).toBeGreaterThanOrEqual(canvas.y + canvas.height);
+    expect(bar.width).toBeGreaterThan(canvas.width);
+  });
+
+  test("arrows swipe the screen: short drags vertically, long sweeps sideways", async ({
+    app,
+    page,
+  }) => {
+    await app.launch({ devices: [IPHONE_SIM] });
+    await connectSim(app);
+    await pushIosFrame(app);
+
+    const expected = {
+      down: { x1: 201, y1: 612, x2: 201, y2: 262, duration_ms: 300 },
+      up: { x1: 201, y1: 262, x2: 201, y2: 612, duration_ms: 300 },
+      right: { x1: 362, y1: 437, x2: 40, y2: 437, duration_ms: 150 },
+      left: { x1: 40, y1: 437, x2: 362, y2: 437, duration_ms: 150 },
+    };
+    let n = 0;
+    for (const [dir, swipe] of Object.entries(expected)) {
+      await page.getByRole("button", { name: `Scroll the device screen ${dir}` }).click();
+      n += 1;
+      const calls = await app.waitForCall("send_input", n);
+      expect(calls[n - 1].args).toEqual({
+        event: { kind: "swipe", ...swipe },
+        screenW: W,
+        screenH: H,
+      });
+    }
+  });
+
+  test("Home presses the iPhone's Home button", async ({ app, page }) => {
+    await app.launch({ devices: [IPHONE_SIM] });
+    await connectSim(app);
+    await pushIosFrame(app);
+    await page.getByRole("button", { name: "Press Home button" }).click();
+    await app.waitForCall("ios_press_home");
+  });
+
+  test("a swipe the device rejects is reported", async ({ app, page }) => {
+    await app.launch({ devices: [IPHONE_SIM], failures: { send_input: "driver gone" } });
+    await connectSim(app);
+    await pushIosFrame(app);
+    await page.getByRole("button", { name: "Scroll the device screen down" }).click();
+    await expect(page.getByText("Scroll failed")).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("driver gone");
+  });
+});

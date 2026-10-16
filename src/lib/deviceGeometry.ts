@@ -112,3 +112,64 @@ export function wheelSwipeEndY(
 ): number {
   return Math.max(0, Math.min(deviceHeight - 1, cursorY - Math.round(displayDelta / scale)));
 }
+
+export type SwipeDirection = "up" | "down" | "left" | "right";
+
+export interface ToolbarSwipe {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  duration_ms: number;
+}
+
+/**
+ * Swipe sent by the device toolbar's arrow buttons, in stream space. The
+ * finger moves against the arrow so the content on that side comes into
+ * view. Vertical swipes are a slow 30 % → 70 % drag so lists scroll without
+ * flinging; horizontal ones sweep 10 % → 90 % fast enough for launchers and
+ * carousels to read them as a page change.
+ */
+export function toolbarSwipe(
+  direction: SwipeDirection,
+  deviceWidth: number,
+  deviceHeight: number,
+): ToolbarSwipe {
+  const cx = Math.round(deviceWidth / 2);
+  const cy = Math.round(deviceHeight / 2);
+  const at = (size: number, ratio: number) => Math.round(size * ratio);
+  switch (direction) {
+    case "up":
+      return {
+        x1: cx,
+        y1: at(deviceHeight, 0.3),
+        x2: cx,
+        y2: at(deviceHeight, 0.7),
+        duration_ms: 300,
+      };
+    case "down":
+      return {
+        x1: cx,
+        y1: at(deviceHeight, 0.7),
+        x2: cx,
+        y2: at(deviceHeight, 0.3),
+        duration_ms: 300,
+      };
+    case "left":
+      return {
+        x1: at(deviceWidth, 0.1),
+        y1: cy,
+        x2: at(deviceWidth, 0.9),
+        y2: cy,
+        duration_ms: 150,
+      };
+    case "right":
+      return {
+        x1: at(deviceWidth, 0.9),
+        y1: cy,
+        x2: at(deviceWidth, 0.1),
+        y2: cy,
+        duration_ms: 150,
+      };
+  }
+}

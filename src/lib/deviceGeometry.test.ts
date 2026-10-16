@@ -7,6 +7,7 @@ import {
   fitScale,
   hierarchyExtent,
   toDevicePoint,
+  toolbarSwipe,
   wheelSwipeEndY,
 } from "./deviceGeometry";
 
@@ -150,5 +151,70 @@ describe("wheelSwipeEndY", () => {
   it("stays on screen", () => {
     expect(wheelSwipeEndY(100, 1000, 0.5, 2340)).toBe(0);
     expect(wheelSwipeEndY(2300, -1000, 0.5, 2340)).toBe(2339);
+  });
+});
+
+describe("toolbarSwipe", () => {
+  it("scrolls down by dragging the finger up the middle of the screen", () => {
+    expect(toolbarSwipe("down", 1080, 2340)).toEqual({
+      x1: 540,
+      y1: 1638,
+      x2: 540,
+      y2: 702,
+      duration_ms: 300,
+    });
+  });
+
+  it("scrolls up by dragging the finger down", () => {
+    expect(toolbarSwipe("up", 1080, 2340)).toEqual({
+      x1: 540,
+      y1: 702,
+      x2: 540,
+      y2: 1638,
+      duration_ms: 300,
+    });
+  });
+
+  it("flips to the page on the left with a long, fast sweep to the right", () => {
+    expect(toolbarSwipe("left", 1080, 2340)).toEqual({
+      x1: 108,
+      y1: 1170,
+      x2: 972,
+      y2: 1170,
+      duration_ms: 150,
+    });
+  });
+
+  it("flips to the page on the right with a long, fast sweep to the left", () => {
+    expect(toolbarSwipe("right", 1080, 2340)).toEqual({
+      x1: 972,
+      y1: 1170,
+      x2: 108,
+      y2: 1170,
+      duration_ms: 150,
+    });
+  });
+
+  it("horizontal sweeps cover most of the width, faster than vertical drags", () => {
+    const h = toolbarSwipe("right", 402, 874);
+    const v = toolbarSwipe("down", 402, 874);
+    expect(Math.abs(h.x2 - h.x1)).toBeGreaterThanOrEqual(402 * 0.75);
+    expect(h.duration_ms).toBeLessThan(v.duration_ms);
+  });
+
+  it("stays on screen and returns whole stream pixels for odd sizes", () => {
+    for (const dir of ["up", "down", "left", "right"] as const) {
+      const s = toolbarSwipe(dir, 403, 875);
+      for (const [v, max] of [
+        [s.x1, 403],
+        [s.x2, 403],
+        [s.y1, 875],
+        [s.y2, 875],
+      ]) {
+        expect(Number.isInteger(v)).toBe(true);
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThan(max);
+      }
+    }
   });
 });
