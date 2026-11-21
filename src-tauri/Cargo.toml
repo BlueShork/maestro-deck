@@ -42,7 +42,7 @@ jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 # MITM CA lives in the OS trust store) break every request — downloads and
 # Vertex token exchange fail on work machines while the browser works fine.
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
-base64 = "0.22"
+base64 = "0.23"
 arboard = "3"
 # Wraps a tokio file as a byte stream so an APK is streamed to GCS instead of
 # being read into memory first.
