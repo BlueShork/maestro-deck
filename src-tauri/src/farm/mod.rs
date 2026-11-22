@@ -20,6 +20,18 @@ pub async fn active(state: &AppState) -> Option<Arc<session::FarmSession>> {
     state.farm_session.lock().await.clone()
 }
 
+/// The agent's hierarchy: Android sends the uiautomator XML, an iPhone the
+/// JSON of `maestro hierarchy` (already scaled to the video's pixels).
+pub fn parse_farm_hierarchy(raw: &str) -> crate::error::AppResult<crate::hierarchy::HierarchyTree> {
+    let mut tree = if raw.trim_start().starts_with('{') {
+        crate::hierarchy::parse_maestro_json(raw)?
+    } else {
+        crate::hierarchy::parse_xml(raw)?
+    };
+    tree.xml_raw = raw.to_string();
+    Ok(tree)
+}
+
 /// Drops a farm session that has ended (gateway close, lost link) from the
 /// app state, so local commands stop routing to it.
 pub async fn clear_if_closed(state: &AppState) {
@@ -57,5 +69,29 @@ impl session::FarmEvents for AppFarmEvents {
             crate::runner::unregister_runner(pid).await;
             crate::runner::emit_exit(&app, pid, code);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn farm_hierarchy_json_uses_the_maestro_parser() {
+        let json = r#"{"attributes":{"bounds":"[0,0][1206,2622]","text":""},"children":[
+            {"attributes":{"bounds":"[30,60][330,192]","text":"Réglages","resource-id":"settings"},"children":[]}
+        ]}"#;
+        let tree = parse_farm_hierarchy(json).expect("json");
+        let root = tree.root.as_ref().expect("root");
+        assert_eq!(root.children.len(), 1);
+        assert_eq!(root.children[0].text.as_deref(), Some("Réglages"));
+        assert_eq!(tree.xml_raw, json);
+    }
+
+    #[test]
+    fn farm_hierarchy_xml_still_uses_the_xml_parser() {
+        let xml = r#"<?xml version="1.0"?><hierarchy rotation="0"><node index="0" text="Hi" resource-id="" class="android.widget.TextView" package="p" content-desc="" checkable="false" checked="false" clickable="true" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,0][100,50]" /></hierarchy>"#;
+        let tree = parse_farm_hierarchy(xml).expect("xml");
+        assert!(tree.root.is_some());
     }
 }

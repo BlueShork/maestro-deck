@@ -610,9 +610,8 @@ pub async fn enter_inspect_mode(
         .clone()
         .ok_or(AppError::NoDevice)?;
     if let Some(session) = crate::farm::active(state.inner()).await {
-        let xml = session.hierarchy().await?;
-        let mut tree = crate::hierarchy::parse_xml(&xml)?;
-        tree.xml_raw = xml;
+        let raw = session.hierarchy().await?;
+        let tree = crate::farm::parse_farm_hierarchy(&raw)?;
         return finalize_hierarchy(tree, state.inner()).await;
     }
     if device.platform == crate::device::Platform::Ios {

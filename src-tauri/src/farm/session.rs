@@ -68,6 +68,11 @@ pub struct Hello {
     pub video_height: Option<u32>,
     pub minutes_remaining: f64,
     pub max_ends_at: f64,
+    /// "ios" for an iPhone of the Mac mini; absent from older gateways (android).
+    #[serde(default)]
+    pub platform: Option<String>,
+    #[serde(default)]
+    pub os_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

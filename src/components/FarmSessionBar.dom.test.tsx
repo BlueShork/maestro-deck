@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ipc", () => ({ ipc: { onFarmSession: vi.fn(async () => () => undefined) } }));
+const openDialog = vi.fn(async (_opts: unknown) => null);
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: (opts: unknown) => openDialog(opts) }));
 
 import { FarmSessionBar } from "@/components/FarmSessionBar";
 import { useFarmStore } from "@/stores/farmStore";
@@ -82,5 +84,37 @@ describe("FarmSessionBar warnings", () => {
     });
     render(<FarmSessionBar />);
     expect(screen.queryByText(/closes soon without activity/)).toBeNull();
+  });
+});
+
+describe("FarmSessionBar install", () => {
+  const session = (platform?: "android" | "ios") => ({
+    sessionId: "s1",
+    deviceId: "a",
+    label: "L",
+    gatewayUrl: "wss://g",
+    startedAt: Date.now(),
+    minutesRemaining: 30,
+    maxEndsAt: Date.now() + 30 * 60_000,
+    status: "active" as const,
+    ...(platform ? { platform } : {}),
+  });
+
+  it("offers an .apk on an Android phone", () => {
+    useFarmStore.setState({ session: session(), installing: false });
+    render(<FarmSessionBar />);
+    fireEvent.click(screen.getByRole("button", { name: /Install APK/ }));
+    expect(openDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: [{ name: "Android app", extensions: ["apk"] }] }),
+    );
+  });
+
+  it("offers an .ipa on a farm iPhone", () => {
+    useFarmStore.setState({ session: session("ios"), installing: false });
+    render(<FarmSessionBar />);
+    fireEvent.click(screen.getByRole("button", { name: /Install IPA/ }));
+    expect(openDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: [{ name: "iOS app", extensions: ["ipa"] }] }),
+    );
   });
 });

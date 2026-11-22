@@ -8,6 +8,7 @@ import {
   farmApi,
   FarmApiError,
   farmDeviceLabel,
+  farmPlatform,
   type FarmDevice,
 } from "@/lib/farmApi";
 import { ipc, type FarmSessionEvent } from "@/lib/ipc";
@@ -23,6 +24,8 @@ export interface FarmSessionState {
   minutesRemaining: number;
   maxEndsAt: number;
   status: "connecting" | "active" | "reconnecting";
+  /** Absent means android (a session opened before the iOS farm). */
+  platform?: "android" | "ios";
 }
 
 interface FarmState {
@@ -87,6 +90,7 @@ export const useFarmStore = create<FarmState>((set, get) => ({
         sessionId: "",
         deviceId: device.id,
         label,
+        platform: farmPlatform(device),
         gatewayUrl: "",
         startedAt: Date.now(),
         minutesRemaining: 0,

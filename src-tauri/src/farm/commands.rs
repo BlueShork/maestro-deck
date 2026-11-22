@@ -20,14 +20,22 @@ pub fn device_from_hello(h: &Hello) -> Device {
         None => (h.video_width.unwrap_or(0), h.video_height.unwrap_or(0)),
     };
     let release = h.android_release.clone().unwrap_or_default();
+    // An iPhone of the farm is driven exactly like a farm Android phone (video,
+    // scrcpy input, inspect, runs all go through the gateway), so it keeps the
+    // Android routing; only its OS version differs.
+    let os_version = if h.platform.as_deref() == Some("ios") {
+        h.os_version.clone().unwrap_or_default()
+    } else {
+        release.clone()
+    };
     Device {
         serial: h.device_id.clone(),
         model: h.model.clone().unwrap_or_else(|| "Farm phone".into()),
-        android_version: release.clone(),
+        android_version: release,
         screen_width: w,
         screen_height: h_px,
         platform: Platform::Android,
-        os_version: release,
+        os_version,
         booted: false,
         physical: false,
     }
@@ -93,11 +101,29 @@ mod tests {
             video_height: Some(1024),
             minutes_remaining: 30.0,
             max_ends_at: 0.0,
+            platform: None,
+            os_version: None,
         });
         assert_eq!(d.serial, "nuc1-S1");
         assert_eq!(d.platform, crate::device::Platform::Android);
         assert_eq!((d.screen_width, d.screen_height), (1080, 2340));
         assert_eq!(d.android_version, "15");
         assert!(!d.physical);
+    }
+
+    #[test]
+    fn a_farm_iphone_keeps_the_farm_routing_with_its_ios_version() {
+        let hello: Hello = serde_json::from_value(serde_json::json!({
+            "deviceId": "macmini1-U", "model": "iPhone 17 Pro", "androidRelease": null,
+            "screen": {"width": 1206, "height": 2622, "density": 480},
+            "videoWidth": 1206, "videoHeight": 2622, "minutesRemaining": 30.0, "maxEndsAt": 0.0,
+            "platform": "ios", "osVersion": "26.7.2"
+        }))
+        .expect("hello");
+        let d = device_from_hello(&hello);
+        assert_eq!(d.platform, crate::device::Platform::Android);
+        assert_eq!(d.os_version, "26.7.2");
+        assert_eq!(d.android_version, "");
+        assert_eq!((d.screen_width, d.screen_height), (1206, 2622));
     }
 }
