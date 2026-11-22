@@ -611,7 +611,9 @@ pub async fn enter_inspect_mode(
         .ok_or(AppError::NoDevice)?;
     if let Some(session) = crate::farm::active(state.inner()).await {
         let raw = session.hierarchy().await?;
-        let tree = crate::farm::parse_farm_hierarchy(&raw)?;
+        let screen = (device.screen_width > 0 && device.screen_height > 0)
+            .then_some((device.screen_width as i32, device.screen_height as i32));
+        let tree = crate::farm::parse_farm_hierarchy(&raw, screen)?;
         return finalize_hierarchy(tree, state.inner()).await;
     }
     if device.platform == crate::device::Platform::Ios {
