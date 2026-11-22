@@ -34,10 +34,17 @@ export function FarmSessionBar() {
     ? Math.max(0, Math.ceil((session.maxEndsAt - now) / 60_000))
     : session.minutesRemaining;
 
+  // The agent installs what the phone runs: an .apk on Android, an .ipa
+  // (re-signed by the farm) on an iPhone.
+  const ios = session.platform === "ios";
   const pickApk = async () => {
     const path = await openDialog({
       multiple: false,
-      filters: [{ name: "Android app", extensions: ["apk"] }],
+      filters: [
+        ios
+          ? { name: "iOS app", extensions: ["ipa"] }
+          : { name: "Android app", extensions: ["apk"] },
+      ],
     });
     if (typeof path === "string") await installApk(path);
   };
@@ -109,14 +116,14 @@ export function FarmSessionBar() {
           wide
           disabled={installing || session.status !== "active"}
           onClick={() => void pickApk()}
-          title="Install an .apk on the farm phone"
+          title={ios ? "Install an .ipa on the farm iPhone" : "Install an .apk on the farm phone"}
         >
           {installing ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
             <Package className="h-3.5 w-3.5" />
           )}
-          {installing ? "Installing…" : "Install APK"}
+          {installing ? "Installing…" : ios ? "Install IPA" : "Install APK"}
         </PanelAction>
         <PanelAction
           wide

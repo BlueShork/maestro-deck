@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 
 import type { CloudJobPlatform } from "@/lib/cloudJobs";
-import { farmDeviceLabel, type FarmDevice } from "@/lib/farmApi";
+import { farmDeviceLabel, farmPlatform, type FarmDevice } from "@/lib/farmApi";
 import type { Device, Platform } from "@/types";
 
 /**
@@ -167,9 +167,12 @@ function farmEntry(
     id: `farm:${f.id}`,
     source: "farm",
     kind: "physical",
-    platform: "android",
+    platform: farmPlatform(f),
     name: farmDeviceLabel(f),
-    os: `Android ${f.androidRelease ?? "?"}`,
+    os:
+      farmPlatform(f) === "ios"
+        ? `iOS ${f.osVersion ?? "?"}`
+        : `Android ${f.androidRelease ?? "?"}`,
     detail: [f.manufacturer, f.model].filter(Boolean).join(" "),
     tablet: isTabletName(farmDeviceLabel(f)),
     state:

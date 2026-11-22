@@ -20,6 +20,25 @@ pub async fn active(state: &AppState) -> Option<Arc<session::FarmSession>> {
     state.farm_session.lock().await.clone()
 }
 
+/// The agent's hierarchy: Android sends the uiautomator XML, an iPhone the
+/// XCTest driver tree (`axElement`, already scaled to the video's pixels).
+/// `screen` (pixels) clamps frames of off-screen scroll content. A plain
+/// `maestro hierarchy` JSON is still read, for an agent of the first iOS cut.
+pub fn parse_farm_hierarchy(
+    raw: &str,
+    screen: Option<(i32, i32)>,
+) -> crate::error::AppResult<crate::hierarchy::HierarchyTree> {
+    let mut tree = if raw.contains("\"axElement\"") {
+        crate::hierarchy::ios::parse_ios_axelement(raw, screen)?
+    } else if raw.trim_start().starts_with('{') {
+        crate::hierarchy::parse_maestro_json(raw)?
+    } else {
+        crate::hierarchy::parse_xml(raw)?
+    };
+    tree.xml_raw = raw.to_string();
+    Ok(tree)
+}
+
 /// Drops a farm session that has ended (gateway close, lost link) from the
 /// app state, so local commands stop routing to it.
 pub async fn clear_if_closed(state: &AppState) {
@@ -57,5 +76,50 @@ impl session::FarmEvents for AppFarmEvents {
             crate::runner::unregister_runner(pid).await;
             crate::runner::emit_exit(&app, pid, code);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn farm_hierarchy_json_uses_the_maestro_parser() {
+        let json = r#"{"attributes":{"bounds":"[0,0][1206,2622]","text":""},"children":[
+            {"attributes":{"bounds":"[30,60][330,192]","text":"Réglages","resource-id":"settings"},"children":[]}
+        ]}"#;
+        let tree = parse_farm_hierarchy(json, None).expect("json");
+        let root = tree.root.as_ref().expect("root");
+        assert_eq!(root.children.len(), 1);
+        assert_eq!(root.children[0].text.as_deref(), Some("Réglages"));
+        assert_eq!(tree.xml_raw, json);
+    }
+
+    #[test]
+    fn farm_hierarchy_axelement_uses_the_ios_parser_clamped_to_the_screen() {
+        // The Mac mini agent sends the XCTest driver tree, already in pixels.
+        let json = r#"{"depth":2,"axElement":{"elementType":1,"frame":{"X":0,"Y":0,"Width":1206,"Height":2622},"children":[
+            {"elementType":9,"label":"Settings","frame":{"X":30,"Y":1500,"Width":300,"Height":132}},
+            {"elementType":9,"label":"Below","frame":{"X":0,"Y":9000,"Width":1206,"Height":132}}
+        ]}}"#;
+        let tree = parse_farm_hierarchy(json, Some((1206, 2622))).expect("axelement");
+        let root = tree.root.as_ref().expect("root");
+        let settings = root
+            .children
+            .iter()
+            .find(|n| {
+                n.text.as_deref() == Some("Settings")
+                    || n.content_desc.as_deref() == Some("Settings")
+            })
+            .expect("settings node");
+        assert_eq!((settings.bounds.left, settings.bounds.top), (30, 1500));
+        assert_eq!(tree.xml_raw, json);
+    }
+
+    #[test]
+    fn farm_hierarchy_xml_still_uses_the_xml_parser() {
+        let xml = r#"<?xml version="1.0"?><hierarchy rotation="0"><node index="0" text="Hi" resource-id="" class="android.widget.TextView" package="p" content-desc="" checkable="false" checked="false" clickable="true" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,0][100,50]" /></hierarchy>"#;
+        let tree = parse_farm_hierarchy(xml, None).expect("xml");
+        assert!(tree.root.is_some());
     }
 }

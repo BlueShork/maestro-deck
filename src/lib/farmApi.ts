@@ -7,6 +7,9 @@ export type FarmDeviceState = "available" | "in_use" | "offline";
 
 export interface FarmDevice {
   id: string;
+  /** Absent from a dashboard older than the iOS farm: android. */
+  platform?: "android" | "ios";
+  osVersion?: string | null;
   manufacturer: string | null;
   model: string | null;
   marketingName: string | null;
@@ -61,6 +64,10 @@ export class FarmApiError extends Error {
 
 export function closeReasonMessage(reason: string): string {
   return CLOSE_REASONS[reason] ?? "The farm session ended.";
+}
+
+export function farmPlatform(f: Pick<FarmDevice, "platform">): "android" | "ios" {
+  return f.platform === "ios" ? "ios" : "android";
 }
 
 export function farmDeviceLabel(d: Pick<FarmDevice, "id" | "marketingName" | "model">): string {

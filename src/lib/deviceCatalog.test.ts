@@ -131,6 +131,34 @@ describe("buildCatalog", () => {
 });
 
 describe("connecting", () => {
+  it("farm device without platform is android", () => {
+    // The NUC is not redeployed: its phones come without platform/osVersion.
+    const [entry] = buildCatalog({ ...base, signedIn: true, farmDevices: [farm({})] }).filter(
+      (e) => e.source === "farm",
+    );
+    expect(entry).toMatchObject({ platform: "android", os: "Android 15" });
+  });
+
+  it("ios farm device", () => {
+    const [entry] = buildCatalog({
+      ...base,
+      signedIn: true,
+      farmDevices: [
+        farm({
+          id: "macmini1-U",
+          platform: "ios",
+          osVersion: "26.7.2",
+          manufacturer: "Apple",
+          model: "iPhone 17 Pro",
+          marketingName: "iPhone 17 Pro",
+          androidRelease: null,
+          sdk: null,
+        }),
+      ],
+    }).filter((e) => e.source === "farm");
+    expect(entry).toMatchObject({ platform: "ios", os: "iOS 26.7.2", name: "iPhone 17 Pro" });
+  });
+
   it("marks a local device being connected and a farm session being opened", () => {
     const entries = buildCatalog({
       ...base,
