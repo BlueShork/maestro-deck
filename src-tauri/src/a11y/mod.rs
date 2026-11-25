@@ -13,6 +13,8 @@
 //! never replaces a manual audit. The report says so explicitly.
 
 pub mod contrast;
+#[cfg(test)]
+mod fixtures_test;
 pub mod ipc;
 pub mod rules;
 
@@ -63,7 +65,8 @@ impl AuditConfig {
         if let Some(d) = self.px_per_unit.filter(|d| *d > 0.0) {
             return d;
         }
-        let width = (root.bounds.right - root.bounds.left).max(1) as f32;
+        let screen = screen_bounds(root);
+        let width = (screen.right - screen.left).max(1) as f32;
         let typical = match self.platform {
             Platform::Android => 411.0,
             Platform::Ios => 390.0,
@@ -231,14 +234,49 @@ pub fn audit(screens: &[Screen], config: &AuditConfig) -> AccessibilityReport {
 // ---------- helpers shared by rules ----------
 
 /// Nodes worth auditing: visible, on screen, not the system UI.
+///
+/// A clickable node nested inside a clickable ancestor that already has a
+/// label is skipped: the screen reader focuses the ancestor (e.g. on iOS a
+/// settings row "Texte en gras" contains an unlabeled inner switch control).
+/// Non-interactive descendants (text) are kept, so contrast is still checked.
 pub(crate) fn app_nodes(root: &UINode) -> Vec<&UINode> {
-    let mut out = Vec::new();
-    walk(root, &mut |n| {
-        if is_visible(&n.bounds) && !is_system_ui(n) && n.class_name != "hierarchy" {
+    fn rec<'a>(n: &'a UINode, inside_labeled_control: bool, out: &mut Vec<&'a UINode>) {
+        let nested_control = inside_labeled_control && n.clickable;
+        if !nested_control
+            && is_visible(&n.bounds)
+            && !is_system_ui(n)
+            && n.class_name != "hierarchy"
+        {
             out.push(n);
         }
-    });
+        let labeled_control = n.clickable && n.enabled && merged_label(n).is_some();
+        for c in &n.children {
+            rec(c, inside_labeled_control || labeled_control, out);
+        }
+    }
+    let mut out = Vec::new();
+    rec(root, false, &mut out);
     out
+}
+
+/// The screen area the hierarchy covers. Usually the root's bounds, but the
+/// iOS root is a 0×0 wrapper (`Any`), so fall back to the union of what's
+/// below it.
+pub(crate) fn screen_bounds(root: &UINode) -> Bounds {
+    if is_visible(&root.bounds) {
+        return root.bounds;
+    }
+    let mut b = Bounds {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    walk(root, &mut |n| {
+        b.right = b.right.max(n.bounds.right);
+        b.bottom = b.bottom.max(n.bounds.bottom);
+    });
+    b
 }
 
 pub(crate) fn is_visible(b: &Bounds) -> bool {

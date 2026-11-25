@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 
 use super::{
-    app_nodes, contrast, finding, merged_label, own_label, short_class, AuditConfig, Platform,
-    RuleOutcome, Screen,
+    app_nodes, contrast, finding, merged_label, own_label, screen_bounds, short_class, AuditConfig,
+    Platform, RuleOutcome, Screen,
 };
 use crate::hierarchy::UINode;
 
@@ -229,15 +229,27 @@ fn touch_target_size(screen: &Screen, config: &AuditConfig) -> RuleOutcome {
         if !(n.clickable && n.enabled) {
             continue;
         }
+        // A sliver cut by the screen edge (scroll content clamped to the
+        // screen, e.g. 370×4 pt at the bottom): its real size is unknown.
+        let r = &screen_bounds(&screen.root);
+        let touches_edge = n.bounds.top <= r.top || n.bounds.bottom >= r.bottom;
+        if touches_edge && ((n.bounds.bottom - n.bounds.top) as f32 / density) < 8.0 {
+            continue;
+        }
         out.applicable = true;
         let w = (n.bounds.right - n.bounds.left) as f32 / density;
         let h = (n.bounds.bottom - n.bounds.top) as f32 / density;
         if w < min || h < min {
-            out.findings.push(finding(
+            let mut f = finding(
                 screen,
                 n,
                 format!("Cible tactile de {w:.0}×{h:.0} {unit}, minimum conseillé {min:.0}×{min:.0} {unit}"),
-            ));
+            );
+            // iOS frames are often smaller than the real hit area (a Settings
+            // row's switch is 28 pt tall, the cell around it handles the
+            // touch). Flag for review on iOS, never as a miss.
+            f.needs_review = config.platform == Platform::Ios;
+            out.findings.push(f);
         }
     }
     out

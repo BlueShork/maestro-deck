@@ -93,6 +93,7 @@ fn element_type_name(t: i64) -> &'static str {
         50 => "SecureTextField",
         52 => "TextView",
         56 => "MenuBarItem",
+        75 => "Cell",
         _ => "Element",
     }
 }

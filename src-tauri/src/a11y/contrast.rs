@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use image::RgbaImage;
 
-use super::{app_nodes, finding, AuditConfig, RuleOutcome, Screen};
+use super::{app_nodes, finding, screen_bounds, AuditConfig, RuleOutcome, Screen};
 use crate::hierarchy::Bounds;
 
 /// WCAG relative luminance of an sRGB colour.
@@ -136,7 +136,18 @@ pub fn text_contrast(screen: &Screen, config: &AuditConfig) -> RuleOutcome {
         if n.text.as_deref().map(str::trim).unwrap_or("").is_empty() {
             continue;
         }
-        let b = scale_bounds(&n.bounds, &screen.root.bounds, img);
+        // Text lives in leaf elements. A container carrying a label (iOS
+        // `Application « Réglages »`, a whole row) spans other content, so
+        // its pixels say nothing about the text colour.
+        if !n.children.is_empty() {
+            continue;
+        }
+        // On iOS the VoiceOver label is folded into `text` for every element
+        // (icons, switches, cells), so only StaticText is visible text.
+        if config.platform == super::Platform::Ios && n.class_name != "StaticText" {
+            continue;
+        }
+        let b = scale_bounds(&n.bounds, &screen_bounds(&screen.root), img);
         let Some(est) = estimate(img, &b) else {
             continue;
         };
