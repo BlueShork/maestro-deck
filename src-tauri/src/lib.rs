@@ -119,6 +119,7 @@ pub fn run() {
             launch_app,
             stop_app,
             a11y::ipc::a11y_audit_screen,
+            a11y::ipc::a11y_audit_device,
             bank::ipc::compare_screenshots,
             bank::ipc::compare_screenshots_all,
             bank::ipc::resolve_comparison,

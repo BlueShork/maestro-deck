@@ -150,6 +150,9 @@ export const ipc = {
       screenshotPngBase64: args.screenshotPngBase64 ?? null,
       pxPerUnit: args.pxPerUnit ?? null,
     }),
+  /** Accessibility pre-audit of what the connected device shows now (fresh
+   *  hierarchy + screenshot): the final screen when called after a run. */
+  auditDeviceAccessibility: () => call<AccessibilityReport>("a11y_audit_device"),
   compareScreenshots: (args: {
     workspace: string;
     flowPath: string;
