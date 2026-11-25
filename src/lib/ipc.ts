@@ -26,6 +26,7 @@ import type {
   PluginWorkspaceInfo,
   RegistryEntry,
 } from "@/lib/plugins/types";
+import type { A11yPlatform, AccessibilityReport } from "@/types/accessibility";
 import type { BankGroup, RunReport } from "@/types/visualRegression";
 
 /** A failed backend command. The message is the backend's own (it ends up in
@@ -138,6 +139,17 @@ export const ipc = {
   stopFlow: (pid: number) => call<void>("stop_flow", { pid }),
   launchAppOnDevice: (appId: string) => call<void>("launch_app", { appId }),
   stopAppOnDevice: (appId: string) => call<void>("stop_app", { appId }),
+  /** Accessibility pre-audit of the screen last dumped by the inspector. */
+  auditAccessibility: (args: {
+    platform: A11yPlatform;
+    screenshotPngBase64?: string | null;
+    pxPerUnit?: number | null;
+  }) =>
+    call<AccessibilityReport>("a11y_audit_screen", {
+      platform: args.platform,
+      screenshotPngBase64: args.screenshotPngBase64 ?? null,
+      pxPerUnit: args.pxPerUnit ?? null,
+    }),
   compareScreenshots: (args: {
     workspace: string;
     flowPath: string;

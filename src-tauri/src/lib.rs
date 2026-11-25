@@ -3,6 +3,7 @@
 
 //! Maestro Deck — source-available visual IDE for Maestro mobile tests.
 
+pub mod a11y;
 pub mod app_control;
 mod app_menu;
 #[cfg(target_os = "macos")]
@@ -117,6 +118,7 @@ pub fn run() {
             stop_flow,
             launch_app,
             stop_app,
+            a11y::ipc::a11y_audit_screen,
             bank::ipc::compare_screenshots,
             bank::ipc::compare_screenshots_all,
             bank::ipc::resolve_comparison,

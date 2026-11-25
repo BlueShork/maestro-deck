@@ -135,6 +135,7 @@ fn convert(node: AxElement, next_index: &mut usize, screen: Option<(i32, i32)>) 
         clickable: node.enabled.unwrap_or(true) && is_interactive(node.element_type),
         enabled: node.enabled.unwrap_or(true),
         focused: node.has_focus.unwrap_or(false),
+        a11y: Default::default(),
         children,
     }
 }
