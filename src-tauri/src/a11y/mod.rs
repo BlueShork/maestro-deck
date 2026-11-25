@@ -339,6 +339,13 @@ pub(crate) mod testutil {
         }
     }
 
+    pub fn ios() -> AuditConfig {
+        AuditConfig {
+            platform: Platform::Ios,
+            px_per_unit: None,
+        }
+    }
+
     pub fn android() -> AuditConfig {
         AuditConfig {
             platform: Platform::Android,

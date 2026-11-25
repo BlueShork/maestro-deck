@@ -56,12 +56,12 @@ pub fn all() -> Vec<Rule> {
 
 fn is_image(n: &UINode) -> bool {
     let c = short_class(n);
-    c.contains("Image") || c == "XCUIElementTypeImage"
+    c.contains("Image") || c == "Icon"
 }
 
 fn is_text_input(n: &UINode) -> bool {
     let c = short_class(n);
-    c.contains("EditText") || c.contains("TextField") || c == "XCUIElementTypeTextField"
+    c.contains("EditText") || c.contains("TextField") || c == "SearchField"
 }
 
 fn is_toggle(n: &UINode) -> bool {
@@ -399,6 +399,59 @@ mod tests {
             &android(),
         );
         assert!(!o.applicable);
+    }
+
+    // ---- iOS (classes from hierarchy::ios) ----
+
+    #[test]
+    fn ios_switch_with_value_exposes_state() {
+        let json = r#"{"elementType":1,"frame":{"X":0,"Y":0,"Width":390,"Height":844},"children":[
+            {"elementType":40,"label":"Wi-Fi","value":"1","frame":{"X":300,"Y":100,"Width":51,"Height":31}}]}"#;
+        let root = crate::hierarchy::ios::parse_ios_axelement(json, Some((390, 844)))
+            .unwrap()
+            .root
+            .unwrap();
+        let o = toggle_state_exposed(&screen(root), &ios());
+        assert!(o.applicable);
+        assert!(o.findings.is_empty());
+    }
+
+    #[test]
+    fn ios_unlabeled_image_button_fails_r1() {
+        let json = r#"{"elementType":1,"frame":{"X":0,"Y":0,"Width":390,"Height":844},"children":[
+            {"elementType":9,"frame":{"X":10,"Y":10,"Width":44,"Height":44}}]}"#;
+        let root = crate::hierarchy::ios::parse_ios_axelement(json, Some((390, 844)))
+            .unwrap()
+            .root
+            .unwrap();
+        let o = missing_name(&screen(root), &ios());
+        assert_eq!(o.findings.len(), 1);
+    }
+
+    #[test]
+    fn ios_44pt_target_passes_b1() {
+        let json = r#"{"elementType":1,"frame":{"X":0,"Y":0,"Width":390,"Height":844},"children":[
+            {"elementType":9,"label":"Fermer","frame":{"X":10,"Y":10,"Width":44,"Height":44}}]}"#;
+        let root = crate::hierarchy::ios::parse_ios_axelement(json, Some((390, 844)))
+            .unwrap()
+            .root
+            .unwrap();
+        let o = touch_target_size(&screen(root), &ios());
+        assert!(o.applicable);
+        assert!(o.findings.is_empty(), "{:?}", o.findings);
+    }
+
+    #[test]
+    fn ios_search_field_with_placeholder_passes_r1() {
+        let json = r#"{"elementType":1,"frame":{"X":0,"Y":0,"Width":390,"Height":844},"children":[
+            {"elementType":45,"placeholderValue":"Rechercher","frame":{"X":10,"Y":10,"Width":300,"Height":36}}]}"#;
+        let root = crate::hierarchy::ios::parse_ios_axelement(json, Some((390, 844)))
+            .unwrap()
+            .root
+            .unwrap();
+        let o = missing_name(&screen(root), &ios());
+        assert!(o.applicable);
+        assert!(o.findings.is_empty());
     }
 
     // ---- B1 ----
