@@ -34,6 +34,17 @@ export interface UINode {
   clickable: boolean;
   enabled: boolean;
   focused: boolean;
+  /** Accessibility attributes (null when the source doesn't expose them). */
+  a11y?: {
+    checkable: boolean | null;
+    checked: boolean | null;
+    selected: boolean | null;
+    focusable: boolean | null;
+    scrollable: boolean | null;
+    hintText: string | null;
+    importantForAccessibility: boolean | null;
+    error: string | null;
+  };
   children: UINode[];
 }
 

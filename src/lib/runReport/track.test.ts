@@ -3,13 +3,30 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/ipc", () => ({ ipc: { workspaceGitBranch: vi.fn(async () => "main") } }));
+vi.mock("@/lib/ipc", () => ({
+  ipc: {
+    workspaceGitBranch: vi.fn(async () => "main"),
+    auditDeviceAccessibility: vi.fn(async () => A11Y_REPORT),
+  },
+}));
+
+const A11Y_REPORT = vi.hoisted(() => ({
+  standard: "RAAM 1.1" as const,
+  coverage: { automated: 7, total: 108 },
+  screens: ["écran final"],
+  score: 75,
+  verdict: "non_compliant" as const,
+  criteria: [],
+  bestPractices: [],
+  disclaimer: "Pré-audit automatique",
+}));
 
 import { ipc } from "@/lib/ipc";
 import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useRunReportStore } from "@/stores/runReportStore";
 import { useRunStore } from "@/stores/runStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 import { startRunReportTracking } from "./track";
@@ -21,6 +38,8 @@ beforeEach(() => {
   useRunReportStore.setState({ last: null, flows: [] });
   useRunStore.setState({ running: false, starting: false, stopRequested: false, steps: [] });
   useWorkspaceStore.setState({ folderPath: "/Users/me/shop" });
+  useSettingsStore.setState({ a11yAuditEnabled: false });
+  vi.mocked(ipc.auditDeviceAccessibility).mockClear();
   useDeviceStore.setState({
     current: {
       serial: "x",
@@ -47,6 +66,42 @@ async function runAll(lines: string[], exitCode: number) {
   useRunStore.getState().setStopped(exitCode);
   await flush();
 }
+
+describe("accessibility pre-audit of the final screen", () => {
+  it("is not run when the option is off", async () => {
+    await runAll(["[Passed] a (1s)"], 0);
+    expect(ipc.auditDeviceAccessibility).not.toHaveBeenCalled();
+    expect(useRunReportStore.getState().last!.accessibility).toBeUndefined();
+  });
+
+  it("is added to the report when the option is on", async () => {
+    useSettingsStore.setState({ a11yAuditEnabled: true });
+    await runAll(["[Passed] a (1s)"], 0);
+    expect(ipc.auditDeviceAccessibility).toHaveBeenCalledTimes(1);
+    expect(useRunReportStore.getState().last!.accessibility).toEqual(A11Y_REPORT);
+  });
+
+  it("never blocks the report when the audit fails", async () => {
+    useSettingsStore.setState({ a11yAuditEnabled: true });
+    vi.mocked(ipc.auditDeviceAccessibility).mockRejectedValueOnce(new Error("no driver"));
+    await runAll(["[Passed] a (1s)"], 0);
+    const r = useRunReportStore.getState().last!;
+    expect(r.status).toBe("passed");
+    expect(r.accessibility).toBeUndefined();
+  });
+
+  it("skips a stopped run", async () => {
+    useSettingsStore.setState({ a11yAuditEnabled: true });
+    const run = useRunStore.getState();
+    run.setStarting();
+    run.setRunTarget({ path: "/Users/me/shop", kind: "all", expectedFlow: null });
+    run.setRunning(42);
+    useRunStore.setState({ stopRequested: true });
+    useRunStore.getState().setStopped(null);
+    await flush();
+    expect(ipc.auditDeviceAccessibility).not.toHaveBeenCalled();
+  });
+});
 
 describe("startRunReportTracking", () => {
   it("records a Run All report with every flow, beyond the console buffer", async () => {

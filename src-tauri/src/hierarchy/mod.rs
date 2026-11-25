@@ -66,7 +66,57 @@ pub struct UINode {
     pub clickable: bool,
     pub enabled: bool,
     pub focused: bool,
+    /// Accessibility attributes Maestro exposes but the inspector doesn't
+    /// need. Read by the `a11y` audit; defaults to "unknown" everywhere a
+    /// source doesn't provide them (iOS, web, older fixtures).
+    #[serde(default)]
+    pub a11y: A11yAttrs,
     pub children: Vec<UINode>,
+}
+
+/// Optional accessibility metadata. Every field is `None` when the source
+/// didn't report it, so rules can tell "false" apart from "not exposed".
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct A11yAttrs {
+    pub checkable: Option<bool>,
+    pub checked: Option<bool>,
+    pub selected: Option<bool>,
+    pub focusable: Option<bool>,
+    pub scrollable: Option<bool>,
+    pub hint_text: Option<String>,
+    pub important_for_accessibility: Option<bool>,
+    pub error: Option<String>,
+}
+
+impl A11yAttrs {
+    /// Builds the attributes from a key/value attribute map, accepting both
+    /// the UiAutomator XML names and the Maestro JSON names.
+    pub fn from_attr_map<'a, F>(get: F) -> Self
+    where
+        F: Fn(&str) -> Option<&'a str>,
+    {
+        let flag = |keys: &[&str]| keys.iter().find_map(|k| get(k)).map(|v| v == "true");
+        let text = |keys: &[&str]| {
+            keys.iter()
+                .find_map(|k| get(k))
+                .filter(|v| !v.is_empty())
+                .map(str::to_string)
+        };
+        A11yAttrs {
+            checkable: flag(&["checkable"]),
+            checked: flag(&["checked"]),
+            selected: flag(&["selected"]),
+            focusable: flag(&["focusable"]),
+            scrollable: flag(&["scrollable"]),
+            hint_text: text(&["hintText", "hint"]),
+            important_for_accessibility: flag(&[
+                "important-for-accessibility",
+                "importantForAccessibility",
+            ]),
+            error: text(&["error"]),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -235,6 +285,7 @@ fn convert_maestro_node(node: MaestroNode, next_index: &mut usize) -> UINode {
         clickable: attrs.get("clickable").map(|s| s == "true").unwrap_or(false),
         enabled: attrs.get("enabled").map(|s| s == "true").unwrap_or(true),
         focused: attrs.get("focused").map(|s| s == "true").unwrap_or(false),
+        a11y: A11yAttrs::from_attr_map(|k| attrs.get(k).map(String::as_str)),
         children,
     }
 }
@@ -332,6 +383,7 @@ fn build_root(children: Vec<UINode>, next_index: &mut usize) -> Option<UINode> {
                 clickable: false,
                 enabled: true,
                 focused: false,
+                a11y: Default::default(),
                 children,
             })
         }
@@ -357,6 +409,7 @@ fn build_node(
     let mut clickable = false;
     let mut enabled = false;
     let mut focused = false;
+    let mut extra: HashMap<String, String> = HashMap::new();
 
     let decoder = reader.decoder();
     for attr in e.attributes().flatten() {
@@ -388,6 +441,17 @@ fn build_node(
             b"clickable" => clickable = value == "true",
             b"enabled" => enabled = value == "true",
             b"focused" => focused = value == "true",
+            b"checkable"
+            | b"checked"
+            | b"selected"
+            | b"focusable"
+            | b"scrollable"
+            | b"hint"
+            | b"hintText"
+            | b"error"
+            | b"important-for-accessibility" => {
+                extra.insert(String::from_utf8_lossy(key).into_owned(), value.to_string());
+            }
             _ => {}
         }
     }
@@ -406,6 +470,7 @@ fn build_node(
         clickable,
         enabled,
         focused,
+        a11y: A11yAttrs::from_attr_map(|k| extra.get(k).map(String::as_str)),
         children: Vec::new(),
     })
 }
@@ -603,6 +668,44 @@ mod tests {
         assert_eq!(btn.text.as_deref(), Some("Sign in"));
         assert_eq!(btn.resource_id.as_deref(), Some("com.x:id/btn"));
         assert!(btn.clickable);
+    }
+
+    #[test]
+    fn keeps_accessibility_attributes_from_maestro_json() {
+        let json = r#"{"attributes": {
+            "bounds": "[0,0][200,100]", "class": "android.widget.Switch",
+            "checkable": "true", "checked": "false", "selected": "true",
+            "hintText": "Adresse e-mail", "error": "", "scrollable": "false"
+        }, "children": []}"#;
+        let root = parse_maestro_json(json).unwrap().root.unwrap();
+        assert_eq!(root.a11y.checkable, Some(true));
+        assert_eq!(root.a11y.checked, Some(false));
+        assert_eq!(root.a11y.selected, Some(true));
+        assert_eq!(root.a11y.hint_text.as_deref(), Some("Adresse e-mail"));
+        assert_eq!(root.a11y.error, None);
+        assert_eq!(root.a11y.important_for_accessibility, None);
+    }
+
+    #[test]
+    fn keeps_accessibility_attributes_from_xml() {
+        let xml = r#"<hierarchy><node class="android.widget.CheckBox" bounds="[0,0][100,100]" checkable="true" checked="true" focusable="true" clickable="true" enabled="true"/></hierarchy>"#;
+        let root = parse_xml(xml).unwrap().root.unwrap();
+        assert_eq!(root.a11y.checkable, Some(true));
+        assert_eq!(root.a11y.checked, Some(true));
+        assert_eq!(root.a11y.focusable, Some(true));
+        assert_eq!(root.a11y.selected, None);
+    }
+
+    #[test]
+    fn deserializes_node_without_a11y_field() {
+        // The front sends nodes back (suggest_selectors); older payloads
+        // have no `a11y` key.
+        let n: UINode = serde_json::from_str(
+            r#"{"id":"0","resource_id":null,"text":null,"content_desc":null,"class_name":"x","package":"p",
+                "bounds":{"left":0,"top":0,"right":1,"bottom":1},"clickable":false,"enabled":true,"focused":false,"children":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(n.a11y, A11yAttrs::default());
     }
 
     #[test]

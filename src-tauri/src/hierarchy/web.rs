@@ -47,6 +47,7 @@ fn web_element_to_node(e: WebElement, id: usize) -> UINode {
         clickable: false,
         enabled: true,
         focused: false,
+        a11y: Default::default(),
         children: Vec::new(),
     }
 }
@@ -113,6 +114,7 @@ pub fn parse_device_screen_hierarchy(
         clickable: false,
         enabled: true,
         focused: false,
+        a11y: Default::default(),
         children,
     };
     Ok(HierarchyTree {

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Ethan Morisset
 // SPDX-License-Identifier: BUSL-1.1
 
+import type { AccessibilityReport } from "@/types/accessibility";
+
 /** The last run, as plugins with the `runs` permission see it. Plain JSON:
  *  it crosses postMessage into the plugin frame. */
 export interface ReportItem {
@@ -21,6 +23,8 @@ export interface RunReport {
   device: { platform: "android" | "ios" | "web" | "cloud"; name: string } | null;
   items: ReportItem[];
   totals: { passed: number; failed: number; skipped: number };
+  /** Accessibility pre-audit, present only when the option is enabled. */
+  accessibility?: AccessibilityReport;
 }
 
 export interface ReportContext {

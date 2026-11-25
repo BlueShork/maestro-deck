@@ -55,6 +55,12 @@ interface SettingsState {
    * exactly as before.
    */
   appId: string;
+  /**
+   * Accessibility pre-audit (RAAM 1.1) of the final screen of each local run,
+   * added to the run report. Off by default: it dumps the hierarchy and takes
+   * a screenshot after the run, which adds a second or two.
+   */
+  a11yAuditEnabled: boolean;
   setInspectKey: (k: string) => void;
   setShowFps: (v: boolean) => void;
   setTheme: (t: ThemeMode) => void;
@@ -67,6 +73,7 @@ interface SettingsState {
   setConfirmBeforeQuit: (v: boolean) => void;
   setConsoleMode: (m: ConsoleMode) => void;
   setAppId: (id: string) => void;
+  setA11yAuditEnabled: (v: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -85,6 +92,7 @@ export const useSettingsStore = create<SettingsState>()(
       confirmBeforeQuit: true,
       consoleMode: "simple",
       appId: "",
+      a11yAuditEnabled: false,
       setInspectKey: (inspectKey) => set({ inspectKey }),
       setShowFps: (showFps) => set({ showFps }),
       setTheme: (theme) => set({ theme }),
@@ -98,6 +106,7 @@ export const useSettingsStore = create<SettingsState>()(
       setConfirmBeforeQuit: (confirmBeforeQuit) => set({ confirmBeforeQuit }),
       setConsoleMode: (consoleMode) => set({ consoleMode }),
       setAppId: (appId) => set({ appId: appId.trim() }),
+      setA11yAuditEnabled: (a11yAuditEnabled) => set({ a11yAuditEnabled }),
     }),
     {
       name: "maestro-deck.settings",
@@ -115,6 +124,7 @@ export const useSettingsStore = create<SettingsState>()(
         confirmBeforeQuit: s.confirmBeforeQuit,
         consoleMode: s.consoleMode,
         appId: s.appId,
+        a11yAuditEnabled: s.a11yAuditEnabled,
       }),
     },
   ),

@@ -95,6 +95,7 @@ fn is_targetable(n: &UINode) -> bool {
 fn collect(node: &UINode, out: &mut Vec<IndexedNode>) {
     out.push(IndexedNode {
         node: UINode {
+            a11y: Default::default(),
             children: Vec::new(),
             ..node.clone()
         },
@@ -177,6 +178,7 @@ mod tests {
             clickable: true,
             enabled: true,
             focused: false,
+            a11y: Default::default(),
             children: vec![],
         };
         let s = suggest_selectors(&node);
@@ -204,6 +206,7 @@ mod tests {
             clickable: false,
             enabled: true,
             focused: false,
+            a11y: Default::default(),
             children: vec![],
         };
         let s = suggest_selectors(&node);
@@ -230,6 +233,7 @@ mod tests {
             clickable: false,
             enabled: true,
             focused: false,
+            a11y: Default::default(),
             children: vec![],
         };
         let s = suggest_selectors_with_viewport(&node, Some((400, 400)));
