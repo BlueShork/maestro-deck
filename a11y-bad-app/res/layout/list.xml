@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 Ethan Morisset -->
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!-- Liste. Défauts : corbeilles sans libellé (R1), boutons « Voir » répétés
+     (R2), date gris clair (R4). Témoins OK : titre, bouton « Rechercher »
+     libellé de 48 dp. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:padding="24dp" android:background="#FFFFFF"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:id="@+id/list_title" android:text="Opérations" android:textSize="28sp"
+            android:textColor="#212121"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <!-- OK : bouton icône libellé, 48 dp -->
+        <ImageButton android:id="@+id/search" android:contentDescription="Rechercher"
+            android:src="@android:drawable/ic_menu_search"
+            android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+
+    <!-- R4 : gris clair sur blanc (environ 2,3:1) -->
+    <TextView android:id="@+id/list_date" android:text="Mis à jour le 25 novembre"
+        android:textSize="14sp" android:textColor="#AAAAAA" android:layout_marginTop="4dp"
+        android:layout_marginBottom="16dp"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_width="match_parent" android:layout_height="72dp">
+        <TextView android:id="@+id/label_1" android:text="Loyer" android:textSize="18sp" android:textColor="#212121"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <!-- R2 : « Voir » répété sur chaque ligne -->
+        <Button android:id="@+id/see_1" android:text="Voir"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        <!-- R1 : corbeille sans libellé -->
+        <ImageButton android:id="@+id/delete_1" android:src="@android:drawable/ic_menu_delete"
+            android:background="@android:color/transparent"
+            android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_width="match_parent" android:layout_height="72dp">
+        <TextView android:id="@+id/label_2" android:text="Courses" android:textSize="18sp" android:textColor="#212121"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <!-- R2 : « Voir » répété sur chaque ligne -->
+        <Button android:id="@+id/see_2" android:text="Voir"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        <!-- R1 : corbeille sans libellé -->
+        <ImageButton android:id="@+id/delete_2" android:src="@android:drawable/ic_menu_delete"
+            android:background="@android:color/transparent"
+            android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_width="match_parent" android:layout_height="72dp">
+        <TextView android:id="@+id/label_3" android:text="Électricité" android:textSize="18sp" android:textColor="#212121"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <!-- R2 : « Voir » répété sur chaque ligne -->
+        <Button android:id="@+id/see_3" android:text="Voir"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        <!-- R1 : corbeille sans libellé -->
+        <ImageButton android:id="@+id/delete_3" android:src="@android:drawable/ic_menu_delete"
+            android:background="@android:color/transparent"
+            android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_width="match_parent" android:layout_height="72dp">
+        <TextView android:id="@+id/label_4" android:text="Abonnement" android:textSize="18sp" android:textColor="#212121"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <!-- R2 : « Voir » répété sur chaque ligne -->
+        <Button android:id="@+id/see_4" android:text="Voir"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        <!-- R1 : corbeille sans libellé -->
+        <ImageButton android:id="@+id/delete_4" android:src="@android:drawable/ic_menu_delete"
+            android:background="@android:color/transparent"
+            android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 Ethan Morisset -->
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!-- Accueil. Défauts : menu et onglets en icônes sans libellé (R1), bandeau
+     blanc sur jaune (R4), bouton flottant de 32 dp (B1). Témoins OK : titre,
+     bouton « Commencer ». -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:background="#FFFFFF"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:background="#1565C0" android:paddingStart="8dp" android:paddingEnd="16dp"
+        android:layout_width="match_parent" android:layout_height="64dp">
+        <!-- R1 : menu sans libellé -->
+        <ImageButton android:id="@+id/menu" android:src="@android:drawable/ic_menu_sort_by_size"
+            android:background="@android:color/transparent"
+            android:layout_width="56dp" android:layout_height="56dp" />
+        <!-- OK : titre -->
+        <TextView android:id="@+id/app_title" android:text="Ma Banque" android:textSize="22sp"
+            android:textColor="#FFFFFF" android:layout_marginStart="8dp"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <!-- R4 : blanc sur jaune (environ 1,1:1) -->
+    <TextView android:id="@+id/promo" android:text="Offre spéciale : 0 € de frais ce mois-ci"
+        android:textSize="16sp" android:textColor="#FFFFFF" android:background="#FFEB3B"
+        android:padding="16dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+    <!-- OK : texte et bouton principal -->
+    <TextView android:id="@+id/balance" android:text="Solde : 1 254,30 €" android:textSize="28sp"
+        android:textColor="#212121" android:padding="24dp"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+    <Button android:id="@+id/start" android:text="Commencer" android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1">
+        <!-- B1 : bouton flottant de 32 dp, libellé -->
+        <ImageButton android:id="@+id/fab" android:contentDescription="Nouveau virement"
+            android:src="@android:drawable/ic_input_add" android:background="#1565C0"
+            android:scaleType="fitCenter" android:padding="4dp"
+            android:layout_gravity="bottom|end" android:layout_margin="24dp"
+            android:layout_width="32dp" android:layout_height="32dp" />
+    </FrameLayout>
+
+    <!-- R1 : barre d'onglets en icônes seules, sans libellé -->
+    <LinearLayout android:orientation="horizontal" android:background="#EEEEEE"
+        android:layout_width="match_parent" android:layout_height="64dp">
+        <ImageButton android:id="@+id/tab_home" android:src="@android:drawable/ic_menu_today"
+            android:background="@android:color/transparent"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
+        <ImageButton android:id="@+id/tab_cards" android:src="@android:drawable/ic_menu_agenda"
+            android:background="@android:color/transparent"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
+        <ImageButton android:id="@+id/tab_profile" android:src="@android:drawable/ic_menu_myplaces"
+            android:background="@android:color/transparent"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" />
+    </LinearLayout>
+</LinearLayout>
