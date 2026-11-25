@@ -151,7 +151,7 @@ fn contains_role_word(label: &str) -> Option<&'static str> {
 /// Fails: two interactive elements on the same screen with the same label
 /// (the user can't tell them apart), or a label repeating the role the
 /// screen reader already announces ("bouton Valider").
-fn duplicate_or_redundant_label(screen: &Screen, _: &AuditConfig) -> RuleOutcome {
+fn duplicate_or_redundant_label(screen: &Screen, config: &AuditConfig) -> RuleOutcome {
     let mut out = RuleOutcome::default();
     let mut seen: HashMap<String, usize> = HashMap::new();
     let nodes = app_nodes(&screen.root);
@@ -164,7 +164,15 @@ fn duplicate_or_redundant_label(screen: &Screen, _: &AuditConfig) -> RuleOutcome
     for (n, label) in &interactive {
         out.applicable = true;
         *seen.entry(label.trim().to_lowercase()).or_default() += 1;
-        if let Some(desc) = n.content_desc.as_deref() {
+        // The spoken label: `content_desc` on Android. On iOS the VoiceOver
+        // label is folded into `text` when the element has no visible text
+        // (always the case for icon buttons), so check that too.
+        let spoken = match config.platform {
+            Platform::Android => n.content_desc.as_deref(),
+            Platform::Ios if n.class_name == "StaticText" => None,
+            Platform::Ios => n.content_desc.as_deref().or(n.text.as_deref()),
+        };
+        if let Some(desc) = spoken {
             if let Some(role) = contains_role_word(desc) {
                 out.findings.push(finding(
                     screen,
@@ -464,6 +472,19 @@ mod tests {
         let o = missing_name(&screen(root), &ios());
         assert!(o.applicable);
         assert!(o.findings.is_empty());
+    }
+
+    #[test]
+    fn ios_r2_flags_role_in_voiceover_label() {
+        let json = r#"{"elementType":1,"frame":{"X":0,"Y":0,"Width":390,"Height":844},"children":[
+            {"elementType":9,"label":"Bouton fermer","frame":{"X":10,"Y":100,"Width":44,"Height":44}}]}"#;
+        let root = crate::hierarchy::ios::parse_ios_axelement(json, Some((390, 844)))
+            .unwrap()
+            .root
+            .unwrap();
+        let o = duplicate_or_redundant_label(&screen(root), &ios());
+        assert_eq!(o.findings.len(), 1);
+        assert!(o.findings[0].message.contains("bouton"));
     }
 
     // ---- B1 ----
