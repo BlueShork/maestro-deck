@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 Ethan Morisset -->
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!-- Formulaire. Défauts : champs sans libellé ni indice (R1), deux boutons
+     « OK » (R2), message d'erreur rouge pâle (R4), case de 20 dp (B1).
+     Témoins OK : champs avec indice, case « J'accepte » de taille normale. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:padding="24dp" android:background="#FFFFFF"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <TextView android:id="@+id/form_title" android:text="Nouveau virement" android:textSize="28sp"
+        android:textColor="#212121"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+
+    <!-- OK : champ avec indice -->
+    <EditText android:id="@+id/beneficiary" android:hint="Bénéficiaire" android:inputType="textPersonName"
+        android:minHeight="56dp" android:layout_marginTop="24dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <!-- R1 : champ montant sans libellé ni indice -->
+    <EditText android:id="@+id/amount" android:inputType="numberDecimal"
+        android:minHeight="56dp" android:layout_marginTop="8dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+    <!-- R1 : champ motif sans libellé ni indice -->
+    <EditText android:id="@+id/reason" android:inputType="text"
+        android:minHeight="56dp" android:layout_marginTop="8dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+    <!-- R4 : erreur rouge pâle sur blanc (environ 2,3:1) -->
+    <TextView android:id="@+id/error" android:text="Le montant doit être supérieur à 0."
+        android:textSize="14sp" android:textColor="#EF9A9A" android:layout_marginTop="8dp"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+
+    <!-- OK : case à cocher correcte. Dessin de case statique : l'animation par
+         défaut ne s'affiche pas sur l'émulateur de capture. -->
+    <CheckBox android:id="@+id/accept" android:button="@android:drawable/checkbox_off_background" android:text="J'accepte les conditions"
+        android:layout_marginTop="16dp"
+        android:layout_width="match_parent" android:layout_height="56dp" />
+
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_marginTop="8dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <!-- B1 : case de 20 dp, libellée -->
+        <CheckBox android:id="@+id/save_beneficiary" android:button="@android:drawable/checkbox_off_background" android:contentDescription="Mémoriser le bénéficiaire"
+            android:minWidth="0dp" android:minHeight="0dp"
+            android:layout_width="20dp" android:layout_height="20dp" />
+        <TextView android:text="Mémoriser" android:textColor="#212121" android:layout_marginStart="12dp"
+            android:layout_width="wrap_content" android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <!-- R2 : deux boutons « OK » -->
+    <LinearLayout android:orientation="horizontal" android:layout_marginTop="24dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <Button android:id="@+id/ok_draft" android:text="OK"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <Button android:id="@+id/ok_send" android:text="OK"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+    </LinearLayout>
+</LinearLayout>

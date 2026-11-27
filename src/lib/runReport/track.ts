@@ -8,6 +8,8 @@ import { useDeviceStore } from "@/stores/deviceStore";
 import { useFlowStore } from "@/stores/flowStore";
 import { useRunReportStore } from "@/stores/runReportStore";
 import { useRunStore } from "@/stores/runStore";
+import { useSettingsStore } from "@/stores/settingsStore";
+import type { AccessibilityReport } from "@/types/accessibility";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 import { buildRunReport } from "./build";
@@ -24,6 +26,20 @@ function currentDevice(): RunReport["device"] {
   if (cloud) return { platform: "cloud", name: `Maestro Deck Cloud · ${cloud.replace("_", " ")}` };
   const d = useDeviceStore.getState().current;
   return d ? { platform: d.platform, name: d.model } : null;
+}
+
+/** The accessibility pre-audit of the run's final screen, when the option is
+ *  on and the run used a local device (Android / iOS; not the cloud or the
+ *  web). A failing audit never blocks the run report: it is just left out. */
+export function auditFinalScreen(
+  ranOn: RunReport["device"],
+  stopRequested: boolean,
+): Promise<AccessibilityReport | undefined> {
+  const local = ranOn && (ranOn.platform === "android" || ranOn.platform === "ios");
+  if (!useSettingsStore.getState().a11yAuditEnabled || !local || stopRequested) {
+    return Promise.resolve(undefined);
+  }
+  return ipc.auditDeviceAccessibility().catch(() => undefined);
 }
 
 // "Run" on an unsaved buffer and "Run from here" execute this temp copy of the
@@ -79,25 +95,27 @@ export function startRunReportTracking(): () => void {
       ? ipc.workspaceGitBranch(folder).catch(() => null)
       : Promise.resolve(null);
 
-    void branch.then((b) => {
+    const accessibility = auditFinalScreen(ranOn, stopRequested);
+
+    void Promise.all([branch, accessibility]).then(([b, a11y]) => {
       if (run !== ended) return;
-      useRunReportStore.getState().finish(
-        buildRunReport(
-          {
-            id: crypto.randomUUID(),
-            kind,
-            title,
-            startedAt: began,
-            endedAt,
-            exitCode,
-            stopRequested,
-            project: { name: folder ? baseName(folder) : title, branch: b },
-            device: ranOn,
-          },
-          steps,
-          flows,
-        ),
+      const report = buildRunReport(
+        {
+          id: crypto.randomUUID(),
+          kind,
+          title,
+          startedAt: began,
+          endedAt,
+          exitCode,
+          stopRequested,
+          project: { name: folder ? baseName(folder) : title, branch: b },
+          device: ranOn,
+        },
+        steps,
+        flows,
       );
+      if (a11y) report.accessibility = a11y;
+      useRunReportStore.getState().finish(report);
     });
   });
 }

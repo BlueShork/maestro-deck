@@ -6,7 +6,7 @@
 
 use serde::Deserialize;
 
-use super::{Bounds, HierarchyTree, UINode};
+use super::{A11yAttrs, Bounds, HierarchyTree, UINode};
 use crate::error::{AppError, AppResult};
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +40,10 @@ struct AxElement {
     #[serde(rename = "hasFocus", default)]
     has_focus: Option<bool>,
     #[serde(default)]
+    selected: Option<bool>,
+    #[serde(rename = "placeholderValue", default)]
+    placeholder_value: Option<String>,
+    #[serde(default)]
     children: Vec<AxElement>,
 }
 
@@ -51,25 +55,45 @@ struct AxElement {
 /// all (verified against a live RN sheet), so without the clickable flag it
 /// carries zero signal and downstream consumers (Billy's compacted
 /// get_screen) prune it — making form fields invisible to the agent.
+///
+/// Raw values come from `XCUIElementType` in XCUIAutomation's
+/// `XCUIElementTypes.h`: 40 switch, 41 toggle and 42 link are tappable too.
 fn is_interactive(element_type: i64) -> bool {
     matches!(
         element_type,
-        9 | 10 | 12 | 13 | 33 | 34 | 35 | 45 | 49 | 50 | 52 | 53 | 56 | 58
+        9 | 10 | 12 | 13 | 33 | 34 | 35 | 40 | 41 | 42 | 45 | 49 | 50 | 52 | 53 | 56 | 58
     )
 }
 
-/// Human-readable class name for a subset of XCUIElement.ElementType values.
+/// Element types whose `value` is an on/off state ("1" / "0").
+fn is_toggle_type(element_type: i64) -> bool {
+    matches!(element_type, 10 | 12 | 40 | 41)
+}
+
+/// Human-readable class name for a subset of XCUIElement.ElementType values
+/// (raw values from `XCUIElementTypes.h`).
 fn element_type_name(t: i64) -> &'static str {
     match t {
         0 => "Any",
         1 => "Other",
         2 => "Application",
         9 => "Button",
-        33 => "Link",
+        10 => "RadioButton",
+        12 => "CheckBox",
+        33 => "Slider",
+        37 => "SegmentedControl",
+        40 => "Switch",
+        41 => "Toggle",
+        42 => "Link",
+        43 => "Image",
+        44 => "Icon",
+        45 => "SearchField",
         48 => "StaticText",
         49 => "TextField",
         50 => "SecureTextField",
-        56 => "Switch",
+        52 => "TextView",
+        56 => "MenuBarItem",
+        75 => "Cell",
         _ => "Element",
     }
 }
@@ -106,7 +130,26 @@ fn convert(node: AxElement, next_index: &mut usize, screen: Option<(i32, i32)>) 
     *next_index += 1;
 
     // Visible text per Maestro IOSDriver semantics: title, else value.
-    let visible = non_empty(node.title).or_else(|| non_empty(node.value));
+    // Accessibility attributes, read before `value` is moved: for toggles the
+    // value is the on/off state ("1"/"0"), not text.
+    let toggle = is_toggle_type(node.element_type);
+    let a11y = A11yAttrs {
+        checkable: toggle.then_some(true),
+        checked: if toggle {
+            node.value.as_deref().and_then(|v| match v {
+                "1" | "true" | "on" => Some(true),
+                "0" | "false" | "off" => Some(false),
+                _ => None,
+            })
+        } else {
+            None
+        },
+        selected: node.selected,
+        hint_text: non_empty(node.placeholder_value),
+        ..Default::default()
+    };
+    let value = if toggle { None } else { node.value };
+    let visible = non_empty(node.title).or_else(|| non_empty(value));
     let label = non_empty(node.label);
     // Cross-platform portability: on iOS the visible text usually lives only in
     // the accessibility `label` (title/value are empty). Maestro's `text:`
@@ -135,6 +178,7 @@ fn convert(node: AxElement, next_index: &mut usize, screen: Option<(i32, i32)>) 
         clickable: node.enabled.unwrap_or(true) && is_interactive(node.element_type),
         enabled: node.enabled.unwrap_or(true),
         focused: node.has_focus.unwrap_or(false),
+        a11y,
         children,
     }
 }
@@ -280,6 +324,37 @@ mod tests {
             .unwrap();
         assert_eq!(n2.text.as_deref(), Some("Submit"));
         assert_eq!(n2.content_desc.as_deref(), Some("Submit button"));
+    }
+
+    #[test]
+    fn element_types_match_xcuielementtype_raw_values() {
+        assert_eq!(element_type_name(33), "Slider");
+        assert_eq!(element_type_name(40), "Switch");
+        assert_eq!(element_type_name(42), "Link");
+        assert_eq!(element_type_name(43), "Image");
+        assert_eq!(element_type_name(56), "MenuBarItem");
+        assert!(is_interactive(40) && is_interactive(41) && is_interactive(42));
+    }
+
+    #[test]
+    fn switch_value_becomes_checked_state_not_text() {
+        let json = r#"{"elementType":40,"label":"Wi-Fi","value":"1","enabled":true,"children":[]}"#;
+        let root = parse_ios_axelement(json, None).unwrap().root.unwrap();
+        assert_eq!(root.class_name, "Switch");
+        assert!(root.clickable);
+        assert_eq!(root.a11y.checkable, Some(true));
+        assert_eq!(root.a11y.checked, Some(true));
+        assert_eq!(root.text.as_deref(), Some("Wi-Fi"));
+    }
+
+    #[test]
+    fn keeps_placeholder_and_selected() {
+        let json =
+            r#"{"elementType":49,"placeholderValue":"E-mail","selected":true,"children":[]}"#;
+        let root = parse_ios_axelement(json, None).unwrap().root.unwrap();
+        assert_eq!(root.a11y.hint_text.as_deref(), Some("E-mail"));
+        assert_eq!(root.a11y.selected, Some(true));
+        assert_eq!(root.a11y.checkable, None);
     }
 
     #[test]

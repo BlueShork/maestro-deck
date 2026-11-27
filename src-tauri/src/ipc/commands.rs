@@ -711,7 +711,7 @@ pub async fn enter_inspect_mode(
     finalize_hierarchy(tree, state.inner()).await
 }
 
-async fn ensure_ios_keeper(
+pub(crate) async fn ensure_ios_keeper(
     udid: &str,
     state: &AppState,
 ) -> AppResult<std::sync::Arc<crate::ios_session::IosDriverKeeper>> {

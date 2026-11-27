@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 Ethan Morisset -->
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!-- Interrupteurs. Défauts : interrupteur qui cache son état (R3, non
+     détectable via Maestro, voir le README des fixtures), étoile « favori »
+     cliquable sans libellé (R1), légende gris clair (R4), interrupteur de
+     32 dp de haut (B1). Témoins OK : deux interrupteurs corrects, case à
+     cocher correcte. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:padding="24dp" android:background="#FFFFFF"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <TextView android:id="@+id/toggles_title" android:text="Préférences" android:textSize="28sp"
+        android:textColor="#212121"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+
+    <!-- OK -->
+    <Switch android:id="@+id/dark_mode" android:text="Mode sombre" android:layout_marginTop="16dp"
+        android:layout_width="match_parent" android:layout_height="56dp" />
+    <!-- OK -->
+    <Switch android:id="@+id/biometrics" android:text="Connexion biométrique" android:checked="true"
+        android:layout_width="match_parent" android:layout_height="56dp" />
+    <!-- R3 : se déclare non cochable (voir MainActivity) -->
+    <Switch android:id="@+id/alerts_broken" android:text="Alertes de paiement"
+        android:layout_width="match_parent" android:layout_height="56dp" />
+    <!-- B1 : interrupteur de 32 dp de haut -->
+    <Switch android:id="@+id/sounds_small" android:text="Sons"
+        android:minHeight="0dp"
+        android:layout_width="match_parent" android:layout_height="32dp" />
+
+    <!-- R4 : légende gris clair -->
+    <TextView android:id="@+id/toggles_caption"
+        android:text="Les alertes sont envoyées par notification."
+        android:textSize="14sp" android:textColor="#C0C0C0" android:layout_marginTop="8dp"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_marginTop="16dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:text="Compte favori" android:textSize="18sp" android:textColor="#212121"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <!-- R1 : étoile cliquable sans libellé -->
+        <ImageView android:id="@+id/favorite" android:src="@android:drawable/btn_star_big_off"
+            android:clickable="true" android:focusable="true"
+            android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+
+    <!-- OK (dessin de case statique, voir form.xml) -->
+    <CheckBox android:id="@+id/newsletter_box" android:button="@android:drawable/checkbox_on_background" android:text="Recevoir la lettre d'information"
+        android:checked="true" android:layout_marginTop="8dp"
+        android:layout_width="match_parent" android:layout_height="56dp" />
+</LinearLayout>

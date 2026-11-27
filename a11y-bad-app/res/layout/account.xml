@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 Ethan Morisset -->
+<!-- SPDX-License-Identifier: BUSL-1.1 -->
+<!--
+  Compte. Écran volontairement mal accessible : chaque défaut est là pour une règle
+  précise du pré-audit (voir src-tauri/src/a11y/fixtures/README.md).
+  Les éléments marqués "OK" sont des témoins qui ne doivent rien remonter.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:padding="24dp" android:background="#FFFFFF"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <!-- R1 : bouton image sans libellé -->
+    <ImageButton android:id="@+id/close"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:layout_width="56dp" android:layout_height="56dp" />
+
+    <TextView android:id="@+id/title" android:text="Mon compte" android:textSize="28sp"
+        android:textColor="#212121" android:layout_marginTop="8dp"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+
+    <!-- R1 : champ sans libellé ni indice -->
+    <EditText android:id="@+id/name" android:inputType="text"
+        android:layout_marginTop="16dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+    <!-- OK : champ avec indice -->
+    <EditText android:id="@+id/email" android:hint="Adresse e-mail" android:inputType="textEmailAddress"
+        android:layout_marginTop="8dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+    <!-- R1 : zone cliquable qui ne contient qu'une image sans libellé -->
+    <FrameLayout android:id="@+id/avatar_card" android:clickable="true" android:focusable="true"
+        android:background="#E3F2FD" android:layout_marginTop="16dp"
+        android:layout_width="match_parent" android:layout_height="72dp">
+        <ImageView android:src="@android:drawable/ic_menu_camera"
+            android:layout_gravity="center"
+            android:layout_width="48dp" android:layout_height="48dp" />
+    </FrameLayout>
+
+    <!-- R2 : deux boutons au même libellé -->
+    <LinearLayout android:orientation="horizontal" android:layout_marginTop="16dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <Button android:id="@+id/delete_photo" android:text="Supprimer"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <Button android:id="@+id/delete_account" android:text="Supprimer"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <!-- R2 : contentDescription qui répète le rôle (TalkBack lit « Bouton valider, bouton ») -->
+    <Button android:id="@+id/validate" android:text="Valider"
+        android:contentDescription="Bouton valider"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+    <!-- R3 : interrupteur qui n'expose pas son état (voir MainActivity) -->
+    <Switch android:id="@+id/notif_broken" android:text="Notifications"
+        android:layout_marginTop="16dp"
+        android:layout_width="match_parent" android:layout_height="56dp" />
+
+    <!-- OK : interrupteur correct -->
+    <Switch android:id="@+id/newsletter" android:text="Newsletter" android:checked="true"
+        android:layout_width="match_parent" android:layout_height="56dp" />
+
+    <!-- R4 : texte gris clair sur blanc (environ 1,9:1) -->
+    <TextView android:id="@+id/low_contrast"
+        android:text="Vos données sont conservées 30 jours."
+        android:textSize="16sp" android:textColor="#BDBDBD" android:layout_marginTop="16dp"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+
+    <!-- OK : texte bien contrasté -->
+    <TextView android:id="@+id/good_contrast"
+        android:text="Vous pouvez les exporter à tout moment."
+        android:textSize="16sp" android:textColor="#212121" android:layout_marginTop="8dp"
+        android:layout_width="wrap_content" android:layout_height="wrap_content" />
+
+    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_marginTop="16dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <!-- OK : bouton principal -->
+        <Button android:id="@+id/save" android:text="Enregistrer"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" />
+        <!-- B1 : cible tactile de 24 dp, libellée -->
+        <ImageButton android:id="@+id/help" android:contentDescription="Aide"
+            android:src="@android:drawable/ic_menu_help" android:scaleType="fitCenter"
+            android:padding="0dp" android:layout_marginStart="16dp"
+            android:layout_width="24dp" android:layout_height="24dp" />
+    </LinearLayout>
+</LinearLayout>
